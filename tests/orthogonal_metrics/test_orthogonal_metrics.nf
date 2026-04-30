@@ -1,0 +1,223 @@
+#!/usr/bin/env nextflow
+
+/*
+ * =============================================================================
+ * test_orthogonal_metrics.nf
+ * =============================================================================
+ * P0-31 test harness.  Runs the full post-negative-steering orthogonal-
+ * metrics cascade on a completed test_negative_steering run:
+ *
+ *   NEGSTEER_CROSS_SEQUENCE output (cached)
+ *      │
+ *      ▼
+ *   NEGSTEER_INTERFACE_METRICS               (P0-29 — iRMSD/fnat/DockQ/iPSAE_15/intact_core)
+ *      │
+ *      ▼
+ *   EXTRACT_SURVIVOR_MANIFEST                (manifest of per-survivor tuples)
+ *      │
+ *      ├──→  AF3_SETUP_DB  ──→  AF3_NOMSA_ON_SURVIVORS  ──→  AF3_PARSE_OUTPUT
+ *      ├──→  NEGSTEER_BIOPHYSICAL_METRICS                                       (fan-out)
+ *      └──→  NEGSTEER_ROSETTA_METRICS                                           (fan-out)
+ *      │
+ *      ▼
+ *   NEGSTEER_ORTHOGONAL_METRICS              (merge + filter cascade)
+ *
+ * Expected input layout (produced by test_negative_steering.nf):
+ *   <input_dir>/
+ *       cross_sequence_summary.csv
+ *       runs/
+ *           design_0_seq_0/plan.json  effector_template.cif  cycle_0/...
+ *           design_0_seq_1/...
+ *           design_1_seq_0/...
+ *           ...
+ *
+ * Usage:
+ *   sbatch tests/orthogonal_metrics/run_test_orthogonal_metrics_slurm.sh
+ *   or directly:
+ *     nextflow run test_orthogonal_metrics.nf \\
+ *         --input_dir tests/negative_steering/receptor_resurfacing_results/negative_steering
+ * =============================================================================
+ */
+
+nextflow.enable.dsl = 2
+
+// ---------------------------------------------------------------------------
+// Parameter defaults
+// ---------------------------------------------------------------------------
+
+params.project_name   = "test_orthogonal_metrics"
+params.outdir         = "${projectDir}/results"
+
+// ── Test-chaining: consume output of test_negative_steering ───────────
+// test_negative_steering publishes its negsteer aggregate to
+// <outdir>/negative_steering/.  Default to that sibling-test location
+// so the two tests form a cascade when run in order.
+params.upstream_negsteer_outdir = "${projectDir}/../negative_steering/receptor_resurfacing_results"
+params.input_dir                = "${params.upstream_negsteer_outdir}/negative_steering"
+
+// Chains (must match what negative steering was run with).
+params.receptor_chain = "A"
+params.effector_chain = "B"
+
+// ── Negative controls (Task 6) — OFF for this test ────────────────────
+// test_negative_steering also sets this to false; surface it here so
+// the param is declared even though this test doesn't directly invoke
+// the controls code path (relevant only if the user sets it true and
+// then re-runs; see main.nf for how controls feed cross_sequence_summary).
+params.run_negative_controls = false
+
+// ── P0-29 defaults (forwarded to NEGSTEER_INTERFACE_METRICS) ──────────
+params.interface_plddt_trim_threshold = 50.0
+params.interface_intact_threshold     = 5.0
+
+// ── P0-38 default (also forwarded to NEGSTEER_INTERFACE_METRICS) ──────
+// See main.nf for the rationale on hard-coded μ/σ vs CLI cutoff.
+params.weighted_jaccard_pair_cutoff   = 8.0
+
+// ── P0-31 defaults ────────────────────────────────────────────────────
+params.af3_nomsa_seeds              = [42, 123, 456]
+params.orthogonal_filter_sc_min     = 0.55
+params.orthogonal_filter_bsa_min    = 600
+params.orthogonal_filter_plddt_min  = 0.75
+params.orthogonal_filter_af3_ra_max = 5.0
+
+// Forwarded to biophysical metrics (contact cutoff for interface).
+params.negsteer_postprocess_contact_cutoff = 5.0
+
+// ── Concurrency defaults ──────────────────────────────────────────────
+params.max_af3_parallel = 30
+
+// ---------------------------------------------------------------------------
+// Includes
+// ---------------------------------------------------------------------------
+
+include { NEGSTEER_INTERFACE_METRICS   } from '../../modules/negsteer_interface_metrics'
+include { EXTRACT_SURVIVOR_MANIFEST    } from '../../modules/negsteer_manifest'
+include { AF3_SETUP_DB                 } from '../../modules/negsteer_af3_nomsa'
+include { AF3_NOMSA_ON_SURVIVORS       } from '../../modules/negsteer_af3_nomsa'
+include { AF3_PARSE_OUTPUT             } from '../../modules/negsteer_af3_nomsa'
+include { NEGSTEER_BIOPHYSICAL_METRICS } from '../../modules/negsteer_biophysical_metrics'
+include { NEGSTEER_ROSETTA_METRICS     } from '../../modules/negsteer_rosetta_metrics'
+include { NEGSTEER_ORTHOGONAL_METRICS  } from '../../modules/negsteer_orthogonal_metrics'
+
+
+// ---------------------------------------------------------------------------
+// EXTRACT_SURVIVOR_MANIFEST is imported from modules/negsteer_manifest.nf
+// (promoted out of this file by P0-34 so production main.nf and this test
+// share one definition).  See the module for documentation.
+// ---------------------------------------------------------------------------
+
+
+// ---------------------------------------------------------------------------
+// Workflow
+// ---------------------------------------------------------------------------
+
+workflow {
+
+    // Log which upstream source is being consumed.
+    log.info "Orthogonal-metrics test — input source:"
+    log.info "  upstream_negsteer_outdir: ${params.upstream_negsteer_outdir}"
+    log.info "  input_dir               : ${params.input_dir}"
+
+    // ── Inputs ─────────────────────────────────────────────────────
+    cross_csv_ch = Channel
+        .fromPath("${params.input_dir}/cross_sequence_summary.csv",
+                  checkIfExists: true)
+
+    workdirs_ch = Channel
+        .fromPath("${params.input_dir}/runs/*", type: 'dir', checkIfExists: true)
+        .collect()
+
+    // ── P0-29: interface-restricted metrics ────────────────────────
+    NEGSTEER_INTERFACE_METRICS(cross_csv_ch, workdirs_ch)
+    extended_csv_ch = NEGSTEER_INTERFACE_METRICS.out.extended_csv
+
+    // ── Build per-survivor manifest ────────────────────────────────
+    EXTRACT_SURVIVOR_MANIFEST(extended_csv_ch, workdirs_ch)
+
+    // ── Fan-out: one record per survivor ───────────────────────────
+    // The manifest CSV is consumed via splitCsv.  Each record becomes
+    // three downstream tuples — one per orthogonal-metrics stream.
+    manifest_records_ch = EXTRACT_SURVIVOR_MANIFEST.out.manifest
+        .splitCsv(header: true)
+        .map { r ->
+            [
+                r.seq_name,
+                r.canonical_pdb_abs,
+                r.ground_truth_abs,
+                r.effector_template_cif_abs,
+                r.receptor_seq,
+                r.effector_seq,
+            ]
+        }
+
+    // ── AF3-no-MSA stream ──────────────────────────────────────────
+    AF3_SETUP_DB()
+
+    af3_input_ch = manifest_records_ch.map { rec ->
+        tuple(
+            rec[0],              // seq_name
+            rec[4],              // receptor_seq
+            rec[5],              // effector_seq
+            file(rec[3]),        // effector_template_cif path
+            file(rec[2]),        // ground_truth_pdb path
+        )
+    }
+
+    AF3_NOMSA_ON_SURVIVORS(
+        af3_input_ch,
+        AF3_SETUP_DB.out.db_dir,
+        AF3_SETUP_DB.out.ready_flag,
+    )
+    AF3_PARSE_OUTPUT(
+        AF3_NOMSA_ON_SURVIVORS.out.prediction,
+        Channel.value(file("${projectDir}/bin/parse_af3_output.py")),
+    )
+
+    // ── Biophysical stream ─────────────────────────────────────────
+    biophysical_input_ch = manifest_records_ch.map { rec ->
+        tuple(
+            rec[0],              // seq_name
+            file(rec[1]),        // canonical_pdb
+            file(rec[2]),        // ground_truth_pdb (unused but kept symmetric)
+        )
+    }
+    NEGSTEER_BIOPHYSICAL_METRICS(biophysical_input_ch)
+
+    // ── Rosetta stream ─────────────────────────────────────────────
+    rosetta_input_ch = manifest_records_ch.map { rec ->
+        tuple(
+            rec[0],              // seq_name
+            file(rec[1]),        // canonical_pdb
+        )
+    }
+    NEGSTEER_ROSETTA_METRICS(rosetta_input_ch)
+
+    // ── Merge the three streams into the final CSV ─────────────────
+    NEGSTEER_ORTHOGONAL_METRICS(
+        extended_csv_ch,
+        AF3_PARSE_OUTPUT.out.summary_csv.collect(),
+        NEGSTEER_BIOPHYSICAL_METRICS.out.summary_csv.collect(),
+        NEGSTEER_ROSETTA_METRICS.out.summary_csv.collect(),
+    )
+}
+
+// ---------------------------------------------------------------------------
+// On completion
+// ---------------------------------------------------------------------------
+
+workflow.onComplete {
+    log.info """
+    =============================================================
+    Orthogonal-Metrics Test Complete
+    =============================================================
+    Output:   ${params.outdir}
+    Duration: ${workflow.duration}
+    Success:  ${workflow.success}
+    =============================================================
+    """.stripIndent()
+}
+
+workflow.onError {
+    log.error "Orthogonal-metrics test failed: ${workflow.errorMessage}"
+}

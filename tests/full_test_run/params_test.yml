@@ -1,0 +1,165 @@
+# =============================================================================
+# Production params for the receptor-resurfacing pipeline
+# Target: af3_pikp1_native_avrpikf_complex (PikP1 + AvrPikF)
+#
+# Composed from:
+#   - tests/rfdiffusion/test_rfdiffusion.nf        (contigs, target, chain conv)
+#   - tests/proteinmpnn/test_proteinmpnn.nf        (mpnn_top_n)
+#   - tests/negative_steering/test_negative_steering.nf
+#                                                  (all negsteer_* values)
+#   - params_example.yml                            (template + comments)
+#
+# Submit:
+#   sbatch /hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/run_pipeline.slurm.sh ./params.yml
+#
+# Resume after partial completion (same dir):
+#   sbatch /hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/run_pipeline.slurm.sh ./params.yml --resume
+#
+# (The slurm wrapper appends extra args to the nextflow run command, so
+# `--resume` should be passed via the wrapper.  If that doesn't work,
+# fall back to launching nextflow directly with -resume.)
+# =============================================================================
+
+
+# ── Project ───────────────────────────────────────────────────────────
+project_name: "PikP1_AvrPikF_overnight"
+outdir: "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/full_test_run/results"
+
+# ── Execution ─────────────────────────────────────────────────────────
+# Test was 16 (test_negative_steering.nf line 138).  Production default
+# in params_example.yml is 10 — keeping the test value for consistency
+# with what we just measured runtimes against.
+max_boltz2_parallel: 24
+
+
+# ═════════════════════════════════════════════════════════════════════════
+# INPUT MODE 2: Pre-docked complex PDB
+# ═════════════════════════════════════════════════════════════════════════
+pdb_file: "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/rfdiffusion/data/af3_pikp1_native_avrpikf_complex.pdb"
+
+# IMPORTANT: hotspot — Mode 2 does NOT auto-derive (no HADDOCK step).
+# test_rfdiffusion ran without a hotspot AND with min_hotspot_frac=0.0,
+# which means RFDiffusion got no positive guidance about WHERE on the
+# receptor the new binder should bind.  For a true production run you
+# probably want this populated.  Leaving it empty matches the test
+# exactly, which is what we want for an "overnight extended test".
+hotspot: ""
+
+
+# ═════════════════════════════════════════════════════════════════════════
+# SHARED SETTINGS
+# ═════════════════════════════════════════════════════════════════════════
+
+# ── Chain identifiers ─────────────────────────────────────────────────
+# Per the documented convention (params_example.yml line 52-54), these
+# describe the INPUT PDB.  The input PDB has receptor on A, effector
+# on C, so effector_chain="C".  Downstream consumers that work on
+# RFDiffusion split outputs (NEGSTEER_RUN_ONE etc.) read the
+# rfdiff_output_* params (always A/B — hardcoded by
+# rfdiffusion_filter.py:write_split_pdb).
+receptor_chain: "A"
+effector_chain: "C"
+
+
+# ── RFDiffusion ───────────────────────────────────────────────────────
+# Trailing chain-letter token "C" matches effector_chain above.
+contigs: "A1-32/10-20/A46-72/6-6 C"
+num_designs: 32                            # match what the test ran (test
+                                           # sized for fast turnaround;
+                                           # production default is 32 but
+                                           # we want overnight completion)
+rfdiff_iterations: 100                     # test value (test_rfdiffusion line 33)
+                                           # production default is 100 but 50
+                                           # is what we measured runtime against
+min_hotspot_frac: 0.0                      # test value — paired with empty hotspot
+
+
+# ── HADDOCK3 (modes 1/3 only — UNUSED in mode 2) ──────────────────────
+# These have no effect on this run but are required by the schema.
+haddock_sampling: 10000
+haddock_seletop: 400
+contact_cutoff: 8.0
+effector_active_residues: ""
+
+
+# ── Rosetta pre-validation ────────────────────────────────────────────
+sc_threshold: 0.5                          # test cascade used the default; the
+                                           # pipeline_notes13 cascade ran
+                                           # 4/8 passing at 0.5.  Production
+                                           # default is 0.62 (Overath); we keep
+                                           # the test value here so the cascade
+                                           # behaves identically.
+
+
+# ── ProteinMPNN ───────────────────────────────────────────────────────
+num_seqs: 4                               # production default; test used the
+                                           # same.  Total designs into MPNN =
+                                           # num_designs × num_seqs = 8 × 16 = 128
+mpnn_sampling_temp: 0.25
+rm_aa: "C"
+mpnn_top_n: 32                              # match the test run (8 sequences
+                                           # progressed to negative steering)
+
+
+# ═════════════════════════════════════════════════════════════════════════
+# Boltz2 negative-steering — all values from test_negative_steering.nf
+# ═════════════════════════════════════════════════════════════════════════
+
+# Steering strategy
+negsteer_mode: "mild"
+negsteer_max_mutations: 6
+negsteer_candidate_pool_size: 10
+negsteer_protected_set_source: "design_region_union"
+
+# Design / seed counts
+negsteer_n_designs: 20
+negsteer_num_seeds: 3
+negsteer_n_cycles: 1
+
+# Boltz prediction hyperparameters
+negsteer_diffusion_samples: 5              # test value (2 confirmed equivalent
+                                           # to production's 5 within noise per
+                                           # the d=2 vs d=5 comparison earlier)
+negsteer_recycling_steps: 3
+negsteer_rmsd_threshold: 6.0
+negsteer_contact_cutoff: 4.5
+
+negsteer_no_kernels: true                  # test value — kernels-OFF (P0-35
+                                           # closed because kernels were ~5%
+                                           # slower on these complex sizes)
+
+# Post-processing thresholds
+negsteer_postprocess_rmsd_threshold: 5.0
+negsteer_postprocess_metric_column: "steered_ra_eff_vs_truth"
+negsteer_postprocess_contact_cutoff: 5.0
+
+
+# ── Negative controls ─────────────────────────────────────────────────
+run_negative_controls: true
+negsteer_controls_n_designs: 1
+controls_warning_ipsae_max: 0.5
+controls_warning_ra_eff_min: 5.0
+
+
+# ── Interface metrics (P0-29) ─────────────────────────────────────────
+# These params are accepted for backward compatibility but the metrics
+# they used to govern (intact_core, weighted_jaccard, ipSAE_15,
+# interface_plddt) are now computed per-prediction by compute_metrics.py.
+# See the metric-relocation patches in this session.
+interface_plddt_trim_threshold: 50.0
+interface_intact_threshold: 5.0
+weighted_jaccard_pair_cutoff: 8.0
+
+
+# ── Orthogonal validation metrics ─────────────────────────────────────
+af3_nomsa_seeds: [42, 123, 456]
+orthogonal_filter_sc_min: 0.55
+orthogonal_filter_bsa_min: 600
+orthogonal_filter_plddt_min: 0.75
+orthogonal_filter_af3_ra_max: 5.0
+
+
+# ── Quality control ───────────────────────────────────────────────────
+max_poly_x: 5
+min_pct_identity: 0.0
+max_pct_identity: 100.0

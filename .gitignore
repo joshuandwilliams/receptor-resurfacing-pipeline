@@ -1,0 +1,95 @@
+# ============================================================
+# .gitignore for receptor-resurfacing-pipeline
+# ============================================================
+
+# ----- Nextflow -----
+.nextflow/
+.nextflow.log*
+.nextflow.history*
+work/
+tests/*/work/
+tests/*/tmp/
+
+# ----- Pipeline outputs -----
+# Adjust these if your output directory naming changes
+results/
+tests/*/results/
+tests/*/receptor_resurfacing_results/
+
+# ----- SLURM logs -----
+*.out
+*.err
+slurm-*.out
+slurm-*.err
+
+# ----- Python -----
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# ----- Jupyter -----
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# ----- macOS -----
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# ----- Microsoft Office lock files -----
+~$*
+
+# ----- Editors / IDEs -----
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+
+# ----- Environment / secrets -----
+.env
+.env.local
+*.local
+
+# ----- Build / packaging artifacts -----
+build/
+dist/
+*.egg
+.eggs/
+
+# ----- Java / JDK (if anything bundled) -----
+jdk-*/
+*.class
+*.jar
+
+# ----- Nextflow home (in case it gets recreated locally) -----
+nxf_home/
+
+# ----- Archive / scratch directories -----
+archive/
+scratch/
+
+# ----- Large data that shouldn't be tracked -----
+# Be cautious — your tests/ directory has small PDB files
+# that ARE tracked. Add specific patterns here if needed.
+# *.pdb              # don't enable globally — your test data uses .pdb
+# *.cif
+
+# ----- OS / misc -----
+Thumbs.db
+desktop.ini

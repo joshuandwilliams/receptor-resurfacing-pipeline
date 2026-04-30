@@ -1,0 +1,224 @@
+# =============================================================================
+# Example parameters — Receptor Resurfacing Pipeline v0.3.0
+# =============================================================================
+# Usage:
+#   sbatch /hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/run_pipeline.slurm.sh ./params.yml
+#
+# There are four input modes. Uncomment ONE of the sections below.
+# =============================================================================
+
+
+# ── Project ───────────────────────────────────────────────────────────
+project_name: "Sr50_3BI_LRR:AVR-PikD"
+outdir: "./results"
+
+# ── Execution ─────────────────────────────────────────────────────────
+max_boltz2_parallel: 10        # Max concurrent Boltz-2 GPU SLURM jobs on the
+                               # cluster — governs both BOLTZ2_PREDICT (main
+                               # pipeline) and NEGSTEER_RUN_ONE (negative
+                               # steering).  Each job handles one design
+                               # sequence (all seeds inside that job).  Raise
+                               # to fan out more GPU jobs at once; lower to
+                               # be a better neighbour on a busy cluster.
+                               # Capped overall by executor.queueSize in
+                               # nextflow.config (20).
+
+
+# ═════════════════════════════════════════════════════════════════════════
+# INPUT MODE 1: PDB + PDB (separate files, need docking)
+# ═════════════════════════════════════════════════════════════════════════
+# Both structures exist as separate PDBs.  HADDOCK3 docks them, then the
+# pipeline continues with RFDiffusion → MPNN → Boltz2.
+#
+receptor_input: "./Sr50_3BI_LRR.pdb"
+effector_input: "./AVR-PikD.pdb"
+
+
+# ═════════════════════════════════════════════════════════════════════════
+# INPUT MODE 2: Pre-docked complex PDB (direct mode)
+# ═════════════════════════════════════════════════════════════════════════
+# A single PDB containing both chains already docked together.
+# HADDOCK3 is skipped — goes straight to RFDiffusion.
+# You must provide hotspot manually (or leave blank if not needed).
+#
+# pdb_file: "./sr50_pwl2_af2.pdb"
+# hotspot: "B24,B25,B26,B27,B28,B29,B40,B41,B42,B43,B44,B45,B46,B47"
+
+
+# ═════════════════════════════════════════════════════════════════════════
+# SHARED SETTINGS (apply to all modes)
+# ═════════════════════════════════════════════════════════════════════════
+
+# ── Chain identifiers ─────────────────────────────────────────────────
+receptor_chain: "A"
+effector_chain: "B"
+
+# ── RFDiffusion ───────────────────────────────────────────────────────
+# In modes 1-3, effector length in contigs is auto-derived — just use "B".
+# In mode 4, you can write "B1-123" explicitly or use "B" if the PDB
+# contains the effector chain.
+contigs: "B A1-400/20-30/A426-435"
+hotspot: ""            # auto-derived from HADDOCK3 in modes 1-3
+num_designs: 32
+rfdiff_iterations: 100
+min_hotspot_frac: 0.5      # Min fraction of effector contacts inside design region to keep a design (0.0 = no filter)
+
+# ── HADDOCK3 (modes 1-3 only) ────────────────────────────────────────
+haddock_sampling: 10000    # 10000 = semi-blind, 1000 = targeted
+haddock_seletop: 400       # Top N rigid-body models passed to flexref
+contact_cutoff: 8.0        # Angstrom cutoff for hotspot extraction
+effector_active_residues: ""  # Comma-separated effector residue numbers to steer
+                              # HADDOCK docking toward specific effector surface patches.
+                              # e.g. "24,25,26,40,41,42,43,44,45,46,47" for AVR-PikD
+                              # binding epitope.  Leave empty ("") to restrain against
+                              # the entire effector chain (default semi-blind behaviour).
+                              # NOTE: This only affects HADDOCK3 docking restraints.
+                              # RFDiffusion hotspots are still auto-derived from the
+                              # docked interface (or set via the hotspot param).
+
+# ── Rosetta pre-validation physics filter ────────────────────────────
+sc_threshold: 0.62             # Min shape complementarity (Sc) to pass filter
+                               # (Overath et al., 2025).  Designs below this are
+                               # removed before ProteinMPNN sequence design.
+
+# ── ProteinMPNN ───────────────────────────────────────────────────────
+num_seqs: 16               # Sequences per RFDiffusion design (total = num_designs × num_seqs)
+mpnn_sampling_temp: 0.25
+rm_aa: "C"
+mpnn_top_n: 64             # Select top N sequences by MPNN score for AF2 (0 = use all)
+
+# -- Boltz2 Negative-Steering Validation ----------------------------------
+# The Boltz2 validation stage runs the negative-steering pipeline per
+# MPNN sequence.  For each sequence, one SLURM GPU job runs the full
+# single-cycle chain inline:
+#
+#   plan -> predict-one (xN) -> collect
+#        -> reversion prep -> predict-reversion-one (xM) -> harvest + finalize
+#        -> aggregate -> compute-final-metrics -> aggregate-per-sequence
+#        -> extract_passing
+#
+# Cross-sequence aggregation then picks a tier-then-composite
+# representative per MPNN sequence and produces a single ranked
+# triage table.
+#
+# Concurrency across MPNN sequences is capped by max_boltz2_parallel.
+# With the defaults below a typical sequence completes in ~2 hours.
+
+# Steering strategy
+negsteer_mode: "mild"                       # strong | mild | conservative | alanine
+                                            # mild = D/E/K/R substitutions; appropriate default
+                                            # for resurfacing designs (aggressive without
+                                            # introducing volumetrically incompatible side chains)
+negsteer_max_mutations: 6                   # Number of receptor residues to mutate per design
+negsteer_candidate_pool_size: 10            # Sampling pool size; > max_mutations gives more
+                                            # positional diversity across designs
+negsteer_protected_set_source: "design_region_union"
+                                            # true_interface | design_region_union
+                                            # design_region_union excludes both the true
+                                            # interface AND the RFDiffusion design region from
+                                            # the candidate pool — required for resurfacing
+                                            # designs so steering never lands on MPNN residues
+
+# Design / seed counts
+negsteer_n_designs: 20                      # Steered designs per MPNN sequence
+negsteer_num_seeds: 3                       # Independent Boltz seeds per unique sequence
+                                            # Total steered predictions per sequence
+                                            # = n_designs * num_seeds (= 60 by default)
+negsteer_n_cycles: 1                        # Currently single-cycle only. Multi-cycle is a
+                                            # follow-up item (see notes6 open item 4).
+
+# Boltz prediction hyperparameters
+negsteer_diffusion_samples: 5               # Diffusion samples per seed
+negsteer_recycling_steps: 3                 # Boltz recycling steps
+negsteer_rmsd_threshold: 6.0                # If initial cold-start RMSD <= this (in A), plan
+                                            # skips steering and writes a one-line summary
+negsteer_contact_cutoff: 4.5                # Heavy-atom contact cutoff (A) used by plan for
+                                            # interface detection
+
+# The negative-steering pipeline uses Boltz's CUDA triangle-attention
+# kernels via cuEquivariance, installed into boltz2_negsteer.img (pinned
+# at cuequivariance==0.9.1, cu12 variant; see boltz2_negsteer.def).
+# Setting this to true disables the kernel path and falls back to pure
+# PyTorch (~20-30% slower per Boltz call) — useful as a fast debugging
+# fallback if kernel dispatch misbehaves on a new GPU/driver combination.
+negsteer_no_kernels: false
+
+# Post-processing thresholds (forwarded to compute-final-metrics)
+negsteer_postprocess_rmsd_threshold: 5.0    # Rows with steered_ra_eff_vs_truth >= this
+                                            # threshold do NOT get confidence metrics populated
+                                            # (saves time on structurally wrong designs)
+negsteer_postprocess_metric_column: "steered_ra_eff_vs_truth"
+negsteer_postprocess_contact_cutoff: 5.0    # Heavy-atom contact cutoff for post-processing
+                                            # contamination classification (see columns.md)
+
+
+# ── Negative controls (Task 6 / P0-6) ─────────────────────────────────
+# Per-design negative controls: for each parent RFDiffusion design, run
+# one scrambled-receptor and one polyA-receptor variant through the same
+# negative-steering inner loop as a real MPNN sequence.  See
+# modules/negsteer_controls.nf and bin/build_control_sequences.py.
+#
+# Controls are diagnostic, not promotable — cross_sequence_summary.py
+# excludes them from the cross-rank ranking and the onComplete banner
+# emits a MISCALIBRATION warning if any control row scores like a real
+# binder (low ra_eff or high ipSAE).
+run_negative_controls: true              # Default ON for production;
+                                         # flip to false in test harnesses
+                                         # to keep wall-clock low.
+negsteer_controls_n_designs: 1           # Steered designs per control.
+                                         # Production runs 20 per real MPNN
+                                         # sequence; controls just need a
+                                         # diagnostic reading, so 1 is enough
+                                         # and 20× cheaper.
+controls_warning_ipsae_max: 0.5          # ipSAE > this on a control row
+                                         # triggers a miscalibration warning.
+controls_warning_ra_eff_min: 5.0         # ra_eff < this on a control row
+                                         # triggers a miscalibration warning.
+
+
+# ── Interface-restricted metrics (P0-29) ──────────────────────────────
+# Parameters for NEGSTEER_INTERFACE_METRICS, which adds iRMSD / fnat /
+# DockQ / ipsae_15 / intact_core columns to cross_sequence_summary.csv.
+interface_plddt_trim_threshold: 50.0  # Per-residue pLDDT cutoff for the
+                                      # intact_core filter.  Residues with
+                                      # pLDDT below this are dropped
+                                      # from the receptor alignment.
+interface_intact_threshold: 5.0       # Å cutoff for the intact_core
+                                      # filter, matching the current
+                                      # whole-chain `intact` threshold.
+
+
+# ── Weighted Jaccard contact overlap (P0-38) ──────────────────────────
+# Forwarded to compute_interface_metrics.py.  Hard distance ceiling for
+# receptor–effector residue pairs entering the weighted_jaccard sum.
+# At d=8 the Gaussian weight exp(-(d-4)^2/2.25) is ≈ 8e-4, so the
+# cutoff is numerically inert — only there to bound the all-vs-all
+# distance loop.  The Gaussian's μ and σ² are deliberately NOT exposed
+# as flags; re-tuning them would silently invalidate cross-cohort
+# weighted_jaccard comparisons in Task 8 AUROC.
+weighted_jaccard_pair_cutoff: 8.0
+
+
+# ── Orthogonal validation metrics (P0-31) ─────────────────────────────
+# Post-P0-29 orthogonal-validation stage.  AF3-no-MSA, FreeSASA (BSA),
+# MDAnalysis (H-bonds), interface pLDDT, Rosetta (Sc + ΔΔG, no
+# FastRelax).  All run on survivors.
+af3_nomsa_seeds: [42, 123, 456]       # Match Boltz num_seeds=3.  AF3
+                                      # does not expose a seed-count CLI
+                                      # flag — seeds pass via the
+                                      # modelSeeds JSON field.
+
+# Filter cascade thresholds.  Below-threshold survivors are flagged in
+# orthogonal_flags, not dropped (except af3_nomsa which is a hard drop).
+orthogonal_filter_sc_min: 0.55        # Lawrence-Colman shape complementarity
+orthogonal_filter_bsa_min: 600        # Å² (Overath et al. 2025)
+orthogonal_filter_plddt_min: 0.75     # mean interface pLDDT
+orthogonal_filter_af3_ra_max: 5.0     # AF3-no-MSA ra_eff vs reference
+                                      # (MANDATORY filter — failing
+                                      # survivors dropped from wet-lab set)
+
+
+# ── Quality control ───────────────────────────────────────────────────
+max_poly_x: 5
+min_pct_identity: 0.0
+max_pct_identity: 100.0

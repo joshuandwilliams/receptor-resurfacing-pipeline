@@ -1,0 +1,60 @@
+<ROSETTASCRIPTS>
+    <!--
+        fastrelax_for_ia.xml
+        ────────────────────
+        FastRelax pre-treatment for InterfaceAnalyzer ΔΔG scoring of
+        predicted protein-protein complexes.
+
+        One Cartesian-space FastRelax repeat with the ref2015 score
+        function.  This is the canonical setup used in Bennett et al.
+        2023 for de novo binder ΔΔG calibration, so the resulting
+        rosetta_ddg values are directly comparable to that paper's
+        −30 REU threshold.
+
+        Why one repeat, why Cartesian, why ref2015_cart:
+
+          - default_repeats=1 captures the bulk of the energy
+            improvement (clash relief, sidechain optimisation) at
+            ~3-6 min wall time per ~150-residue complex.  Additional
+            repeats give diminishing returns.
+          - cartesian=true minimises in Cartesian coordinates rather
+            than torsion space, which is more robust on predicted
+            structures whose bond geometry may differ slightly from
+            ideal (Boltz/AlphaFold/etc do not enforce strict
+            stereochemistry).
+          - ref2015_cart adds the cart_bonded term that penalises
+            bond-length and bond-angle deviation, which Cartesian
+            minimisation needs to avoid drifting toward unphysical
+            geometries.
+
+        No constraints, no fixed regions: the entire complex relaxes
+        as one body so both bound-state energy AND inter-chain
+        geometry are simultaneously optimised.  InterfaceAnalyzer
+        then computes the unbound state by chain separation +
+        repacking.
+    -->
+
+    <SCOREFXNS>
+        <ScoreFunction name="r15_cart" weights="ref2015_cart"/>
+    </SCOREFXNS>
+
+    <MOVERS>
+        <!--
+            FastRelax in this Rosetta build (2025.37) does not accept
+            'default_repeats' as an XML attribute — that setting must
+            be passed as the command-line option '-relax:default_repeats'
+            instead.  See run_rosetta_metrics.py:_run_fast_relax for
+            where the option is added to the rosetta_scripts cmdline.
+        -->
+        <FastRelax name="relax"
+                   scorefxn="r15_cart"
+                   cartesian="true"/>
+    </MOVERS>
+
+    <PROTOCOLS>
+        <Add mover="relax"/>
+    </PROTOCOLS>
+
+    <OUTPUT scorefxn="r15_cart"/>
+
+</ROSETTASCRIPTS>
