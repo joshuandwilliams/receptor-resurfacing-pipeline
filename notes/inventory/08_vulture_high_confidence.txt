@@ -1,0 +1,8 @@
+bin/compute_interface_metrics.py:103: unused import 'Iterable' (90% confidence)
+bin/derive_design_region.py:193: unused variable 'design_id_hint' (100% confidence)
+bin/haddock3_plots.py:21: unused import 'mticker' (90% confidence)
+bin/negsteer_plots.py:261: unused variable 'cross_tier' (100% confidence)
+bin/negsteer_plots.py:1260: unreachable code after 'return' (100% confidence)
+bin/rfdiffusion_plots.py:31: unused import 'BoundaryNorm' (90% confidence)
+tests/negative_steering/test_negsteer_plots.py:259: unused variable 'cross_tier' (100% confidence)
+tests/negative_steering/test_negsteer_plots.py:1258: unreachable code after 'return' (100% confidence)

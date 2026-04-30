@@ -1,0 +1,10 @@
+93	F541	[*] f-string-missing-placeholders
+31	F401	[-] unused-import
+23	E702	[ ] multiple-statements-on-one-line-semicolon
+13	F841	[ ] unused-variable
+12	E701	[ ] multiple-statements-on-one-line-colon
+10	E741	[ ] ambiguous-variable-name
+ 7	F821	[ ] undefined-name
+ 3	E402	[ ] module-import-not-at-top-of-file
+Found 192 errors.
+[*] 122 fixable with the `--fix` option (13 hidden fixes can be enabled with the `--unsafe-fixes` option).

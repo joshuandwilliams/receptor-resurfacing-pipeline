@@ -1,0 +1,194 @@
+bin/boltz2_iterate_steering.py:63:8: F401 [*] `os` imported but unused
+bin/boltz2_iterate_steering.py:663:15: F541 [*] f-string without any placeholders
+bin/boltz2_iterate_steering.py:686:21: E741 Ambiguous variable name: `l`
+bin/boltz2_iterate_steering.py:689:37: E741 Ambiguous variable name: `l`
+bin/boltz2_iterate_steering.py:815:15: F541 [*] f-string without any placeholders
+bin/boltz2_iterate_steering.py:1022:15: F541 [*] f-string without any placeholders
+bin/boltz2_iterate_steering.py:1175:15: F541 [*] f-string without any placeholders
+bin/boltz2_iterate_steering.py:1240:15: F541 [*] f-string without any placeholders
+bin/boltz2_iterate_steering.py:1570:15: F541 [*] f-string without any placeholders
+bin/boltz2_iterate_steering.py:1704:39: E741 Ambiguous variable name: `l`
+bin/boltz2_iterate_steering.py:2299:39: E741 Ambiguous variable name: `l`
+bin/boltz2_iterate_steering.py:2523:15: F541 [*] f-string without any placeholders
+bin/boltz2_iterate_steering.py:2524:15: F541 [*] f-string without any placeholders
+bin/boltz2_iterate_steering.py:2541:15: F541 [*] f-string without any placeholders
+bin/boltz2_iterate_steering.py:2542:15: F541 [*] f-string without any placeholders
+bin/boltz2_iterate_steering.py:2693:15: F541 [*] f-string without any placeholders
+bin/boltz2_iterate_steering.py:2694:15: F541 [*] f-string without any placeholders
+bin/boltz2_iterate_steering.py:2761:15: F541 [*] f-string without any placeholders
+bin/boltz2_iterate_steering.py:2762:15: F541 [*] f-string without any placeholders
+bin/boltz2_iterate_steering.py:2763:15: F541 [*] f-string without any placeholders
+bin/boltz2_iterate_steering.py:4071:27: F541 [*] f-string without any placeholders
+bin/boltz2_iterate_steering.py:4072:27: F541 [*] f-string without any placeholders
+bin/boltz2_iterate_steering.py:4073:27: F541 [*] f-string without any placeholders
+bin/boltz2_iterate_steering.py:4140:27: F541 [*] f-string without any placeholders
+bin/boltz2_iterate_steering.py:4141:27: F541 [*] f-string without any placeholders
+bin/boltz2_iterate_steering.py:4577:15: F541 [*] f-string without any placeholders
+bin/boltz2_iterate_steering.py:4578:15: F541 [*] f-string without any placeholders
+bin/boltz2_iterate_steering.py:4915:11: F541 [*] f-string without any placeholders
+bin/boltz2_iterate_steering.py:5008:15: F541 [*] f-string without any placeholders
+bin/boltz2_iterate_steering.py:5009:15: F541 [*] f-string without any placeholders
+bin/boltz2_iterate_steering.py:5063:15: F541 [*] f-string without any placeholders
+bin/boltz2_iterate_steering.py:5064:15: F541 [*] f-string without any placeholders
+bin/boltz2_negative_steering.py:70:1: E402 Module level import not at top of file
+bin/boltz2_negative_steering.py:264:15: F541 [*] f-string without any placeholders
+bin/boltz2_negative_steering.py:267:15: F541 [*] f-string without any placeholders
+bin/boltz2_negative_steering.py:766:13: F541 [*] f-string without any placeholders
+bin/boltz2_negative_steering.py:770:13: F541 [*] f-string without any placeholders
+bin/boltz2_negative_steering.py:1092:19: F821 Undefined name `Optional`
+bin/boltz2_negative_steering.py:1093:20: F821 Undefined name `Optional`
+bin/boltz2_negative_steering.py:1095:7: F821 Undefined name `Optional`
+bin/boltz2_negative_steering.py:1167:20: F821 Undefined name `Optional`
+bin/boltz2_negative_steering.py:1573:24: F541 [*] f-string without any placeholders
+bin/boltz2_negative_steering.py:1823:11: F541 [*] f-string without any placeholders
+bin/boltz2_negative_steering.py:1852:32: E741 Ambiguous variable name: `l`
+bin/boltz2_negative_steering.py:1853:29: E741 Ambiguous variable name: `l`
+bin/boltz2_negative_steering.py:1877:15: F541 [*] f-string without any placeholders
+bin/boltz2_negative_steering.py:1902:15: F541 [*] f-string without any placeholders
+bin/boltz2_negative_steering.py:1916:11: F541 [*] f-string without any placeholders
+bin/boltz2_negative_steering.py:2133:15: F541 [*] f-string without any placeholders
+bin/boltz2_negative_steering.py:2187:11: F541 [*] f-string without any placeholders
+bin/boltz2_negative_steering.py:2199:5: F841 Local variable `wrong_dist` is assigned to but never used
+bin/boltz2_negative_steering.py:2348:34: F821 Undefined name `Optional`
+bin/boltz2_negative_steering.py:2349:32: F821 Undefined name `Optional`
+bin/boltz2_negative_steering.py:2350:36: F821 Undefined name `Optional`
+bin/boltz2_negative_steering.py:2410:15: F541 [*] f-string without any placeholders
+bin/boltz2_negative_steering.py:2419:15: F541 [*] f-string without any placeholders
+bin/boltz2_negative_steering.py:2420:15: F541 [*] f-string without any placeholders
+bin/boltz2_negative_steering.py:2421:15: F541 [*] f-string without any placeholders
+bin/boltz2_negative_steering.py:2422:15: F541 [*] f-string without any placeholders
+bin/boltz2_negative_steering.py:2426:15: F541 [*] f-string without any placeholders
+bin/boltz2_negative_steering.py:2427:15: F541 [*] f-string without any placeholders
+bin/boltz2_negative_steering.py:2450:19: F541 [*] f-string without any placeholders
+bin/boltz2_negative_steering.py:2451:19: F541 [*] f-string without any placeholders
+bin/boltz2_negative_steering.py:2535:15: F541 [*] f-string without any placeholders
+bin/boltz2_negative_steering.py:2536:15: F541 [*] f-string without any placeholders
+bin/boltz2_negative_steering.py:2588:19: F541 [*] f-string without any placeholders
+bin/boltz2_negative_steering.py:2589:19: F541 [*] f-string without any placeholders
+bin/build_contigs.py:23:8: F401 [*] `sys` imported but unused
+bin/build_control_sequences.py:78:26: F401 [*] `typing.Tuple` imported but unused
+bin/compute_interface_metrics.py:100:8: F401 [*] `os` imported but unused
+bin/compute_interface_metrics.py:103:26: F401 [*] `typing.Iterable` imported but unused
+bin/compute_interface_metrics.py:110:29: F401 [*] `compute_metrics.compute_ipsae` imported but unused
+bin/compute_interface_metrics.py:370:5: F841 Local variable `model_translate` is assigned to but never used
+bin/compute_interface_metrics.py:373:9: F841 Local variable `all_model` is assigned to but never used
+bin/compute_interface_metrics.py:375:9: F841 Local variable `all_native` is assigned to but never used
+bin/compute_metrics.py:1585:23: F541 [*] f-string without any placeholders
+bin/compute_metrics.py:1586:23: F541 [*] f-string without any placeholders
+bin/compute_metrics.py:1587:23: F541 [*] f-string without any placeholders
+bin/compute_metrics.py:1591:19: F541 [*] f-string without any placeholders
+bin/cross_sequence_summary.py:91:8: F401 [*] `os` imported but unused
+bin/cross_sequence_summary.py:105:1: E402 Module level import not at top of file
+bin/derive_design_region.py:223:15: F541 [*] f-string without any placeholders
+bin/derive_design_region.py:224:15: F541 [*] f-string without any placeholders
+bin/derive_design_region.py:238:15: F541 [*] f-string without any placeholders
+bin/derive_design_region.py:239:15: F541 [*] f-string without any placeholders
+bin/derive_design_region.py:240:15: F541 [*] f-string without any placeholders
+bin/derive_design_region.py:241:15: F541 [*] f-string without any placeholders
+bin/derive_design_region.py:243:11: F541 [*] f-string without any placeholders
+bin/derive_design_region.py:244:11: F541 [*] f-string without any placeholders
+bin/derive_design_region.py:257:9: F541 [*] f-string without any placeholders
+bin/derive_design_region.py:258:9: F541 [*] f-string without any placeholders
+bin/derive_design_region.py:259:9: F541 [*] f-string without any placeholders
+bin/derive_design_region.py:338:15: F541 [*] f-string without any placeholders
+bin/derive_input_design_region.py:69:8: F401 [*] `re` imported but unused
+bin/derive_input_design_region.py:260:17: F541 [*] f-string without any placeholders
+bin/derive_input_design_region.py:261:17: F541 [*] f-string without any placeholders
+bin/derive_input_design_region.py:287:17: F541 [*] f-string without any placeholders
+bin/derive_input_design_region.py:288:17: F541 [*] f-string without any placeholders
+bin/derive_input_design_region.py:289:17: F541 [*] f-string without any placeholders
+bin/derive_true_interface.py:223:15: F541 [*] f-string without any placeholders
+bin/derive_true_interface.py:224:15: F541 [*] f-string without any placeholders
+bin/derive_true_interface.py:225:15: F541 [*] f-string without any placeholders
+bin/derive_true_interface.py:226:15: F541 [*] f-string without any placeholders
+bin/derive_true_interface.py:229:11: F541 [*] f-string without any placeholders
+bin/derive_true_interface.py:230:11: F541 [*] f-string without any placeholders
+bin/derive_true_interface.py:240:9: F541 [*] f-string without any placeholders
+bin/derive_true_interface.py:241:9: F541 [*] f-string without any placeholders
+bin/derive_true_interface.py:242:9: F541 [*] f-string without any placeholders
+bin/derive_true_interface.py:294:15: F541 [*] f-string without any placeholders
+bin/extract_survivor_manifest.py:27:8: F401 [*] `sys` imported but unused
+bin/haddock3_plots.py:20:30: F401 [*] `matplotlib.patches` imported but unused
+bin/haddock3_plots.py:21:29: F401 [*] `matplotlib.ticker` imported but unused
+bin/haddock3_plots.py:27:24: F401 [*] `haddock_utils.cluster_mean_score` imported but unused
+bin/haddock3_plots.py:138:17: E701 Multiple statements on one line (colon)
+bin/haddock3_plots.py:139:17: E701 Multiple statements on one line (colon)
+bin/mpnn_design_region_score.py:29:1: E402 Module level import not at top of file
+bin/mpnn_design_region_score.py:275:40: E701 Multiple statements on one line (colon)
+bin/mpnn_design_region_score.py:276:42: E701 Multiple statements on one line (colon)
+bin/mpnn_design_region_score.py:277:42: E701 Multiple statements on one line (colon)
+bin/mpnn_select_top.py:53:33: E702 Multiple statements on one line (semicolon)
+bin/mpnn_sequence_qc.py:23:8: F401 [*] `sys` imported but unused
+bin/mpnn_sequence_qc.py:82:56: E702 Multiple statements on one line (semicolon)
+bin/mpnn_sequence_qc.py:89:40: E701 Multiple statements on one line (colon)
+bin/mpnn_sequence_qc.py:91:46: E702 Multiple statements on one line (semicolon)
+bin/mpnn_sequence_qc.py:97:77: E702 Multiple statements on one line (semicolon)
+bin/mpnn_sequence_qc.py:112:94: E702 Multiple statements on one line (semicolon)
+bin/mpnn_sequence_qc.py:114:95: E702 Multiple statements on one line (semicolon)
+bin/mpnn_sequence_qc.py:168:33: E702 Multiple statements on one line (semicolon)
+bin/negsteer_plots.py:83:8: F401 [*] `json` imported but unused
+bin/negsteer_plots.py:85:8: F401 [*] `sys` imported but unused
+bin/negsteer_plots.py:1903:23: F541 [*] f-string without any placeholders
+bin/negsteer_within_sequence_plots.py:403:13: F841 Local variable `cs_ra` is assigned to but never used
+bin/negsteer_within_sequence_plots.py:405:13: F841 Local variable `st_ra` is assigned to but never used
+bin/negsteer_within_sequence_plots.py:407:13: F841 Local variable `rev_ra` is assigned to but never used
+bin/negsteer_within_sequence_plots.py:487:33: E702 Multiple statements on one line (semicolon)
+bin/negsteer_within_sequence_plots.py:541:41: E701 Multiple statements on one line (colon)
+bin/negsteer_within_sequence_plots.py:542:41: E701 Multiple statements on one line (colon)
+bin/negsteer_within_sequence_plots.py:555:30: E702 Multiple statements on one line (semicolon)
+bin/negsteer_within_sequence_plots.py:676:33: E701 Multiple statements on one line (colon)
+bin/negsteer_within_sequence_plots.py:683:30: E702 Multiple statements on one line (semicolon)
+bin/negsteer_within_sequence_plots.py:770:33: E702 Multiple statements on one line (semicolon)
+bin/negsteer_within_sequence_plots.py:777:29: E702 Multiple statements on one line (semicolon)
+bin/negsteer_within_sequence_plots.py:852:30: E702 Multiple statements on one line (semicolon)
+bin/negsteer_within_sequence_plots.py:858:32: E702 Multiple statements on one line (semicolon)
+bin/negsteer_within_sequence_plots.py:864:45: E702 Multiple statements on one line (semicolon)
+bin/negsteer_within_sequence_plots.py:979:23: F541 [*] f-string without any placeholders
+bin/orthogonal_metrics_plots.py:73:8: F401 [*] `sys` imported but unused
+bin/orthogonal_metrics_plots.py:74:25: F401 [*] `collections.defaultdict` imported but unused
+bin/orthogonal_metrics_plots.py:1138:23: F541 [*] f-string without any placeholders
+bin/parse_af3_output.py:37:8: F401 [*] `math` imported but unused
+bin/pipeline_correct_sequences.py:21:8: F401 [*] `sys` imported but unused
+bin/pipeline_correct_sequences.py:461:5: F841 Local variable `receptor_len` is assigned to but never used
+bin/reversion.py:72:8: F401 [*] `os` imported but unused
+bin/rfdiffusion_plots.py:31:35: F401 `matplotlib.colors.ListedColormap` imported but unused; consider using `importlib.util.find_spec` to test for availability
+bin/rfdiffusion_plots.py:31:51: F401 `matplotlib.colors.BoundaryNorm` imported but unused; consider using `importlib.util.find_spec` to test for availability
+bin/rfdiffusion_plots.py:318:43: E741 Ambiguous variable name: `l`
+bin/rfdiffusion_plots.py:523:39: E741 Ambiguous variable name: `l`
+bin/rfdiffusion_plots.py:1044:5: F841 Local variable `bottom_margin_in` is assigned to but never used
+bin/run_biophysical_metrics.py:29:8: F401 [*] `math` imported but unused
+tests/negative_steering/test_negsteer_plots.py:81:8: F401 [*] `json` imported but unused
+tests/negative_steering/test_negsteer_plots.py:83:8: F401 [*] `sys` imported but unused
+tests/negative_steering/test_negsteer_plots.py:1907:23: F541 [*] f-string without any placeholders
+tests/negative_steering/test_negsteer_within_sequence_plots.py:396:13: F841 Local variable `cs_ra` is assigned to but never used
+tests/negative_steering/test_negsteer_within_sequence_plots.py:398:13: F841 Local variable `st_ra` is assigned to but never used
+tests/negative_steering/test_negsteer_within_sequence_plots.py:400:13: F841 Local variable `rev_ra` is assigned to but never used
+tests/negative_steering/test_negsteer_within_sequence_plots.py:480:33: E702 Multiple statements on one line (semicolon)
+tests/negative_steering/test_negsteer_within_sequence_plots.py:534:41: E701 Multiple statements on one line (colon)
+tests/negative_steering/test_negsteer_within_sequence_plots.py:535:41: E701 Multiple statements on one line (colon)
+tests/negative_steering/test_negsteer_within_sequence_plots.py:548:30: E702 Multiple statements on one line (semicolon)
+tests/negative_steering/test_negsteer_within_sequence_plots.py:669:33: E701 Multiple statements on one line (colon)
+tests/negative_steering/test_negsteer_within_sequence_plots.py:676:30: E702 Multiple statements on one line (semicolon)
+tests/negative_steering/test_negsteer_within_sequence_plots.py:763:33: E702 Multiple statements on one line (semicolon)
+tests/negative_steering/test_negsteer_within_sequence_plots.py:770:29: E702 Multiple statements on one line (semicolon)
+tests/negative_steering/test_negsteer_within_sequence_plots.py:845:30: E702 Multiple statements on one line (semicolon)
+tests/negative_steering/test_negsteer_within_sequence_plots.py:851:32: E702 Multiple statements on one line (semicolon)
+tests/negative_steering/test_negsteer_within_sequence_plots.py:857:45: E702 Multiple statements on one line (semicolon)
+tests/negative_steering/test_negsteer_within_sequence_plots.py:972:23: F541 [*] f-string without any placeholders
+tests/orthogonal_metrics/test_orthogonal_metrics_plots.py:63:8: F401 [*] `sys` imported but unused
+tests/orthogonal_metrics/test_orthogonal_metrics_plots.py:64:25: F401 [*] `collections.defaultdict` imported but unused
+tests/orthogonal_metrics/test_orthogonal_metrics_plots.py:1162:23: F541 [*] f-string without any placeholders
+tests/proteinmpnn/test_mpnn_plots.py:56:8: F401 [*] `json` imported but unused
+tests/proteinmpnn/test_mpnn_plots.py:65:30: F401 [*] `matplotlib.patches` imported but unused
+tests/proteinmpnn/test_mpnn_plots.py:616:23: F541 [*] f-string without any placeholders
+tests/rfdiffusion/test_rfdiffusion_plots.py:54:8: F401 [*] `sys` imported but unused
+tests/rfdiffusion/test_rfdiffusion_plots.py:289:43: E741 Ambiguous variable name: `l`
+tests/rfdiffusion/test_rfdiffusion_plots.py:503:39: E741 Ambiguous variable name: `l`
+tests/rfdiffusion/test_rfdiffusion_plots.py:887:5: F841 Local variable `bottom_margin_in` is assigned to but never used
+tests/rfdiffusion/test_rfdiffusion_plots.py:1113:19: F541 [*] f-string without any placeholders
+tests/rfdiffusion/test_rfdiffusion_plots.py:1125:19: F541 [*] f-string without any placeholders
+tests/rfdiffusion/test_rfdiffusion_plots.py:1154:19: F541 [*] f-string without any placeholders
+tests/rosetta_filtering/test_rosetta_filtering_plots.py:52:30: F401 [*] `matplotlib.patches` imported but unused
+tests/rosetta_filtering/test_rosetta_filtering_plots.py:215:19: F541 [*] f-string without any placeholders
+Found 192 errors.
+[*] 122 fixable with the `--fix` option (13 hidden fixes can be enabled with the `--unsafe-fixes` option).
