@@ -40,6 +40,7 @@ process EXTRACT_SURVIVOR_MANIFEST {
     input:
     path extended_csv
     path workdirs, stageAs: 'workdirs/*'
+    path manifest_script
 
     output:
     path "survivor_manifest.csv", emit: manifest
@@ -52,7 +53,7 @@ process EXTRACT_SURVIVOR_MANIFEST {
             --bind \${PWD}:\${PWD} \\
             --bind ${projectDir}:${projectDir} \\
             ${params.boltz2_container} \\
-        python ${projectDir}/bin/extract_survivor_manifest.py \\
+        python ${manifest_script} \\
             --input-csv ${extended_csv} \\
             --workdirs-glob 'workdirs/*' \\
             --receptor-chain ${params.rfdiff_output_receptor_chain} \\

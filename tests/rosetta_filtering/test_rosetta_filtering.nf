@@ -94,11 +94,13 @@ workflow {
 
     ROSETTA_FILTER(
         ROSETTA_SC.out.pdb_and_scores.collect(),
-        params.sc_threshold
+        params.sc_threshold,
+        Channel.value(file("${projectDir}/bin/rosetta_filter_collect.py"))
     )
 
     ROSETTA_FILTER_PLOTS(
-        ROSETTA_FILTER.out.metrics
+        ROSETTA_FILTER.out.metrics,
+        Channel.value(file("${projectDir}/bin/rosetta_filter_plots.py"))
     )
 }
 

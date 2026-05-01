@@ -67,7 +67,8 @@ workflow {
         params.receptor_chain,
         params.effector_chain,
         params.contigs,
-        params.effector_active_residues
+        params.effector_active_residues,
+        Channel.value(file("${projectDir}/bin/haddock3_prepare.py"))
     )
 
     HADDOCK3_DOCK(
@@ -75,7 +76,8 @@ workflow {
         HADDOCK3_PREPARE.out.effector_pdb_out,
         HADDOCK3_PREPARE.out.restraints,
         params.haddock_sampling,
-        params.haddock_seletop
+        params.haddock_seletop,
+        Channel.value(file("${projectDir}/bin/collect_haddock3_dock.py"))
     )
 
     HADDOCK3_PLOTS(
@@ -84,7 +86,8 @@ workflow {
         HADDOCK3_DOCK.out.run_dir,
         params.contigs,
         params.receptor_chain,
-        params.effector_active_residues
+        params.effector_active_residues,
+        Channel.value(file("${projectDir}/bin/haddock3_plots.py"))
     )
 
     EXTRACT_HOTSPOTS(
@@ -93,7 +96,8 @@ workflow {
         params.effector_chain,
         params.contact_cutoff,
         params.receptor_seq ?: "",
-        params.effector_seq ?: ""
+        params.effector_seq ?: "",
+        Channel.value(file("${projectDir}/bin/extract_hotspots.py"))
     )
 
     BUILD_CONTIGS(
@@ -102,7 +106,8 @@ workflow {
         params.effector_chain,
         params.contigs,
         WRITE_DUMMY_MAPPING_REC.out.mapping,
-        WRITE_DUMMY_MAPPING_EFF.out.mapping
+        WRITE_DUMMY_MAPPING_EFF.out.mapping,
+        Channel.value(file("${projectDir}/bin/build_contigs.py"))
     )
 }
 

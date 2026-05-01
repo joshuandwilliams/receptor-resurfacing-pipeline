@@ -75,6 +75,7 @@ process DERIVE_INPUT_INDICES {
     val   receptor_chain
     val   effector_chain
     val   contact_cutoff
+    path  derive_script
 
     output:
     path "input_design_region.txt",  emit: design_region
@@ -89,7 +90,7 @@ process DERIVE_INPUT_INDICES {
     set -euo pipefail
 
     singularity exec --bind \${PWD}:\${PWD} ${params.boltz2_container} \\
-        python ${projectDir}/bin/derive_input_design_region.py \\
+        python ${derive_script} \\
             --input-pdb           ${input_pdb} \\
             --contigs             "${contigs}" \\
             --receptor-chain      ${receptor_chain} \\
@@ -124,6 +125,14 @@ process NEGSTEER_CONTROLS {
     val  postprocess_rmsd_threshold
     val  postprocess_metric_column
     val  postprocess_contact_cutoff
+    path build_script
+    // Stage orchestrator as a path input — same caveat as
+    // NEGSTEER_RUN_ONE: sub-scripts called via --bin-dir
+    // ${projectDir}/bin are not content-hashed.  The inline `sys.path
+    // .insert(0, "${projectDir}/bin")` import of
+    // boltz2_negative_steering.get_chain_sequence is also an
+    // un-tracked indirect dependency.
+    path orchestrator_script
 
     output:
     path "${control_name}/", emit: per_control_workdir
@@ -156,7 +165,7 @@ PYEOF
 
     # ─── Build the control receptor + companion FASTAs ───────────────
     singularity exec --bind \${PWD}:\${PWD} ${params.boltz2_container} \\
-        python ${projectDir}/bin/build_control_sequences.py \\
+        python ${build_script} \\
             --source-pdb         "${input_pdb}" \\
             --design-region-file "${design_region}" \\
             --effector-fasta     "${control_name}/inputs/source_effector.fasta" \\
@@ -194,7 +203,7 @@ PYEOF
     # input structure if we wreck the native sequence at the would-be
     # design region?" and the true-interface indices were derived
     # against this exact PDB by DERIVE_INPUT_INDICES.
-    bash ${projectDir}/bin/negative_steering_run_one.sh \\
+    bash ${orchestrator_script} \\
         --seq-name                     "${control_name}" \\
         --ground-truth                 "${input_pdb}" \\
         --receptor-chain               "${receptor_chain}" \\

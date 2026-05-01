@@ -129,11 +129,19 @@ workflow {
         .collect()
 
     // ── P0-29: interface-restricted metrics ────────────────────────
-    NEGSTEER_INTERFACE_METRICS(cross_csv_ch, workdirs_ch)
+    NEGSTEER_INTERFACE_METRICS(
+        cross_csv_ch,
+        workdirs_ch,
+        Channel.value(file("${projectDir}/bin/compute_interface_metrics.py"))
+    )
     extended_csv_ch = NEGSTEER_INTERFACE_METRICS.out.extended_csv
 
     // ── Build per-survivor manifest ────────────────────────────────
-    EXTRACT_SURVIVOR_MANIFEST(extended_csv_ch, workdirs_ch)
+    EXTRACT_SURVIVOR_MANIFEST(
+        extended_csv_ch,
+        workdirs_ch,
+        Channel.value(file("${projectDir}/bin/extract_survivor_manifest.py"))
+    )
 
     // ── Fan-out: one record per survivor ───────────────────────────
     // The manifest CSV is consumed via splitCsv.  Each record becomes
@@ -182,7 +190,10 @@ workflow {
             file(rec[2]),        // ground_truth_pdb (unused but kept symmetric)
         )
     }
-    NEGSTEER_BIOPHYSICAL_METRICS(biophysical_input_ch)
+    NEGSTEER_BIOPHYSICAL_METRICS(
+        biophysical_input_ch,
+        Channel.value(file("${projectDir}/bin/run_biophysical_metrics.py"))
+    )
 
     // ── Rosetta stream ─────────────────────────────────────────────
     rosetta_input_ch = manifest_records_ch.map { rec ->
@@ -191,7 +202,20 @@ workflow {
             file(rec[1]),        // canonical_pdb
         )
     }
-    NEGSTEER_ROSETTA_METRICS(rosetta_input_ch)
+    // FastRelax XML — this test was previously calling
+    // NEGSTEER_ROSETTA_METRICS with only the per-survivor tuple,
+    // which had been silently inconsistent with the production
+    // module's two-input signature (tuple + fastrelax_xml).  Adding
+    // fastrelax_xml here as a side effect of the cache-busting
+    // refactor; the test now matches main.nf's invocation shape.
+    fastrelax_xml_ch = Channel.value(
+        file("${projectDir}/bin/fastrelax_for_ia.xml")
+    )
+    NEGSTEER_ROSETTA_METRICS(
+        rosetta_input_ch,
+        fastrelax_xml_ch,
+        Channel.value(file("${projectDir}/bin/run_rosetta_metrics.py"))
+    )
 
     // ── Merge the three streams into the final CSV ─────────────────
     NEGSTEER_ORTHOGONAL_METRICS(
@@ -199,6 +223,7 @@ workflow {
         AF3_PARSE_OUTPUT.out.summary_csv.collect(),
         NEGSTEER_BIOPHYSICAL_METRICS.out.summary_csv.collect(),
         NEGSTEER_ROSETTA_METRICS.out.summary_csv.collect(),
+        Channel.value(file("${projectDir}/bin/merge_orthogonal_metrics.py"))
     )
 }
 

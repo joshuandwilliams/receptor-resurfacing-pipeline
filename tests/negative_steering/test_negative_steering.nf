@@ -268,7 +268,9 @@ workflow {
     // by the downstream .combine(by:0) join.
     NEGSTEER_DERIVE_INDICES(
         design_pdb_map_ch.map { stem, pdb -> pdb },
-        metrics_json_ch.first()
+        metrics_json_ch.first(),
+        Channel.value(file("${projectDir}/bin/derive_design_region.py")),
+        Channel.value(file("${projectDir}/bin/derive_true_interface.py"))
     )
 
     indices_map_ch = NEGSTEER_DERIVE_INDICES.out.indices
@@ -309,7 +311,8 @@ workflow {
         plan_extra_args,
         params.negsteer_postprocess_rmsd_threshold,
         params.negsteer_postprocess_metric_column,
-        params.negsteer_postprocess_contact_cutoff
+        params.negsteer_postprocess_contact_cutoff,
+        Channel.value(file("${projectDir}/bin/negative_steering_run_one.sh"))
     )
 
     // ── Negative controls (Task 6) ────────────────────────────────────
@@ -345,7 +348,8 @@ workflow {
             contigs_ch,
             params.receptor_chain,
             params.effector_chain,
-            params.negsteer_contact_cutoff
+            params.negsteer_contact_cutoff,
+            Channel.value(file("${projectDir}/bin/derive_input_design_region.py"))
         )
 
         // Build a 2-element input channel for NEGSTEER_CONTROLS — same
@@ -369,7 +373,9 @@ workflow {
             controls_plan_extra_args,
             params.negsteer_postprocess_rmsd_threshold,
             params.negsteer_postprocess_metric_column,
-            params.negsteer_postprocess_contact_cutoff
+            params.negsteer_postprocess_contact_cutoff,
+            Channel.value(file("${projectDir}/bin/build_control_sequences.py")),
+            Channel.value(file("${projectDir}/bin/negative_steering_run_one.sh"))
         )
 
         // Mix steered + control workdirs into one channel feeding the
@@ -386,7 +392,10 @@ workflow {
 
     // ── Cross-sequence aggregation ───────────────────────────────────
     per_sequence_workdirs_ch = all_workdirs_ch.collect()
-    NEGSTEER_CROSS_SEQUENCE(per_sequence_workdirs_ch)
+    NEGSTEER_CROSS_SEQUENCE(
+        per_sequence_workdirs_ch,
+        Channel.value(file("${projectDir}/bin/cross_sequence_summary.py"))
+    )
 
     // ── Diagnostic plots ─────────────────────────────────────────────
     // Mirrors main.nf "Step 4b": cohort + within-sequence plots in
@@ -404,11 +413,13 @@ workflow {
     NEGSTEER_PLOTS(
         NEGSTEER_CROSS_SEQUENCE.out.cross_summary,
         per_sequence_workdirs_ch,
-        design_region_ch
+        design_region_ch,
+        Channel.value(file("${projectDir}/bin/negsteer_plots.py"))
     )
     NEGSTEER_WITHIN_SEQUENCE_PLOTS(
         NEGSTEER_CROSS_SEQUENCE.out.cross_summary,
-        per_sequence_workdirs_ch
+        per_sequence_workdirs_ch,
+        Channel.value(file("${projectDir}/bin/negsteer_within_sequence_plots.py"))
     )
 }
 

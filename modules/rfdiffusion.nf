@@ -40,6 +40,11 @@ process RFDIFFUSION {
     val  hotspot
     val  num_designs
     val  iterations
+    // Stage bin scripts as path inputs so Nextflow content-hashes them
+    // for the task-cache key.  Without this, edits to bin/*.py do not
+    // invalidate the cache (see comment on AF3_PARSE_OUTPUT in
+    // modules/negsteer_af3_nomsa.nf).
+    path contigs_script
 
     output:
     path "design_*.pdb",  emit: design_pdbs
@@ -54,7 +59,7 @@ process RFDIFFUSION {
 
     # ─── Preprocess contigs ───────────────────────────────────────────────
     singularity exec --bind \${PWD}:\${PWD} ${params.rfdiff_container} \\
-        python ${projectDir}/bin/rfdiffusion_contigs.py \\
+        python ${contigs_script} \\
             --contigs "${raw_contigs}" \\
             --pdb input.pdb \\
             --output processed_contigs.txt
@@ -119,6 +124,7 @@ process RFDIFFUSION_FILTER {
     val  effector_chain
     val  contact_cutoff
     val  min_hotspot_frac
+    path filter_script
 
     output:
     path "rfdiffusion_metrics.json",   emit: metrics
@@ -131,7 +137,7 @@ process RFDIFFUSION_FILTER {
     def hotspot_arg = hotspot ? "--hotspot \"${hotspot}\"" : ""
     """
     singularity exec --bind \${PWD}:\${PWD} ${params.rfdiff_container} \\
-        python ${projectDir}/bin/rfdiffusion_filter.py \\
+        python ${filter_script} \\
             --input-pdb ${input_pdb} \\
             --design-dir . \\
             --contigs "${contigs}" \\
@@ -170,6 +176,7 @@ process RFDIFFUSION_PLOTS {
 
     input:
     path metrics
+    path plots_script
 
     output:
     path "rfdiff_*.png", emit: plots
@@ -180,7 +187,7 @@ process RFDIFFUSION_PLOTS {
         --bind \${PWD}:\${PWD} \\
         --env MPLCONFIGDIR=/tmp \\
         ${params.rfdiff_container} \\
-        python ${projectDir}/bin/rfdiffusion_plots.py \\
+        python ${plots_script} \\
             --metrics ${metrics}
     """
 }

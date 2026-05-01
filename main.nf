@@ -356,7 +356,8 @@ workflow {
             params.receptor_chain,
             params.effector_chain,
             params.contigs,
-            params.effector_active_residues
+            params.effector_active_residues,
+            Channel.value(file("${projectDir}/bin/haddock3_prepare.py"))
         )
 
         HADDOCK3_DOCK(
@@ -364,7 +365,8 @@ workflow {
             HADDOCK3_PREPARE.out.effector_pdb_out,
             HADDOCK3_PREPARE.out.restraints,
             params.haddock_sampling,
-            params.haddock_seletop
+            params.haddock_seletop,
+            Channel.value(file("${projectDir}/bin/collect_haddock3_dock.py"))
         )
 
         HADDOCK3_PLOTS(
@@ -373,7 +375,8 @@ workflow {
             HADDOCK3_DOCK.out.run_dir,
             params.contigs,
             params.receptor_chain,
-            params.effector_active_residues
+            params.effector_active_residues,
+            Channel.value(file("${projectDir}/bin/haddock3_plots.py"))
         )
 
         // ── Extract hotspots from docked complex ────────────────────────
@@ -386,7 +389,8 @@ workflow {
             params.effector_chain,
             params.contact_cutoff,
             params.receptor_seq ?: "",
-            params.effector_seq ?: ""
+            params.effector_seq ?: "",
+            Channel.value(file("${projectDir}/bin/extract_hotspots.py"))
         )
 
         // ── Build updated contigs & extract sequences ───────────────────
@@ -396,7 +400,8 @@ workflow {
             params.effector_chain,
             params.contigs,
             rec_trim_mapping_ch,
-            eff_trim_mapping_ch
+            eff_trim_mapping_ch,
+            Channel.value(file("${projectDir}/bin/build_contigs.py"))
         )
 
         // Read the auto-derived hotspot (use user's if provided)
@@ -424,7 +429,11 @@ workflow {
         // RESOLVE_CONTIGS process.  Downstream consumers (including
         // pipeline_correct_sequences.py) can then assume contigs_ch is
         // always PDB-resolved regardless of which branch produced it.
-        RESOLVE_CONTIGS(rfdiff_pdb_ch, params.contigs)
+        RESOLVE_CONTIGS(
+            rfdiff_pdb_ch,
+            params.contigs,
+            Channel.value(file("${projectDir}/bin/rfdiffusion_contigs.py"))
+        )
         contigs_ch = RESOLVE_CONTIGS.out.resolved_contigs
             .map { it.text.trim() }
             .first()
@@ -468,7 +477,8 @@ workflow {
         contigs_ch,
         hotspot_ch,
         params.num_designs,
-        params.rfdiff_iterations
+        params.rfdiff_iterations,
+        Channel.value(file("${projectDir}/bin/rfdiffusion_contigs.py"))
     )
 
     RFDIFFUSION_FILTER(
@@ -479,13 +489,15 @@ workflow {
         params.receptor_chain,
         params.effector_chain,
         params.contact_cutoff,
-        params.min_hotspot_frac
+        params.min_hotspot_frac,
+        Channel.value(file("${projectDir}/bin/rfdiffusion_filter.py"))
     )
 
     design_pdbs_ch = RFDIFFUSION_FILTER.out.passing_pdbs.flatten()
 
     RFDIFFUSION_PLOTS(
-        RFDIFFUSION_FILTER.out.metrics
+        RFDIFFUSION_FILTER.out.metrics,
+        Channel.value(file("${projectDir}/bin/rfdiffusion_plots.py"))
     )
 
     // =====================================================================
@@ -506,13 +518,15 @@ workflow {
 
     ROSETTA_FILTER(
         ROSETTA_SC.out.pdb_and_scores.collect(),
-        params.sc_threshold
+        params.sc_threshold,
+        Channel.value(file("${projectDir}/bin/rosetta_filter_collect.py"))
     )
 
     rosetta_passing_pdbs_ch = ROSETTA_FILTER.out.passing_pdbs.flatten()
 
     ROSETTA_FILTER_PLOTS(
-        ROSETTA_FILTER.out.metrics
+        ROSETTA_FILTER.out.metrics,
+        Channel.value(file("${projectDir}/bin/rosetta_filter_plots.py"))
     )
 
     // =====================================================================
@@ -523,7 +537,8 @@ workflow {
         receptor_seq_ch,
         effector_seq_ch,
         contigs_ch,
-        receptor_start_pdb_ch
+        receptor_start_pdb_ch,
+        Channel.value(file("${projectDir}/bin/pipeline_correct_sequences.py"))
     )
 
     PROTEINMPNN(
@@ -540,7 +555,8 @@ workflow {
         contigs_ch,
         params.num_designs,
         params.num_seqs,
-        receptor_start_pdb_ch
+        receptor_start_pdb_ch,
+        Channel.value(file("${projectDir}/bin/pipeline_correct_sequences.py"))
     )
 
     SEQUENCE_QC(
@@ -549,7 +565,8 @@ workflow {
         receptor_seq_ch,
         params.max_poly_x,
         params.min_pct_identity,
-        params.max_pct_identity
+        params.max_pct_identity,
+        Channel.value(file("${projectDir}/bin/mpnn_sequence_qc.py"))
     )
 
     // ── Design-region scoring ────────────────────────────────────────
@@ -561,19 +578,22 @@ workflow {
         SEQUENCE_QC.out.qc_metadata,
         design_pdbs_for_score,
         mpnn_dirs_ch,
-        fixed_jsonls_ch
+        fixed_jsonls_ch,
+        Channel.value(file("${projectDir}/bin/mpnn_design_region_score.py"))
     )
 
     // ── Sequence clustering ──────────────────────────────────────────
     MPNN_CLUSTER(
-        MPNN_DESIGN_REGION_SCORE.out.scored_metadata
+        MPNN_DESIGN_REGION_SCORE.out.scored_metadata,
+        Channel.value(file("${projectDir}/bin/mpnn_cluster_sequences.py"))
     )
 
     MPNN_PLOTS(
         MPNN_DESIGN_REGION_SCORE.out.scored_metadata,
         MPNN_CLUSTER.out.cluster_counts,
         receptor_seq_ch,
-        contigs_ch
+        contigs_ch,
+        Channel.value(file("${projectDir}/bin/mpnn_plots.py"))
     )
 
     // =====================================================================
@@ -583,7 +603,8 @@ workflow {
         MPNN_SELECT_TOP(
             SEQUENCE_QC.out.qc_fastas,
             MPNN_DESIGN_REGION_SCORE.out.scored_metadata,
-            params.mpnn_top_n
+            params.mpnn_top_n,
+            Channel.value(file("${projectDir}/bin/mpnn_select_top.py"))
         )
         mpnn_fastas_dir_ch = MPNN_SELECT_TOP.out.top_fastas
     } else {
@@ -651,7 +672,9 @@ workflow {
     // by the downstream .combine(by:0) join.
     NEGSTEER_DERIVE_INDICES(
         design_pdb_map_ch.map { stem, pdb -> pdb },
-        RFDIFFUSION_FILTER.out.metrics.first()   // value-channel broadcast
+        RFDIFFUSION_FILTER.out.metrics.first(),   // value-channel broadcast
+        Channel.value(file("${projectDir}/bin/derive_design_region.py")),
+        Channel.value(file("${projectDir}/bin/derive_true_interface.py"))
     )
 
     // NEGSTEER_DERIVE_INDICES emits tuple(stem, design_region, true_iface)
@@ -708,7 +731,8 @@ workflow {
         plan_extra_args,
         params.negsteer_postprocess_rmsd_threshold,
         params.negsteer_postprocess_metric_column,
-        params.negsteer_postprocess_contact_cutoff
+        params.negsteer_postprocess_contact_cutoff,
+        Channel.value(file("${projectDir}/bin/negative_steering_run_one.sh"))
     )
 
     // -- 4f-bis: Negative controls (Task 6 revision — v7) ------------
@@ -750,7 +774,8 @@ workflow {
             contigs_ch,
             params.receptor_chain,
             params.effector_chain,
-            params.negsteer_contact_cutoff
+            params.negsteer_contact_cutoff,
+            Channel.value(file("${projectDir}/bin/derive_input_design_region.py"))
         )
 
         // Build a 2-element input channel for NEGSTEER_CONTROLS.  Each
@@ -780,7 +805,9 @@ workflow {
             controls_plan_extra_args,
             params.negsteer_postprocess_rmsd_threshold,
             params.negsteer_postprocess_metric_column,
-            params.negsteer_postprocess_contact_cutoff
+            params.negsteer_postprocess_contact_cutoff,
+            Channel.value(file("${projectDir}/bin/build_control_sequences.py")),
+            Channel.value(file("${projectDir}/bin/negative_steering_run_one.sh"))
         )
 
         // Mix steered + control workdirs into one channel feeding the
@@ -807,7 +834,10 @@ workflow {
     // it to a name also makes the dataflow easier to read.
     per_sequence_workdirs_ch = all_workdirs_ch.collect()
 
-    NEGSTEER_CROSS_SEQUENCE(per_sequence_workdirs_ch)
+    NEGSTEER_CROSS_SEQUENCE(
+        per_sequence_workdirs_ch,
+        Channel.value(file("${projectDir}/bin/cross_sequence_summary.py"))
+    )
 
     // ── Step 4b: Diagnostic plots from cross_summary + per-sequence
     //            workdirs.  Two parallel processes — cohort-level and
@@ -822,11 +852,13 @@ workflow {
     NEGSTEER_PLOTS(
         NEGSTEER_CROSS_SEQUENCE.out.cross_summary,
         per_sequence_workdirs_ch,
-        DERIVE_INPUT_INDICES.out.design_region.first()
+        DERIVE_INPUT_INDICES.out.design_region.first(),
+        Channel.value(file("${projectDir}/bin/negsteer_plots.py"))
     )
     NEGSTEER_WITHIN_SEQUENCE_PLOTS(
         NEGSTEER_CROSS_SEQUENCE.out.cross_summary,
-        per_sequence_workdirs_ch
+        per_sequence_workdirs_ch,
+        Channel.value(file("${projectDir}/bin/negsteer_within_sequence_plots.py"))
     )
 
     // =====================================================================
@@ -854,12 +886,17 @@ workflow {
     // ── P0-29: interface-restricted metrics ───────────────────────────
     NEGSTEER_INTERFACE_METRICS(
         NEGSTEER_CROSS_SEQUENCE.out.cross_summary,
-        per_sequence_workdirs_ch
+        per_sequence_workdirs_ch,
+        Channel.value(file("${projectDir}/bin/compute_interface_metrics.py"))
     )
     extended_csv_ch = NEGSTEER_INTERFACE_METRICS.out.extended_csv
 
     // ── Build per-survivor manifest ───────────────────────────────────
-    EXTRACT_SURVIVOR_MANIFEST(extended_csv_ch, per_sequence_workdirs_ch)
+    EXTRACT_SURVIVOR_MANIFEST(
+        extended_csv_ch,
+        per_sequence_workdirs_ch,
+        Channel.value(file("${projectDir}/bin/extract_survivor_manifest.py"))
+    )
 
     // ── Fan-out: one record per survivor ──────────────────────────────
     // The manifest CSV is consumed via splitCsv.  Each record becomes
@@ -908,7 +945,10 @@ workflow {
             file(rec[2]),        // ground_truth_pdb (unused but kept symmetric)
         )
     }
-    NEGSTEER_BIOPHYSICAL_METRICS(biophysical_input_ch)
+    NEGSTEER_BIOPHYSICAL_METRICS(
+        biophysical_input_ch,
+        Channel.value(file("${projectDir}/bin/run_biophysical_metrics.py"))
+    )
 
     // ── Rosetta stream ────────────────────────────────────────────────
     rosetta_input_ch = manifest_records_ch.map { rec ->
@@ -923,7 +963,11 @@ workflow {
     fastrelax_xml_ch = Channel.value(
         file("${projectDir}/bin/fastrelax_for_ia.xml")
     )
-    NEGSTEER_ROSETTA_METRICS(rosetta_input_ch, fastrelax_xml_ch)
+    NEGSTEER_ROSETTA_METRICS(
+        rosetta_input_ch,
+        fastrelax_xml_ch,
+        Channel.value(file("${projectDir}/bin/run_rosetta_metrics.py"))
+    )
 
     // ── Merge the three streams into the final survivors CSV ──────────
     NEGSTEER_ORTHOGONAL_METRICS(
@@ -931,6 +975,7 @@ workflow {
         AF3_PARSE_OUTPUT.out.summary_csv.collect(),
         NEGSTEER_BIOPHYSICAL_METRICS.out.summary_csv.collect(),
         NEGSTEER_ROSETTA_METRICS.out.summary_csv.collect(),
+        Channel.value(file("${projectDir}/bin/merge_orthogonal_metrics.py"))
     )
 
     // ── Orthogonal-metrics diagnostic plots ───────────────────────────

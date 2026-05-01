@@ -107,7 +107,11 @@ workflow {
 
     // ── Resolve the user contig against the input PDB ────────────────
     // Mirrors main.nf Branch B.
-    RESOLVE_CONTIGS(input_pdb_ch, params.contigs)
+    RESOLVE_CONTIGS(
+        input_pdb_ch,
+        params.contigs,
+        Channel.value(file("${projectDir}/bin/rfdiffusion_contigs.py"))
+    )
     contigs_ch = RESOLVE_CONTIGS.out.resolved_contigs
         .map { it.text.trim() }
         .first()
@@ -148,7 +152,8 @@ workflow {
         receptor_seq_ch,
         effector_seq_ch,
         contigs_ch,
-        receptor_start_pdb_ch
+        receptor_start_pdb_ch,
+        Channel.value(file("${projectDir}/bin/pipeline_correct_sequences.py"))
     )
 
     // ── Step 2: ProteinMPNN ──────────────────────────────────────────
@@ -167,7 +172,8 @@ workflow {
         contigs_ch,
         num_designs_ch,
         params.num_seqs,
-        receptor_start_pdb_ch
+        receptor_start_pdb_ch,
+        Channel.value(file("${projectDir}/bin/pipeline_correct_sequences.py"))
     )
 
     // ── Step 4: Quality control ──────────────────────────────────────
@@ -177,7 +183,8 @@ workflow {
         receptor_seq_ch,
         params.max_poly_x,
         params.min_pct_identity,
-        params.max_pct_identity
+        params.max_pct_identity,
+        Channel.value(file("${projectDir}/bin/mpnn_sequence_qc.py"))
     )
 
     // ── Step 5: Design-region scoring ────────────────────────────────
@@ -189,12 +196,14 @@ workflow {
         SEQUENCE_QC.out.qc_metadata,
         design_pdbs_for_score,
         mpnn_dirs_ch,
-        fixed_jsonls_ch
+        fixed_jsonls_ch,
+        Channel.value(file("${projectDir}/bin/mpnn_design_region_score.py"))
     )
 
     // ── Step 6: Sequence clustering ──────────────────────────────────
     MPNN_CLUSTER(
-        MPNN_DESIGN_REGION_SCORE.out.scored_metadata
+        MPNN_DESIGN_REGION_SCORE.out.scored_metadata,
+        Channel.value(file("${projectDir}/bin/mpnn_cluster_sequences.py"))
     )
 
     // ── Step 7: Diagnostic plots ─────────────────────────────────────
@@ -202,7 +211,8 @@ workflow {
         MPNN_DESIGN_REGION_SCORE.out.scored_metadata,
         MPNN_CLUSTER.out.cluster_counts,
         receptor_seq_ch,
-        contigs_ch
+        contigs_ch,
+        Channel.value(file("${projectDir}/bin/mpnn_plots.py"))
     )
 
     // ── Step 8 (optional): Top-N selection ───────────────────────────
@@ -210,7 +220,8 @@ workflow {
         MPNN_SELECT_TOP(
             SEQUENCE_QC.out.qc_fastas,
             MPNN_DESIGN_REGION_SCORE.out.scored_metadata,
-            params.mpnn_top_n
+            params.mpnn_top_n,
+            Channel.value(file("${projectDir}/bin/mpnn_select_top.py"))
         )
     }
 }

@@ -36,6 +36,7 @@ process HADDOCK3_PREPARE {
     val  effector_chain
     val  contigs
     val  effector_active_residues
+    path prepare_script
 
     output:
     path "receptor_haddock.pdb",    emit: receptor_pdb_out
@@ -46,7 +47,7 @@ process HADDOCK3_PREPARE {
     def eff_res_arg = effector_active_residues ? "--effector-active-residues '${effector_active_residues}'" : ""
     """
     singularity exec --bind \${PWD}:\${PWD} ${params.rfdiff_container} \\
-        python ${projectDir}/bin/haddock3_prepare.py \\
+        python ${prepare_script} \\
             --receptor ${receptor_pdb} \\
             --effector ${effector_pdb} \\
             --contigs "${contigs}" \\
@@ -76,6 +77,7 @@ process HADDOCK3_DOCK {
     path restraints
     val  haddock_sampling
     val  haddock_seletop
+    path collect_script
 
     output:
     path "run/run-haddock/",      emit: run_dir
@@ -145,7 +147,7 @@ HADDOCK_CFG
 
     # ── Collect results ───────────────────────────────────────────────────
     singularity exec --bind \${PWD}:\${PWD} ${params.rfdiff_container} \\
-        python ${projectDir}/bin/collect_haddock3_dock.py \\
+        python ${collect_script} \\
             --run-dir run/run-haddock \\
             --min-cluster-size ${params.haddock_min_cluster_size}
     """
@@ -173,6 +175,7 @@ process HADDOCK3_PLOTS {
     val  contigs
     val  receptor_chain
     val  effector_active_residues
+    path plots_script
 
     output:
     path "haddock_*.png", emit: plots
@@ -184,7 +187,7 @@ process HADDOCK3_PLOTS {
         --bind \${PWD}:\${PWD} \\
         --env MPLCONFIGDIR=/tmp \\
         ${params.rfdiff_container} \\
-        python ${projectDir}/bin/haddock3_plots.py \\
+        python ${plots_script} \\
             --capri-scores ${capri_scores} \\
             --cluster-summary ${cluster_summary} \\
             --run-dir ${run_dir} \\
@@ -216,6 +219,7 @@ process EXTRACT_HOTSPOTS {
     val  contact_cutoff
     val  receptor_seq
     val  effector_seq
+    path extract_script
 
     output:
     path "hotspot_string.txt",      emit: hotspot_string
@@ -226,7 +230,7 @@ process EXTRACT_HOTSPOTS {
     def eff_seq_arg = effector_seq ? "--effector-seq '${effector_seq}'" : ""
     """
     singularity exec --bind \${PWD}:\${PWD} ${params.rfdiff_container} \\
-        python ${projectDir}/bin/extract_hotspots.py \\
+        python ${extract_script} \\
             --complex ${best_model} \\
             --receptor-chain ${receptor_chain} \\
             --effector-chain ${effector_chain} \\
@@ -267,6 +271,7 @@ process BUILD_CONTIGS {
     val  user_contigs
     path rec_trim_mapping
     path eff_trim_mapping
+    path build_script
 
     output:
     path "updated_contigs.txt",    emit: contigs_txt
@@ -276,7 +281,7 @@ process BUILD_CONTIGS {
     script:
     """
     singularity exec --bind \${PWD}:\${PWD} ${params.rfdiff_container} \\
-        python ${projectDir}/bin/build_contigs.py \\
+        python ${build_script} \\
             --complex ${complex_pdb} \\
             --receptor-chain ${receptor_chain} \\
             --effector-chain ${effector_chain} \\

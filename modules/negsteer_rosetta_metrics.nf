@@ -48,6 +48,7 @@ process NEGSTEER_ROSETTA_METRICS {
     // point at ${projectDir}/bin/fastrelax_for_ia.xml — outside the
     // container's bound paths.
     path fastrelax_xml
+    path metrics_script
 
     output:
     path "rosetta_summary.csv", emit: summary_csv
@@ -57,7 +58,7 @@ process NEGSTEER_ROSETTA_METRICS {
     set -euo pipefail
 
     singularity exec --bind \${PWD}:\${PWD} ${params.rosetta_container} \\
-        python ${projectDir}/bin/run_rosetta_metrics.py \\
+        python ${metrics_script} \\
             --seq-name ${seq_name} \\
             --canonical-pdb ${canonical_pdb} \\
             --receptor-chain ${params.rfdiff_output_receptor_chain} \\

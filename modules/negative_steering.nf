@@ -55,6 +55,8 @@ process NEGSTEER_DERIVE_INDICES {
     input:
     path design_pdb                 // e.g. design_3.pdb
     path rfdiffusion_metrics_json   // shared rfdiffusion_metrics.json
+    path design_region_script
+    path true_interface_script
 
     output:
     // Tuple carries the design stem alongside the two index files so
@@ -71,7 +73,7 @@ process NEGSTEER_DERIVE_INDICES {
 
     # ── Design region (1-based) ──────────────────────────────────
     singularity exec --bind \${PWD}:\${PWD} ${params.boltz2_container} \\
-        python ${projectDir}/bin/derive_design_region.py \\
+        python ${design_region_script} \\
             --metrics-json ${rfdiffusion_metrics_json} \\
             --design ${design_stem} \\
             --output ${design_stem}_design_region.txt
@@ -81,7 +83,7 @@ process NEGSTEER_DERIVE_INDICES {
     # subset of the design region (advisory only — warnings surface
     # in the process log).
     singularity exec --bind \${PWD}:\${PWD} ${params.boltz2_container} \\
-        python ${projectDir}/bin/derive_true_interface.py \\
+        python ${true_interface_script} \\
             --metrics-json ${rfdiffusion_metrics_json} \\
             --design ${design_stem} \\
             --output ${design_stem}_true_interface.txt \\
@@ -133,6 +135,14 @@ process NEGSTEER_RUN_ONE {
     val  postprocess_rmsd_threshold
     val  postprocess_metric_column
     val  postprocess_contact_cutoff
+    // Stage the orchestrator bash script as a path input so edits to
+    // it bust the cache.  NOTE: bin/negative_steering_run_one.sh
+    // invokes several bin/*.py sub-scripts via --bin-dir
+    // ${projectDir}/bin; those indirect dependencies are NOT
+    // content-hashed by this declaration.  Declaring them all
+    // individually would invent a pattern the rest of the codebase
+    // does not use, so it is left for a future targeted task.
+    path orchestrator_script
 
     output:
     // Publish the entire per-sequence workdir.  passing_summary.csv
@@ -190,7 +200,7 @@ PYEOF
     # ─── Invoke the inline orchestrator ──────────────────────────────
     # bin/negative_steering_run_one.sh expects absolute paths; it
     # calls readlink -f internally but --bin-dir must resolve cleanly.
-    bash ${projectDir}/bin/negative_steering_run_one.sh \\
+    bash ${orchestrator_script} \\
         --seq-name                     "${seq_name}" \\
         --ground-truth                 "${design_pdb}" \\
         --receptor-chain               "${receptor_chain}" \\
@@ -247,6 +257,7 @@ process NEGSTEER_CROSS_SEQUENCE {
     // directory is expected to be named after the MPNN sequence; the
     // aggregator infers the sequence name from the directory name.
     path per_sequence_workdirs
+    path summary_script
 
     output:
     path "cross_sequence_summary.csv", emit: cross_summary
@@ -270,16 +281,17 @@ process NEGSTEER_CROSS_SEQUENCE {
     ls -la aggregator/ | head -40
 
     singularity exec --bind \${PWD}:\${PWD} ${params.boltz2_container} \\
-        python ${projectDir}/bin/cross_sequence_summary.py \\
+        python ${summary_script} \\
             --passing-summary-dir aggregator \\
             --published-runs-dir  ${params.outdir}/negative_steering/runs \\
             --output cross_sequence_summary.csv
-    # cache-bust 2026-04-29: extract_passing.py edited (stage-aware
-    # representative metrics for pose_collapses / new_contamination
-    # rows).  cross_sequence_summary.py imports extract_passing
-    # internally, but Nextflow does not track indirect imports, so a
-    # change to the NF process body is required to invalidate the
-    # cache.  Touched per todo Task 56.
+    # NOTE: summary_script is now content-hashed via the path input
+    # above, so direct edits to cross_sequence_summary.py invalidate
+    # the cache.  However, cross_sequence_summary.py imports
+    # extract_passing.py and other helpers internally; those indirect
+    # imports remain untracked by Nextflow.  When edits land only on
+    # an indirectly-imported helper, the operator must still bust the
+    # cache manually (e.g. by touching the directly-invoked script).
 
     echo "Cross-sequence summary head:"
     head -5 cross_sequence_summary.csv || true
@@ -331,6 +343,7 @@ process NEGSTEER_PLOTS {
     path cross_summary
     path per_sequence_workdirs
     path input_design_region
+    path plots_script
 
     output:
     path "negsteer_*.png", emit: plots
@@ -354,7 +367,7 @@ process NEGSTEER_PLOTS {
         --bind \${PWD}:\${PWD} \\
         --env MPLCONFIGDIR=/tmp \\
         ${params.rfdiff_container} \\
-        python ${projectDir}/bin/negsteer_plots.py \\
+        python ${plots_script} \\
             --csv                  ${cross_summary} \\
             --runs-dir             runs \\
             --input-design-region  ${input_design_region} \\
@@ -394,6 +407,7 @@ process NEGSTEER_WITHIN_SEQUENCE_PLOTS {
     input:
     path cross_summary
     path per_sequence_workdirs
+    path plots_script
 
     output:
     path "negsteer_*.png", emit: plots
@@ -416,7 +430,7 @@ process NEGSTEER_WITHIN_SEQUENCE_PLOTS {
         --bind \${PWD}:\${PWD} \\
         --env MPLCONFIGDIR=/tmp \\
         ${params.rfdiff_container} \\
-        python ${projectDir}/bin/negsteer_within_sequence_plots.py \\
+        python ${plots_script} \\
             --runs-dir          runs \\
             --cross-summary-csv ${cross_summary} \\
             --outdir            .

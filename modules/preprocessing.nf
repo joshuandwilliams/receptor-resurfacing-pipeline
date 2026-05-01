@@ -122,6 +122,7 @@ process RESOLVE_CONTIGS {
     input:
     path pdb_file
     val  raw_contigs
+    path contigs_script
 
     output:
     path "processed_contigs.txt", emit: resolved_contigs
@@ -129,7 +130,7 @@ process RESOLVE_CONTIGS {
     script:
     """
     singularity exec --bind \${PWD}:\${PWD} ${params.rfdiff_container} \\
-        python ${projectDir}/bin/rfdiffusion_contigs.py \\
+        python ${contigs_script} \\
             --contigs "${raw_contigs}" \\
             --pdb ${pdb_file} \\
             --output processed_contigs.txt

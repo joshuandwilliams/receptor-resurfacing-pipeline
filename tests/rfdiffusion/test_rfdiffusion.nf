@@ -61,7 +61,8 @@ workflow {
         contigs_ch,
         hotspot_ch,
         params.num_designs,
-        params.rfdiff_iterations
+        params.rfdiff_iterations,
+        Channel.value(file("${projectDir}/bin/rfdiffusion_contigs.py"))
     )
 
     RFDIFFUSION_FILTER(
@@ -72,11 +73,13 @@ workflow {
         params.receptor_chain,
         params.effector_chain,
         params.contact_cutoff,
-        params.min_hotspot_frac
+        params.min_hotspot_frac,
+        Channel.value(file("${projectDir}/bin/rfdiffusion_filter.py"))
     )
 
     RFDIFFUSION_PLOTS(
-        RFDIFFUSION_FILTER.out.metrics
+        RFDIFFUSION_FILTER.out.metrics,
+        Channel.value(file("${projectDir}/bin/rfdiffusion_plots.py"))
     )
 }
 

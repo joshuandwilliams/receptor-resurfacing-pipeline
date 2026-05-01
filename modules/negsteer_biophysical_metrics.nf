@@ -32,6 +32,7 @@ process NEGSTEER_BIOPHYSICAL_METRICS {
     tuple val(seq_name),
           path(canonical_pdb),
           path(ground_truth_pdb)
+    path metrics_script
 
     output:
     path "biophysical_summary.csv", emit: summary_csv
@@ -41,7 +42,7 @@ process NEGSTEER_BIOPHYSICAL_METRICS {
     set -euo pipefail
 
     singularity exec --bind \${PWD}:\${PWD} ${params.boltz2_container} \\
-        python ${projectDir}/bin/run_biophysical_metrics.py \\
+        python ${metrics_script} \\
             --seq-name ${seq_name} \\
             --canonical-pdb ${canonical_pdb} \\
             --ground-truth ${ground_truth_pdb} \\

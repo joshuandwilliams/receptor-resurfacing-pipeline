@@ -39,6 +39,7 @@ process NEGSTEER_INTERFACE_METRICS {
     input:
     path cross_sequence_summary_csv
     path per_sequence_workdirs, stageAs: 'workdirs/*'
+    path metrics_script
 
     output:
     path "cross_sequence_summary_with_interface_metrics.csv",
@@ -52,7 +53,7 @@ process NEGSTEER_INTERFACE_METRICS {
             --bind \${PWD}:\${PWD} \\
             --bind ${projectDir}:${projectDir} \\
             ${params.boltz2_container} \\
-        python ${projectDir}/bin/compute_interface_metrics.py \\
+        python ${metrics_script} \\
             --input-csv ${cross_sequence_summary_csv} \\
             --output-csv cross_sequence_summary_with_interface_metrics.csv \\
             --workdirs-glob 'workdirs/*' \\

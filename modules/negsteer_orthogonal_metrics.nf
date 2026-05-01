@@ -50,6 +50,7 @@ process NEGSTEER_ORTHOGONAL_METRICS {
     path af3_summaries,         stageAs: 'af3_inputs/?/*'
     path biophysical_summaries, stageAs: 'biophysical_inputs/?/*'
     path rosetta_summaries,     stageAs: 'rosetta_inputs/?/*'
+    path merge_script
 
     output:
     path "survivors_with_orthogonal_metrics.csv",
@@ -60,7 +61,7 @@ process NEGSTEER_ORTHOGONAL_METRICS {
     set -euo pipefail
 
     singularity exec --bind \${PWD}:\${PWD} ${params.boltz2_container} \\
-        python ${projectDir}/bin/merge_orthogonal_metrics.py \\
+        python ${merge_script} \\
             --input-csv ${cross_sequence_summary_with_interface_metrics_csv} \\
             --af3-summaries-glob 'af3_inputs/*/*.csv' \\
             --biophysical-summaries-glob 'biophysical_inputs/*/*.csv' \\

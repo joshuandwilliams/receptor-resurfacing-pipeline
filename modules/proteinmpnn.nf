@@ -24,6 +24,7 @@ process MPNN_FIXED_POSITIONS {
     val  effector_seq
     val  contigs
     val  receptor_start_pdb
+    path correct_script
 
     output:
     tuple path(design_pdb), path("fixed_positions_*.jsonl"), emit: pdb_and_jsonl
@@ -31,7 +32,7 @@ process MPNN_FIXED_POSITIONS {
     script:
     """
     singularity exec --bind \${PWD}:\${PWD} ${params.rfdiff_container} \\
-        python ${projectDir}/bin/pipeline_correct_sequences.py \\
+        python ${correct_script} \\
             --mode gen_fixed_positions \\
             --pdb_file ${design_pdb} \\
             --output_dir . \\
@@ -102,6 +103,7 @@ process SEQUENCE_CORRECTION {
     val  num_designs
     val  num_seqs
     val  receptor_start_pdb
+    path correct_script
 
     output:
     path "af2_fastas/",              emit: af2_fastas
@@ -122,7 +124,7 @@ process SEQUENCE_CORRECTION {
     done
 
     singularity exec --bind \${PWD}:\${PWD} ${params.rfdiff_container} \\
-        python ${projectDir}/bin/pipeline_correct_sequences.py \\
+        python ${correct_script} \\
             --mode correct \\
             --mpnn_dir mpnn_combined \\
             --output_dir . \\
@@ -150,6 +152,7 @@ process SEQUENCE_QC {
     val  max_poly_x
     val  min_pct_identity
     val  max_pct_identity
+    path qc_script
 
     output:
     path "qc_fastas/",           emit: qc_fastas
@@ -159,7 +162,7 @@ process SEQUENCE_QC {
     script:
     """
     singularity exec --bind \${PWD}:\${PWD} ${params.rfdiff_container} \\
-        python ${projectDir}/bin/mpnn_sequence_qc.py \\
+        python ${qc_script} \\
             --af2-fastas-dir ${af2_fastas_dir} \\
             --metadata-csv ${metadata_csv} \\
             --receptor-seq "${receptor_seq}" \\
@@ -193,6 +196,7 @@ process MPNN_DESIGN_REGION_SCORE {
     path design_pdbs
     path mpnn_dirs
     path fixed_jsonls
+    path score_script
 
     output:
     path "scored_metadata.csv", emit: scored_metadata
@@ -224,7 +228,7 @@ process MPNN_DESIGN_REGION_SCORE {
     done
 
     singularity exec --bind \${PWD}:\${PWD} ${params.rfdiff_container} \\
-        python ${projectDir}/bin/mpnn_design_region_score.py \\
+        python ${score_script} \\
             --metadata-csv ${qc_metadata} \\
             --pdb-dir pdb_collected \\
             --mpnn-fasta-dir mpnn_collected \\
@@ -249,6 +253,7 @@ process MPNN_CLUSTER {
 
     input:
     path metadata
+    path cluster_script
 
     output:
     path "mpnn_cluster_counts.csv", emit: cluster_counts
@@ -256,7 +261,7 @@ process MPNN_CLUSTER {
     script:
     """
     singularity exec --bind \${PWD}:\${PWD} ${params.rfdiff_container} \\
-        python ${projectDir}/bin/mpnn_cluster_sequences.py \\
+        python ${cluster_script} \\
             --metadata-csv ${metadata} \\
             --output-csv mpnn_cluster_counts.csv
     """
@@ -283,6 +288,7 @@ process MPNN_PLOTS {
     path cluster_csv
     val  receptor_seq
     val  contigs
+    path plots_script
 
     output:
     path "mpnn_*.png", emit: plots
@@ -293,7 +299,7 @@ process MPNN_PLOTS {
         --bind \${PWD}:\${PWD} \\
         --env MPLCONFIGDIR=/tmp \\
         ${params.rfdiff_container} \\
-        python ${projectDir}/bin/mpnn_plots.py \\
+        python ${plots_script} \\
             --metadata ${metadata} \\
             --cluster-csv ${cluster_csv} \\
             --receptor-seq "${receptor_seq}" \\
@@ -312,6 +318,7 @@ process MPNN_SELECT_TOP {
     path qc_fastas_dir
     path qc_metadata
     val  top_n
+    path select_script
 
     output:
     path "top_fastas/",          emit: top_fastas
@@ -321,7 +328,7 @@ process MPNN_SELECT_TOP {
     script:
     """
     singularity exec --bind \${PWD}:\${PWD} ${params.rfdiff_container} \\
-        python ${projectDir}/bin/mpnn_select_top.py \\
+        python ${select_script} \\
             --qc-fastas-dir ${qc_fastas_dir} \\
             --qc-metadata ${qc_metadata} \\
             --top-n ${top_n} \\

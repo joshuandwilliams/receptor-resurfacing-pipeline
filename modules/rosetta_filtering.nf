@@ -114,6 +114,7 @@ process ROSETTA_FILTER {
     input:
     path pdb_and_score_files   // staged into work dir, discovered by glob in collect script
     val  sc_threshold
+    path collect_script
 
     output:
     path "rosetta_filter_metrics.json",    emit: metrics
@@ -126,7 +127,7 @@ process ROSETTA_FILTER {
     singularity exec \\
         --bind \${PWD}:\${PWD} \\
         ${params.rosetta_container} \\
-        python ${projectDir}/bin/rosetta_filter_collect.py \\
+        python ${collect_script} \\
             --score-dir . \\
             --pdb-dir . \\
             --sc-threshold ${sc_threshold}
@@ -149,6 +150,7 @@ process ROSETTA_FILTER_PLOTS {
 
     input:
     path metrics
+    path plots_script
 
     output:
     path "rosetta_*.png", emit: plots
@@ -159,7 +161,7 @@ process ROSETTA_FILTER_PLOTS {
         --bind \${PWD}:\${PWD} \\
         --env MPLCONFIGDIR=/tmp \\
         ${params.rosetta_container} \\
-        python ${projectDir}/bin/rosetta_filter_plots.py \\
+        python ${plots_script} \\
             --metrics ${metrics}
     """
 }
