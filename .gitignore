@@ -93,3 +93,8 @@ scratch/
 # ----- OS / misc -----
 Thumbs.db
 desktop.ini
+
+# Test data
+tests/full_test_run/example_output_files/*
+!tests/full_test_run/example_output_files/README.md
+

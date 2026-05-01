@@ -1,0 +1,171 @@
+BootStrap: yum
+OSVersion: 9
+MirrorURL: http://yum-repos.hpccluster/AlmaLinux/9/os/$basearch/
+Include: yum
+
+%files
+
+%environment
+    export PATH=/opt/rosetta/main/source/bin:$PATH
+    export ROSETTA3=/opt/rosetta/main/source
+    export ROSETTA3_DB=/opt/rosetta/main/database
+
+%post
+    # =========================================================================
+    # System dependencies
+    # =========================================================================
+    yum update -y
+    yum install -y openssl-devel bzip2-devel libffi-devel epel-release binutils wget
+    yum install -y git unzip tar gzip bzip2 which zlib-devel
+    yum groupinstall -y "Development Tools"
+
+    # =========================================================================
+    # Install Python 3.12
+    # =========================================================================
+    wget https://www.python.org/ftp/python/3.12.4/Python-3.12.4.tgz
+    tar -xzf Python-3.12.4.tgz
+    cd Python-3.12.4
+    ./configure --enable-optimizations
+    make altinstall
+    cd /
+    rm -rf Python-3.12.4 Python-3.12.4.tgz
+
+    rm -f /usr/bin/python
+    ln -s /usr/local/bin/python3.12 /usr/bin/python
+    ln -s /usr/local/bin/pip3.12 /usr/bin/pip
+
+    python -V
+    pip install --upgrade setuptools pip
+
+    # =========================================================================
+    # Download Rosetta 3.15 source code
+    # =========================================================================
+    ROSETTA_URL="https://downloads.rosettacommons.org/downloads/academic/3.15/rosetta_source_3.15_bundle.tar.bz2"
+
+    echo "Downloading Rosetta 3.15 source (~5 GB)..."
+    wget --no-check-certificate \
+         -O /opt/rosetta_source.tar.bz2 \
+         "$ROSETTA_URL" || { echo "ERROR: Download failed"; exit 1; }
+
+    # =========================================================================
+    # Extract Rosetta
+    # =========================================================================
+    echo "Extracting Rosetta source (this takes a while)..."
+    cd /opt
+    tar -xjf rosetta_source.tar.bz2
+    rm -f rosetta_source.tar.bz2
+
+    echo "Contents of /opt after extraction:"
+    ls -la /opt/
+
+    # Handle both possible naming conventions
+    EXTRACTED_DIR=$(ls -d /opt/rosetta.source.release-* /opt/rosetta_source_3.15_bundle 2>/dev/null | head -1)
+    if [ -z "$EXTRACTED_DIR" ]; then
+        echo "ERROR: Could not find extracted Rosetta directory"
+        ls -la /opt/
+        exit 1
+    fi
+    echo "Found extracted directory: $EXTRACTED_DIR"
+    mv "$EXTRACTED_DIR" /opt/rosetta
+
+    if [ ! -d "/opt/rosetta/main" ]; then
+        echo "ERROR: /opt/rosetta/main not found"
+        ls -laR /opt/rosetta/ | head -50
+        exit 1
+    fi
+    echo "Rosetta extracted to /opt/rosetta"
+    ls -la /opt/rosetta/main/
+
+    # =========================================================================
+    # Compile Rosetta (release mode, 4 apps only)
+    # =========================================================================
+    echo "Compiling Rosetta (release mode, 4 apps)..."
+    cd /opt/rosetta/main/source
+
+    ./scons.py -j8 mode=release \
+        bin/rosetta_scripts.default.linuxgccrelease \
+        bin/score_jd2.default.linuxgccrelease \
+        bin/InterfaceAnalyzer.default.linuxgccrelease \
+        bin/relax.default.linuxgccrelease
+
+    SCONS_EXIT=$?
+    if [ $SCONS_EXIT -ne 0 ]; then
+        echo "ERROR: scons failed (exit code $SCONS_EXIT)"
+        exit 1
+    fi
+    echo "scons completed with exit code 0."
+
+    # =========================================================================
+    # Detailed logging of bin/ contents after compilation
+    # =========================================================================
+    echo ""
+    echo "=== bin/ directory after compilation ==="
+    ls -la /opt/rosetta/main/source/bin/ | head -30
+    echo ""
+
+    echo "=== Checking each target binary ==="
+    for APP in rosetta_scripts score_jd2 InterfaceAnalyzer relax; do
+        echo "--- ${APP} ---"
+        ls -la /opt/rosetta/main/source/bin/${APP}* 2>/dev/null || echo "  NOT FOUND in bin/"
+        # Rosetta bin/ entries are symlinks into build/. Check targets.
+        LINK="/opt/rosetta/main/source/bin/${APP}.default.linuxgccrelease"
+        if [ -L "$LINK" ]; then
+            TARGET=$(readlink -f "$LINK")
+            echo "  Symlink target: $TARGET"
+            [ -f "$TARGET" ] && echo "  Target exists ($(stat --printf='%s' $TARGET) bytes)" \
+                             || echo "  WARNING: Target missing!"
+        elif [ -f "$LINK" ]; then
+            echo "  Regular file ($(stat --printf='%s' $LINK) bytes)"
+        fi
+    done
+    echo ""
+
+    # =========================================================================
+    # DO NOT delete build/ artefacts!
+    # Rosetta bin/ entries are SYMLINKS into build/. Deleting build/
+    # was the cause of the missing binaries in the previous build.
+    # =========================================================================
+
+    # =========================================================================
+    # Install Python packages for analysis
+    # =========================================================================
+    pip install numpy matplotlib scipy pandas biopython
+
+    # =========================================================================
+    # Fix permissions
+    # =========================================================================
+    chmod -R a+rX /opt/rosetta
+
+    # =========================================================================
+    # HARD VERIFICATION — abort build if any binary is missing
+    # =========================================================================
+    echo ""
+    echo "=== FINAL VERIFICATION ==="
+
+    MISSING=0
+    for APP in rosetta_scripts score_jd2 InterfaceAnalyzer relax; do
+        BIN="/opt/rosetta/main/source/bin/${APP}.default.linuxgccrelease"
+        REAL=$(readlink -f "$BIN" 2>/dev/null)
+        if [ -x "$BIN" ] && [ -f "$REAL" ]; then
+            echo "  PASS: ${APP}"
+        else
+            echo "  FAIL: ${APP}"
+            MISSING=$((MISSING + 1))
+        fi
+    done
+
+    [ -d "/opt/rosetta/main/database" ] \
+        && echo "  PASS: database" \
+        || { echo "  FAIL: database"; MISSING=$((MISSING + 1)); }
+
+    python -c "import numpy; print('  PASS: numpy')"
+    python -c "import pandas; print('  PASS: pandas')"
+
+    if [ $MISSING -gt 0 ]; then
+        echo ""
+        echo "BUILD ABORTED: $MISSING component(s) missing."
+        exit 1
+    fi
+
+    echo ""
+    echo "=== All checks passed — container ready ==="

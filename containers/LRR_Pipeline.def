@@ -1,0 +1,156 @@
+BootStrap: yum
+OSVersion: 9
+MirrorURL: http://yum-repos.hpccluster/AlmaLinux/9/os/$basearch/
+Include: yum
+
+%files
+
+%environment
+    export DGLBACKEND=pytorch
+    export PATH=/opt/RFdiffusion:/opt/ProteinMPNN:/opt/mmseqs/bin:/usr/local/bin:$PATH
+    export HADDOCK3_HOME=/opt/haddock3
+
+%post
+    # Update yum
+    yum update -y
+    yum install -y openssl-devel bzip2-devel libffi-devel epel-release binutils wget
+    yum install -y git aria2 unzip
+    yum groupinstall -y "Development Tools"
+
+    # =========================================================================
+    # Install Python 3.10
+    # =========================================================================
+    wget https://www.python.org/ftp/python/3.10.2/Python-3.10.2.tgz
+    tar -xzf Python-3.10.2.tgz
+    cd Python-3.10.2
+    ./configure --enable-optimizations
+    make altinstall
+    cd /
+
+    rm -f /usr/bin/python
+    ln -s /usr/local/bin/python3.10 /usr/bin/python
+    ln -s /usr/local/bin/pip3.10 /usr/bin/pip
+
+    python -V
+    pip install --upgrade setuptools pip
+
+    # Set DGLBACKEND for build process
+    export DGLBACKEND=pytorch
+
+    # =========================================================================
+    # SECTION 1: RFDiffusion & ProteinMPNN
+    # =========================================================================
+
+    # Install PyTorch with CUDA 12.4 support
+    pip install torch==2.4.0 --index-url https://download.pytorch.org/whl/cu124
+
+    # Install RFDiffusion dependencies
+    pip install jedi omegaconf hydra-core icecream pyrsistent nvidia-ml-py decorator
+    pip install git+https://github.com/NVIDIA/dllogger#egg=dllogger
+
+    # DGL dependencies, then DGL with --no-deps to avoid torch conflicts
+    pip install psutil tqdm requests scipy networkx pydantic
+    pip install --no-deps dgl -f https://data.dgl.ai/wheels/torch-2.4/cu124/repo.html
+
+    # e3nn dependencies, then e3nn with --no-deps
+    pip install sympy
+    pip install --no-deps e3nn==0.5.5 opt_einsum_fx
+
+    # Clone and install RFDiffusion
+    cd /opt
+    git clone https://github.com/sokrypton/RFdiffusion.git
+    cd /opt/RFdiffusion/env/SE3Transformer
+    pip install .
+
+    # Download RFDiffusion model weights
+    mkdir -p /opt/RFdiffusion/models
+    cd /opt/RFdiffusion/models
+    aria2c -x 16 http://files.ipd.uw.edu/pub/RFdiffusion/6f5902ac237024bdd0c176cb93063dc4/Base_ckpt.pt
+    aria2c -x 16 http://files.ipd.uw.edu/pub/RFdiffusion/e29311f6f1bf1af907f9ef9f44b8328b/Complex_base_ckpt.pt
+
+    # Download inference schedules
+    cd /opt/RFdiffusion
+    aria2c -x 16 https://files.ipd.uw.edu/krypton/schedules.zip
+    unzip schedules.zip
+    rm schedules.zip
+
+    # Clone ProteinMPNN
+    cd /opt
+    git clone https://github.com/dauparas/ProteinMPNN.git
+
+    # Install ColabDesign utilities
+    pip install git+https://github.com/sokrypton/ColabDesign.git@v1.1.1
+
+    # =========================================================================
+    # SECTION 2: HADDOCK3
+    # =========================================================================
+
+    # Install HADDOCK3 from PyPI (includes pre-compiled CNS binary)
+    # CNS is free for non-profit/academic use - no registration required
+    pip install haddock3
+
+    # Install OpenMM and pdbfixer (for the [openmm] refinement module)
+    pip install openmm==8.2.0
+    pip install https://github.com/openmm/pdbfixer/archive/refs/tags/v1.10.tar.gz
+
+    # =========================================================================
+    # SECTION 3: MMseqs2 (sequence clustering)
+    # =========================================================================
+    cd /opt
+    wget https://mmseqs.com/latest/mmseqs-linux-avx2.tar.gz
+    tar xzf mmseqs-linux-avx2.tar.gz
+    ln -s /opt/mmseqs/bin/mmseqs /usr/local/bin/mmseqs
+    rm mmseqs-linux-avx2.tar.gz
+
+    # =========================================================================
+    # SECTION 4: Shared dependencies
+    # =========================================================================
+    pip install numpy matplotlib scipy pandas biopython py3Dmol
+
+    # =========================================================================
+    # Fix permissions for Python packages
+    # =========================================================================
+    cd /usr/local/lib/
+    chmod 755 python3.10
+    chmod 755 python3.10/site-packages
+    cd /usr/local/lib/python3.10/site-packages/
+    find . -mount -type d -exec chmod 755 {} \;
+    find . -mount -type f -exec chmod 775 {} \;
+
+    # =========================================================================
+    # Verify installations
+    # =========================================================================
+    echo "=== Verifying RFDiffusion & ProteinMPNN ==="
+    python -c "import torch; print('PyTorch:', torch.__version__)"
+    python -c "import torch; print('CUDA build:', torch.version.cuda)"
+    python -c "import dgl; print('DGL:', dgl.__version__)"
+    python -c "import e3nn; print('e3nn:', e3nn.__version__)"
+
+    # Test RFDiffusion imports
+    cd /opt/RFdiffusion && python -c "from inference.utils import parse_pdb; print('RFDiffusion imports OK')"
+
+    # Test ProteinMPNN imports
+    cd /opt/ProteinMPNN && python -c "from protein_mpnn_utils import ProteinMPNN; print('ProteinMPNN imports OK')"
+
+    echo "=== Verifying HADDOCK3 ==="
+    python -c "from importlib.metadata import version; print('HADDOCK3 version:', version('haddock3'))"
+    python -c "from haddock.clis.cli import main; print('HADDOCK3 CLI import OK')"
+    haddock3 --version
+
+    # Verify CNS binaries are present
+    HADDOCK_DIR=$(python -c "import haddock; import os; print(os.path.dirname(haddock.__file__))")
+    echo "Searching for CNS binaries..."
+    find "$HADDOCK_DIR/cns/bin" -name "*.bin" -ls 2>/dev/null
+
+    echo "=== Verifying OpenMM ==="
+    python -c "import openmm; print('OpenMM version:', openmm.__version__)"
+    python -c "import pdbfixer; print('pdbfixer import OK')"
+
+    echo "=== Verifying MMseqs2 ==="
+    mmseqs version
+
+    echo "=== Verifying shared packages ==="
+    python -c "import numpy; print('NumPy:', numpy.__version__)"
+    python -c "import Bio; print('BioPython OK')"
+
+    echo "=== All verifications passed ==="

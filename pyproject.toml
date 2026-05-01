@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "receptor-resurfacing-pipeline"
+version = "0.0.0"
+description = "Receptor-resurfacing de novo binder design pipeline (Nextflow + Python)."
+requires-python = ">=3.10"
+
+[project.optional-dependencies]
+test = [
+    "pytest>=7.0",
+    "pandas>=2.0",
+    "numpy>=1.24",
+    "Pillow>=10.0",
+    "scikit-image>=0.21",
+]
+
+[tool.setuptools]
+packages = []
+
+[tool.pytest.ini_options]
+testpaths = ["tests/characterization"]
+addopts = "--strict-markers -ra"
+markers = [
+    "local_unit: tier — unit tests of comparators/helpers; <1s each; runs anywhere with Python.",
+    "local_integration: tier — pure-Python characterization on saved inputs; runs on Mac without HPC.",
+    "hpc: tier — requires a fresh pipeline run; HPC-only.",
+    "wave1: selection — Wave 1 of the characterization suite (cohort + intermediates).",
+    "wave2: selection — Wave 2 of the characterization suite (Python-internal state).",
+    "requires_populated_reversion: needs a per-sequence reference where reversion produced contaminating mutations.",
+    "requires_controls: needs control sequence rows (control_scrambled, control_polyA) in cohort references.",
+    "slow: long-running test (e.g., SSIM over many large PNGs).",
+]

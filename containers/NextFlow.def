@@ -1,0 +1,48 @@
+BootStrap: yum
+OSVersion: 9
+MirrorURL: http://yum-repos.hpccluster/AlmaLinux/9/os/$basearch/
+Include: yum
+
+%environment
+    export JAVA_HOME=/usr/lib/jvm/java-17-openjdk
+    export PATH=$JAVA_HOME/bin:/usr/local/bin:$PATH
+    export NXF_OFFLINE=true
+
+%post
+    yum update -y
+    yum install -y java-17-openjdk-headless which wget procps-ng
+    yum clean all
+
+    export JAVA_HOME=/usr/lib/jvm/java-17-openjdk
+    export PATH=$JAVA_HOME/bin:$PATH
+    export NXF_HOME=/opt/nextflow
+
+    mkdir -p $NXF_HOME/plugins
+
+    # Download the standalone "dist" distribution (replaces the old "-all")
+    wget -q https://github.com/nextflow-io/nextflow/releases/download/v25.10.4/nextflow-25.10.4-dist \
+         -O /usr/local/bin/nextflow
+    chmod 755 /usr/local/bin/nextflow
+
+    # Verify it runs without downloading the runtime JAR
+    nextflow -version
+
+    # Pre-cache the default plugins so they're baked into the image.
+    # Set NXF_PLUGINS_DIR explicitly so we know where they land.
+    export NXF_PLUGINS_DIR=$NXF_HOME/plugins
+    nextflow plugin install nf-tower
+    
+    # Also run a trivial pipeline to trigger any remaining lazy downloads
+    echo 'println "hello"' > /tmp/test.nf
+    nextflow run /tmp/test.nf || true
+    rm -f /tmp/test.nf
+
+    chmod -R 755 /opt/nextflow
+
+%runscript
+    exec nextflow "$@"
+
+%test
+    export NXF_HOME=/tmp/.nxf_test
+    mkdir -p $NXF_HOME
+    nextflow -version
