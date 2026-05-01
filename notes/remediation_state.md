@@ -2,54 +2,52 @@
 
 A living document tracking where the codebase remediation effort currently stands. Read this at the start of every session; update it at the end of every session.
 
-**Last updated:** 2026-04-30
+**Last updated:** 2026-05-01
 
 ---
 
 ## Current Phase
 
-**Phase 1 — complete.**
-**Phase 2 (Establish Behavioral Tests) — about to begin.**
+**Phase 2 (Establish Behavioral Tests) — in progress.**
 
-The boundary between Phase 1 and Phase 2 marks the transition from diagnosis (read-only analysis) to active intervention. From this point forward, code changes are possible, though Phase 2's changes are limited to *adding* characterization tests rather than modifying the existing pipeline.
+Plan written, framework scaffolded, comparators tested, Nextflow caching fixed. Remaining: reference set gap-fill, hpc-tier characterization tests, suspicions pass, safety-net validation.
 
 ---
 
 ## Just Completed
 
-**Phase 1: full diagnostic pass.** All deliverables are in `notes/inventory/`:
+**Phase 2 work to date:**
 
-- `01_module_map.md` — every code file with one-line summaries
-- `02_function_inventory.md` — Python functions and Nextflow processes catalogued
-- `03_dependency_graph.md` — import and invocation relationships
-- `04_functional_categorization.md` — modules grouped by purpose (the codebase's "design concept" made explicit)
-- `05_findings.md` — anomalies and issues spotted during the inventory
-- `06_ubiquitous_language.md` — canonical glossary of domain terms (interactively reviewed and curated)
-- `07_ruff_report.txt`, `07_ruff_summary.txt` — linting (~194 findings)
-- `08_vulture_report.txt`, `08_vulture_high_confidence.txt` — dead code candidates (66 medium-confidence, 8 high-confidence)
-- `09_radon_complexity.txt`, `09_radon_maintainability.txt`, `09_radon_loc.txt` — complexity and size metrics
-- `10_phase_1_synthesis.md` — synthesis briefing summarizing findings, priorities, and refinements to the plan
+- `notes/inventory/11_phase_2_plan.md` — characterization test suite plan (two-wave structure, comparator strategies, manual reference-update procedure)
+- `tests/characterization/` — pytest framework with conftest, fixtures, README
+- `tests/characterization/helpers/` — four comparators (CSV, JSON, PNG, path normalisation) + `ComparisonResult` dataclass
+- `tests/characterization/helpers/tests/` — 50+ unit tests, all passing under `pytest -m local_unit`
+- `tests/characterization/TRACEABILITY.md` — schema for test-to-producer mapping (zero rows; populated when hpc-tier tests are written)
+- `pyproject.toml` — test dependencies, pytest config, marker registry with `--strict-markers`
+- `containers/` — Singularity definition files moved into the repo with a README
+- Nextflow cache-busting — orthogonal-metrics pattern (`path X_script` input, content-hashed) propagated to all modules that invoke `bin/*.py` scripts; corresponding call-site updates in `main.nf` and `tests/*/test_*.nf`
 
-**Reference output sampling.** Hand-picked example output files from a full pipeline test run have been copied to `tests/full_test_run/example_output_files/`. A README in that directory describes each file's structure and pipeline-stage origin (committed; the data files themselves are gitignored).
+**Phase 1 deliverables** remain in `notes/inventory/` (`01_module_map.md` through `10_phase_1_synthesis.md`).
 
 ---
 
 ## Next Concrete Step
 
-**Begin Phase 2: characterization test setup.**
+**Reference set gap-fill on HPC.**
 
-Specifically, the next session should:
+Locate and copy missing files into `tests/full_test_run/example_output_files/` per the ⚠️ checklist in plan §2:
 
-1. Identify a tractable initial set of pipeline outputs (likely 5–15) to use as references for characterization tests. Use the synthesis document and `example_output_files/README.md` to choose representative outputs across the major pipeline stages.
-2. For each chosen output, decide on the appropriate comparison strategy:
-   - Exact equality (for deterministic, low-volume outputs like config dumps or small summary files).
-   - Structural assertion (for tabular outputs where row counts, column names, types matter but exact values may vary).
-   - Tolerance-based numerical comparison (for floating-point metrics where bitwise equality is too brittle).
-   - Partial / property-based assertions (for large outputs where full validation is impossible — e.g., asserting summary statistics rather than exact contents).
-3. Sketch the characterization test framework: where the test scripts live, how they are invoked, what the comparison harness looks like. Tests will need to run on the HPC (since that's where the pipeline runs), but the comparison code itself can be lightweight Python that runs anywhere.
-4. Produce a *plan document* before writing tests, so the approach can be reviewed before significant work happens.
+- `rosetta_filter_summary.csv`
+- Per-design `mpnn_results.json`; full `top_fastas/` and `af2_fastas/` directories
+- All 34 per-sequence subdirectories under `negative_steering/` (32 designs + 2 controls), each containing the seven expected files
+- A populated-reversion per-sequence example (currently all reversion JSONs on disk are empty)
+- The two control sequence rows in `cross_sequence_summary.csv`
+- `cross_sequence_summary_with_interface_metrics.csv`
+- `merged_orthogonal_metrics.csv` / `survivors_with_orthogonal_metrics.csv` (confirm exact filenames)
 
-The first concrete deliverable of Phase 2 is therefore a planning document, not yet test code.
+For each file copied in, update `tests/full_test_run/example_output_files/README.md` with a one-line note. Genuine gaps (files that don't exist on HPC) get noted in the Verification Queue.
+
+This is a manual HPC task — no Claude Code prompt. Required before Prompt 3 (hpc-tier characterization tests) can be drafted.
 
 ---
 
@@ -77,6 +75,10 @@ The original plan included consolidation of duplicated functionality in Phase 3.
 - A file-by-file deep simplification pass is more rigorous than a bird's-eye redundancy sweep across the whole codebase. It's also more naturally combined with the architectural restructuring of Phase 4.
 
 Phase 3 will still consolidate obvious duplication that the inventory has already surfaced (e.g., the four identical blocks in `boltz2_iterate_steering.py`), but ambitious simplification waits.
+
+### Dead-code deletion deferred for safety-net validation
+
+`bin/sequence_registry.py` (vulture-confirmed unreachable) and the empty `main` file at the repo root are intentionally **not** being deleted yet. Per plan §6.3, they are reserved as the canonical first Phase 3 commit — the smallest possible change to validate the safety net. Deleting them now would use up the cleanest validation case for nothing.
 
 ### Specific known issues to track
 
@@ -106,6 +108,7 @@ Local Mac has:
 - Node.js + npm (via Homebrew)
 - Claude Code (`@anthropic-ai/claude-code`, npm-global, runs as `claude`)
 - Conda (miniforge base) with `ruff`, `vulture`, `radon` installed
+- Conda env `receptor-tests` (Python 3.10) with the test framework's dependencies — created via `pyproject.toml`'s `[test]` extra
 - Git, with project pushed to https://github.com/joshuandwilliams/receptor-resurfacing-pipeline
 
 The HPC does not have git installed. Work happens on Mac; HPC receives synced code only.
@@ -120,22 +123,45 @@ The HPC does not have git installed. Work happens on Mac; HPC receives synced co
   - `phase-1.2-glossary-complete`
   - `phase-1.3-static-analysis-complete`
   - `phase-1-complete`
+  - `phase-2.1-plan-complete`
+  - `phase-2.2-scaffolding-complete`
+  - `phase-2.3-comparators-complete`
+  - `phase-2.4-cache-busting-complete`
 
 Tag at the completion of each phase or significant sub-step.
+
+### Anticipated Phase 2 tag sequence
+
+- `phase-2.5-gap-fill-complete` — after the HPC reference-set gap-fill
+- `phase-2.6-hpc-tier-complete` — after Prompt 3 (hpc-tier characterization tests, green on a fresh HPC run)
+- `phase-2.7-suspicions-complete` — after Prompt 4 (suspicion-finding pass producing `SUSPICIONS.md`)
+- `phase-2-complete` — after the dead-code deletion (`bin/sequence_registry.py`, empty `main` file) produces zero diffs in the test suite, validating the safety net
 
 ---
 
 ## Verification Queue
 
-Outputs or behaviors I want to scrutinize for correctness, but don't have time/clarity to investigate immediately. To be revisited during or after refactoring.
+Outputs or behaviors to scrutinize for correctness, but not investigated immediately. Revisited during or after refactoring.
 
-*(Empty for now — populate as suspicious outputs are noticed during Phase 2 setup or later phases.)*
+> - **What:** `merge_orthogonal_metrics.py` semantic divergence between production and test versions.
+> - **Why suspicious:** Finding A4 in `05_findings.md` flags this as a latent bug — production gates on AF3 presence; test demotes it to a flag-only column. Reference output reflects whichever version actually ran in the supervisor-demo cohort, and the Phase 2 test pin will lock that behavior — including the bug — until Phase 3.
+> - **How to verify:** Compare the production `merge_orthogonal_metrics.py` against the test-tree copy. Inspect the cohort's AF3 column distribution. If the production version was used, expect this test to fail when Phase 3 fixes the divergence; update the reference at that point.
 
-Suggested template for entries:
+> - **What:** Suspected `--n-cycles 1` silent-skip-reversion bug from notes6.
+> - **Why suspicious:** Synthesis §5 records the bug as not verified during Phase 1. The supervisor-demo ran with `--n-cycles 1`, so reference outputs may bake in skipped reversion behavior.
+> - **How to verify:** Inspect a per-sequence run's `pathways.json` and reversion JSONs; cross-check whether reversion was actually attempted on contaminated sequences. If skipped where it should not have been, the reversion-related JSONs need regenerating from a `--n-cycles >= 2` run before Phase 3.
 
-> - **What:** Brief description of the output or behavior.
-> - **Why suspicious:** What gave me pause.
-> - **How to verify:** Reference data, paper, manual calculation, or alternative implementation that could be used to check.
+> - **What:** `scaffold_rmsd` field in `rfdiffusion_metrics.json` is actually motif RMSD.
+> - **Why suspicious:** Glossary §F3 — field name is inverted from Baker-lab convention. Semantics likely fine; naming is misleading.
+> - **How to verify:** Naming-only fix in Phase 3.3. Test will need to be updated at that point — reference file's field name changes, not its values.
+
+> - **What:** Cache-busting residual gaps — sub-scripts loaded indirectly are not content-hashed by Nextflow.
+> - **Why suspicious:** `bin/negative_steering_run_one.sh` loads sub-scripts via `--bin-dir` at runtime; `cross_sequence_summary.py` and the `NEGSTEER_CONTROLS` heredoc import helpers via `sys.path.insert`. Edits to these indirectly-loaded scripts will not invalidate the corresponding process cache.
+> - **How to verify:** When testing whether a Phase 3 edit invalidates cache correctly, edit the orchestrator or a directly-tracked script to be safe. Closing this gap requires a new pattern (declaring all sub-scripts as `path` inputs, or staging the entire `bin/` directory) and is deferred.
+
+> - **What:** Pre-existing `fastrelax_xml` mismatch in `tests/orthogonal_metrics/test_orthogonal_metrics.nf`.
+> - **Why suspicious:** The test harness was calling `NEGSTEER_ROSETTA_METRICS(rosetta_input_ch)` without the `fastrelax_xml` input the production module has required since the initial baseline. Corrected in passing during the cache-busting commit.
+> - **How to verify:** Confirm nothing else in the test tree relied on the old shape.
 
 ---
 
@@ -154,7 +180,8 @@ Genuine uncertainties that may need resolution at some point.
 1. Read this document.
 2. Read `notes/codebase_remediation_plan.md` if it's been a while.
 3. Read `notes/inventory/10_phase_1_synthesis.md` for the substantive findings.
-4. Begin work on the "Next Concrete Step" listed above.
+4. Read `notes/inventory/11_phase_2_plan.md` for the Phase 2 design.
+5. Begin work on the "Next Concrete Step" listed above.
 
 **During a session:**
 
