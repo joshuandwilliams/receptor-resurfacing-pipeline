@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from pathlib import Path
 
 import pandas as pd
@@ -11,6 +11,7 @@ from tests.characterization.helpers.result import ComparisonResult
 _MAX_DIFFS = 10
 _STRATEGY_EXACT = "CSV-EXACT"
 _STRATEGY_STRUCT = "CSV-STRUCT"
+_STRATEGY_EXACT_MODULO = "CSV-EXACT-MODULO-PATHS"
 
 
 def compare_csv_exact(
@@ -89,6 +90,45 @@ def compare_csv_struct(
     return _compare_dataframes(
         ref_sorted, act_sorted,
         reference=reference, actual=actual, strategy=_STRATEGY_STRUCT,
+        abs_tol=abs_tol, rel_tol=rel_tol, string_columns=string_columns,
+    )
+
+
+def compare_csv_exact_modulo_paths(
+    reference: Path,
+    actual: Path,
+    path_normalizer: Callable[[str], str],
+    *,
+    abs_tol: float = 1e-6,
+    rel_tol: float = 1e-9,
+    string_columns: Iterable[str] | None = None,
+) -> ComparisonResult:
+    """Strategy CSV-EXACT-MODULO-PATHS.
+
+    Same contract as :func:`compare_csv_exact` except every string-typed cell
+    in both frames is passed through ``path_normalizer`` before comparison.
+    Use this for CSVs that carry absolute Nextflow workdir paths or user-home
+    prefixes in cells (e.g. ``survivor_manifest.csv``,
+    ``survivors_with_orthogonal_metrics.csv``) — analogous to
+    JSON-MODULO-PATHS for JSON files.
+
+    Numeric columns are unaffected. Column-name normalisation is intentionally
+    not performed; only cell *values* in object-typed columns are rewritten.
+    """
+    early = _file_check(reference, actual, _STRATEGY_EXACT_MODULO)
+    if early is not None:
+        return early
+    ref_df = pd.read_csv(reference)
+    act_df = pd.read_csv(actual)
+    for df in (ref_df, act_df):
+        for col in df.columns:
+            if df[col].dtype == object:
+                df[col] = df[col].map(
+                    lambda v: path_normalizer(v) if isinstance(v, str) else v
+                )
+    return _compare_dataframes(
+        ref_df, act_df,
+        reference=reference, actual=actual, strategy=_STRATEGY_EXACT_MODULO,
         abs_tol=abs_tol, rel_tol=rel_tol, string_columns=string_columns,
     )
 

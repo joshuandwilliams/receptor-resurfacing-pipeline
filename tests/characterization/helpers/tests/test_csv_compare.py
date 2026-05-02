@@ -4,7 +4,12 @@ from pathlib import Path
 
 import pytest
 
-from tests.characterization.helpers.csv_compare import compare_csv_exact, compare_csv_struct
+from tests.characterization.helpers.csv_compare import (
+    compare_csv_exact,
+    compare_csv_exact_modulo_paths,
+    compare_csv_struct,
+)
+from tests.characterization.helpers.path_normalize import canonicalize_workdir_paths
 
 
 def _write(path: Path, content: str) -> Path:
@@ -157,3 +162,87 @@ def test_compare_csv_struct_invalid_sort_key_fails(tmp_path):
     result = compare_csv_struct(ref, act, sort_by=["does_not_exist"])
     assert not result.passed
     assert "sort_by" in result.message.lower()
+
+
+# ---------------------------------------------------------------------------
+# compare_csv_exact_modulo_paths
+# ---------------------------------------------------------------------------
+
+_REF_WORKDIR = "/hpc-home/alice/proj/work/ab/0123456789abcdef0123456789abcd"
+_ACT_WORKDIR = "/hpc-home/bob/proj/work/cd/fedcba9876543210fedcba9876543"
+
+
+@pytest.mark.local_unit
+def test_compare_csv_exact_modulo_paths_identity_passes(tmp_path):
+    """Two CSVs with no path content compare equal under modulo-paths."""
+    ref = _write(tmp_path / "r.csv", "a,b\n1,2.0\n3,4.5\n")
+    act = _write(tmp_path / "a.csv", "a,b\n1,2.0\n3,4.5\n")
+    result = compare_csv_exact_modulo_paths(ref, act, canonicalize_workdir_paths)
+    assert result.passed
+    result.assert_passed()
+
+
+@pytest.mark.local_unit
+def test_compare_csv_exact_modulo_paths_normalises_workdir_hash(tmp_path):
+    """Different workdir hashes in path cells normalise to the same value."""
+    ref = _write(
+        tmp_path / "r.csv",
+        f"name,pdb_path,score\nseq1,{_REF_WORKDIR}/out.pdb,0.42\n",
+    )
+    act = _write(
+        tmp_path / "a.csv",
+        f"name,pdb_path,score\nseq1,{_ACT_WORKDIR}/out.pdb,0.42\n",
+    )
+    result = compare_csv_exact_modulo_paths(ref, act, canonicalize_workdir_paths)
+    assert result.passed, result.differences
+
+
+@pytest.mark.local_unit
+def test_compare_csv_exact_modulo_paths_detects_value_drift(tmp_path):
+    """Path cells normalised, but a numeric drift outside tolerance still fails."""
+    ref = _write(
+        tmp_path / "r.csv",
+        f"name,pdb_path,score\nseq1,{_REF_WORKDIR}/out.pdb,0.42\n",
+    )
+    act = _write(
+        tmp_path / "a.csv",
+        f"name,pdb_path,score\nseq1,{_ACT_WORKDIR}/out.pdb,0.99\n",
+    )
+    result = compare_csv_exact_modulo_paths(ref, act, canonicalize_workdir_paths)
+    assert not result.passed
+    assert any("score" in d for d in result.differences)
+
+
+@pytest.mark.local_unit
+def test_compare_csv_exact_modulo_paths_normalises_hpc_home_prefix(tmp_path):
+    """User-home prefixes (/hpc-home/<user>) collapse under the normalizer."""
+    ref = _write(
+        tmp_path / "r.csv",
+        "name,home_path\nseq1,/hpc-home/alice/projects/run1.csv\n",
+    )
+    act = _write(
+        tmp_path / "a.csv",
+        "name,home_path\nseq1,/hpc-home/bob/projects/run1.csv\n",
+    )
+    result = compare_csv_exact_modulo_paths(ref, act, canonicalize_workdir_paths)
+    assert result.passed, result.differences
+
+
+@pytest.mark.local_unit
+def test_compare_csv_exact_modulo_paths_missing_reference_fails(tmp_path):
+    """Nonexistent reference path fails cleanly with a clear message."""
+    ref = tmp_path / "nope.csv"
+    act = _write(tmp_path / "a.csv", "a\n1\n")
+    result = compare_csv_exact_modulo_paths(ref, act, canonicalize_workdir_paths)
+    assert not result.passed
+    assert "reference" in result.message.lower()
+
+
+@pytest.mark.local_unit
+def test_compare_csv_exact_modulo_paths_missing_actual_fails(tmp_path):
+    """Nonexistent actual path fails cleanly with a clear message."""
+    ref = _write(tmp_path / "r.csv", "a\n1\n")
+    act = tmp_path / "nope.csv"
+    result = compare_csv_exact_modulo_paths(ref, act, canonicalize_workdir_paths)
+    assert not result.passed
+    assert "actual" in result.message.lower()
