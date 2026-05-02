@@ -195,6 +195,9 @@ Outputs or behaviors to scrutinize for correctness, but not investigated immedia
 > - **Why suspicious:** The gate must be reading a differently-named column than what gets emitted in the cross_summary join. Possibly a column-rename inconsistency between the gate input and the published output.
 > - **How to verify:** Trace `merge_orthogonal_metrics.py` to find which input column the gate consumes vs which output column it writes. Source: report 15 final VC row.
 
+> - **What:** Pipeline output verbosity — work/ and results/ trees contain many thousands of tiny files per run, dominated by per-seed Boltz internals, intermediate JSONs, and per-design subtrees that are not consumed downstream. Deleting a full run (e.g. tests/old_full_test/) takes minutes-to-hours of filesystem time on HPC; tarballing is slow; backups are inflated.
+> - **Why suspicious:** Likely a mix of (a) Boltz emitting full prediction trees per seed (legitimately many files, possibly excessive), (b) producer scripts writing intermediate JSONs that no downstream stage reads, (c) per-design subtrees duplicated across cycles, and (d) workdirs not pruned because Nextflow defaults retain everything. The path-coverage curation already required excluding *.npz, *.a3m, msa/, predictions/, contamination_scratch/ from fixture tarballs to keep them tractable — that exclude list is itself evidence of the problem.
+> - **How to verify:** During Phase 3, audit each producer script and Nextflow process for files emitted but never consumed downstream. Cross-reference against the orthogonal_metrics fixture exclude list (those subtrees are confirmed unread by the orthogonal_metrics stack). Likely fixes: scratch-only outputs into work/ rather than published; coalesced per-seed outputs; explicit deletion at the end of negsteer cycles. Phase 3 work; not blocking.
 ---
 
 ## Open Questions
