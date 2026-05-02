@@ -8,11 +8,16 @@
 #
 # Excludes:
 #   - .git/, Python/IDE caches, macOS metadata, Word lockfiles
-#   - run artefacts (work/, tmp/, results/, .nextflow/)
+#   - run artefacts (work/, tmp/, results/, .nextflow/, receptor_resurfacing_results/)
 #   - slurm log files in tests/*/
+#   - tests/curation_staging/ -- temporary tarball staging area used
+#     during fixture curation; safe to recreate locally without syncing
+#   - tests/full_test_run/reference_data_helpers/ -- ad-hoc helpers
+#     pulled from HPC for path-coverage analysis
 #
 # Includes (despite being run artefacts in some sense):
 #   - tests/full_test_run/example_output_files/  -- curated reference set
+#     (will retire at phase 2.9)
 #
 # The sync uses --delete, so files removed from the local repo are
 # also removed from HPC. Always run with --dry first when in doubt.
@@ -59,6 +64,8 @@ rsync -av --delete $DRY_RUN \
     --exclude='tests/full_test_run/.nextflow*' \
     --exclude='rsync_dryrun*.txt' \
     --exclude='rsync_deletions*.txt' \
+    --exclude='tests/full_test_run/reference_data_helpers/' \
+    --exclude='tests/curation_staging/' \
     "$REPO_ROOT/" "$HPC_DEST"
 
 echo
