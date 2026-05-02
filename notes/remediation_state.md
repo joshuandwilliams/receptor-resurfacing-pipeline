@@ -2,165 +2,145 @@
 
 A living document tracking where the codebase remediation effort currently stands. Read this at the start of every session; update it at the end of every session.
 
-**Last updated:** 2026-05-02
+**Last updated:** 2026-05-02 (late evening, post-curation)
 
 ---
 
 ## Current Phase
 
-**Phase 2 (Establish Behavioral Tests) — in progress, with a strategic revision.**
+**Phase 2 (Establish Behavioral Tests) — in progress, with a strategic revision in execution.**
 
-Plan written, framework scaffolded, comparators tested, Nextflow caching fixed, reference set rebuilt, 184 hpc-tier characterization tests written, JAVA_HOME fixed, repo synced to HPC.
+Plan written, framework scaffolded, comparators tested, Nextflow caching fixed, supervisor-demo reference set built (now being retired), 184 hpc-tier characterization tests written, JAVA_HOME fixed, repo synced to HPC, per-module test decoupling complete, discovery run executed and curated, per-module fixtures staged into each `tests/<module>/data/`.
 
-**A pivot has been adopted** before the first HPC round-trip: per-module tests will become the primary characterization safety net, with full pipeline runs reserved for milestone verification only. See `notes/inventory/14_phase_2_revision_per_module_tests.md` for the revision plan and rationale.
+The pivot to per-module tests as the primary safety net is described in `notes/inventory/14_phase_2_revision_per_module_tests.md` — that's the active spec.
 
 ---
 
-## Just Completed
+## Just Completed (since last update)
 
-**Phase 2 work to date:**
+- **Discovery run completed.** `params_full_test.yml` ran to completion on HPC after the SIGPIPE fix, producing 122 cross-sequence rows (120 steered + 2 controls) covering 7 of 8 observable per-MPNN-sequence outcome classes.
+- **Path-coverage analysis.** `notes/inventory/15_discovery_run_path_coverage.md` derives the negsteer pathway taxonomy from the producer code's vocabulary (4 orthogonal axes: cold-start outcome / per-seed verdict / aggregated verdict / cohort tier), tabulates the 8 observable classes, identifies discriminating signals per class, and proposes minimum-coverage fixture candidates per stage.
+- **Verification round on HPC.** All verification commands from report 15 run on HPC; results applied back into the report. Resolved Open Q3 (design_44_seq_1 tier-A anomaly: representative `n_pass = n_seeds_pose_holds + n_seeds_clean_steered = 1 + 2 = 3`). Surfaced and corrected: MPNN path was wrong (`top_metadata.csv` lives in `sequences/`, not `mpnn/`); `singleton` verdict is systematic (one per sequence, not "n/a here"); Class 3 splits into 3a (63 sequences, all-zeros) and 3b (6 sequences, mixed pose_collapses).
+- **Class 8 (`new_contamination`) confirmed unreachable from this discovery run** at both per-seed and aggregated resolution. Will be addressed as a standalone task before Phase 3.
+- **RFDiffusion fail branch confirmed not exercisable** by any real run, ever. Defensive code path; will be covered by a small unit test added during Phase 2.9, not by a fixture.
+- **Orthogonal-metrics 0/122 pass rate downgraded** from "coverage gap" to "expected behavior" — the af3_nomsa_ra_eff gate is a warning-style filter; pass branch exercisable via param override in the per-module test.
+- **Per-module fixtures curated.** Five `tests/<module>/data/` directories populated:
+  - `tests/rfdiffusion/data/` — no-op (already correctly set up from decoupling).
+  - `tests/rosetta_filtering/data/rfdiffusion_split/` — 4 split PDBs (design_0, 1, 14, 59) covering sc_threshold both sides.
+  - `tests/proteinmpnn/data/rosetta_passing/` — 2 parent PDBs (design_0, design_28); `input_complex.pdb` populated from rfdiffusion data (was 0-byte placeholder).
+  - `tests/negative_steering/data/` — 8 FASTAs spanning Classes 1, 2, 3a, 4, 5, 6, 7 + 8 deduped parent design PDBs + `rfdiffusion_metrics.json` + `input_complex.pdb`.
+  - `tests/orthogonal_metrics/data/negsteer_run/` — 2 per-sequence workdirs (design_28_seq_1, design_62_seq_0) + trimmed `cross_sequence_summary.csv`. HPC absolute paths rewritten to local Mac/repo paths via `scripts/rewrite_fixture_paths.py`.
+- **Path-rewriter script added** at `scripts/rewrite_fixture_paths.py` — stdlib-only, idempotent, re-runnable when fixtures are re-pulled.
+- **`sync_to_hpc.sh` continuation-line fix** committed (the missing `\` after `nxf_home/` exclude).
 
-- `notes/inventory/11_phase_2_plan.md` — original Phase 2 plan (still in repo as historical record; superseded by the revision below).
-- `notes/inventory/14_phase_2_revision_per_module_tests.md` — pivot to per-module-tests-as-safety-net. Active spec.
-- `tests/characterization/` — pytest framework with conftest, fixtures, README. Includes ComparisonResult dataclass and four+ comparators (CSV-EXACT, CSV-STRUCT, CSV-EXACT-MODULO-PATHS, JSON-DEEP, JSON-MODULO-PATHS, PNG-PERCEPTUAL, PNG-EXISTS, TEXT-EXACT, plus path normalisation).
-- `tests/characterization/helpers/tests/` — 67 unit tests, all passing under `pytest -m local_unit`.
-- `tests/characterization/TRACEABILITY.md` — 184 rows mapping characterization tests to producers.
-- `pyproject.toml` — test dependencies, pytest config, marker registry with `--strict-markers`.
-- `containers/` — Singularity definition files moved into the repo with a README.
-- Nextflow cache-busting — orthogonal-metrics pattern (`path X_script` input, content-hashed) propagated across modules; corresponding call-site updates in `main.nf` and `tests/*/test_*.nf`.
-- `tests/full_test_run/example_output_files/` — supervisor-demo reference set (currently the canonical reference; will be retired once per-module references are in place per the revision plan).
-- 184 hpc-tier characterization tests across 8 stage files, parametrized over the trio `input_control_polyA, design_0_seq_0, design_13_seq_2`.
-- Pre-HPC-roundtrip audit (`audit_pre_hpc_roundtrip.md`); JAVA_HOME path corrected in 7 slurm launchers.
-- `scripts/sync_to_hpc.sh` — sync script with documented excludes; `.gitignore` tightened for Word lockfiles and slurm log files.
-- Repo synced to HPC at `/Volumes/HPC-Home/receptor_design/receptor-resurfacing-pipeline/`.
+**Phase 2 work to date (cumulative):**
+
+- `notes/inventory/11_phase_2_plan.md` — original plan (historical record).
+- `notes/inventory/14_phase_2_revision_per_module_tests.md` — active spec.
+- `notes/inventory/15_discovery_run_path_coverage.md` — discovery-run path coverage and fixture candidates.
+- `tests/characterization/` — pytest framework, conftest, fixtures, README.
+- `tests/characterization/helpers/` — six comparators (CSV-EXACT, CSV-STRUCT, CSV-EXACT-MODULO-PATHS, JSON-DEEP, JSON-MODULO-PATHS, PNG-PERCEPTUAL/EXISTS, TEXT-EXACT) + `ComparisonResult` dataclass.
+- 67 `local_unit` tests passing.
+- 184 `hpc-tier` characterization tests across 8 stage files, parametrized over `input_control_polyA, design_0_seq_0, design_13_seq_2`. **Restructuring required once per-module references are built (next concrete step #4).**
+- Nextflow cache-busting (`path X_script` content-hashed).
+- `containers/` Singularity definitions in repo with README.
+- `scripts/sync_to_hpc.sh` + `.gitignore` hygiene + `scripts/rewrite_fixture_paths.py`.
+- `audit_pre_hpc_roundtrip.md` and JAVA_HOME fix.
+- Per-module fixtures in each `tests/<module>/data/`.
 
 **Phase 1 deliverables** remain in `notes/inventory/` (`01_module_map.md` through `10_phase_1_synthesis.md`).
 
 ---
 
-## Next Concrete Step
+## Right Now (state mid-session)
 
-**Begin execution of the revised Phase 2 plan.**
+Curation work complete on Mac. Per-module fixtures are staged but not yet exercised end-to-end on HPC. Eleven commits pending push (SIGPIPE fix, sync script fix, gitignore update, per-module test decoupling + module READMEs, path-coverage report, path-rewriter script, four per-module fixture commits, this state-doc update).
 
-Per `14_phase_2_revision_per_module_tests.md` §4.2:
+Anticipated tag for these commits: `phase-2.7-discovery-run-complete`. Tagging may be deferred until per-module tests have been exercised on HPC against the curated fixtures (next concrete step #1) — that's the first place the curation could turn out to be subtly wrong.
 
-1. **Decouple per-module tests from upstream chaining.** Each `tests/<module>/test_<module>.nf` should resolve its inputs from `tests/<module>/data/` as the canonical path, not from a previous module's results. The existing fallback logic in `test_negative_steering.nf` already supports this; other tests may need similar adjustment.
+---
 
-2. **Design and run the discovery run on HPC.** Params per revision §2.4: `rfdiffusion_n_designs=64`, `mpnn_seqs_per_design=2`, all 128 forward to negsteer, `negsteer_n_designs=4`, Branch B only. Estimated runtime 2–4 hours. Capture the full `results/` tree.
+## Next Concrete Steps (in order)
 
-3. **Inventory the discovery run** to identify per-stage path coverage; pick fixture candidates.
+1. **Sync curated fixtures to HPC and run each per-module test.** Use `./scripts/sync_to_hpc.sh`; then run `tests/<module>/run_test_<module>.slurm.sh` for each of the four populated modules (rosetta_filtering, proteinmpnn, negative_steering, orthogonal_metrics). Confirm each test produces a clean output tree without missing-file errors. The orthogonal_metrics test is the most likely to surface issues because of the path-rewriting and the cross-fixture reference into `negative_steering/data/design_pdbs/`.
 
-(Steps 4–9 follow per the revision plan.)
+2. **Subtractive rebuild** of each `tests/<module>/example_output_files/` from per-module test output. Same approach as the supervisor-demo rebuild (mirror structure, exclude PDBs/NPZs/MSA/predictions/ subtrees), but per-module rather than cohort-wide.
 
-The 184 existing characterization tests will need their `reference_root` resolution and parametrize lists updated once per-module reference sets are in place.
+3. **Tag `phase-2.8-fixtures-and-references-complete`** once all per-module reference sets are committed.
+
+4. **Restructure 184 characterization tests** to point at per-module reference paths and update parametrize lists. Fold in the small RFDiffusion fail-branch unit test as part of this work (the fail branch is a defensive code path the discovery run can't exercise; covering it requires a hand-constructed input + threshold tweak rather than a real fixture). Tag `phase-2.9-tests-restructured-complete`.
+
+5. **Class 8 (`new_contamination`) standalone task.** Manufactured fixture or unit test against `classify_reversion_verdict` + `_classify_aggregated_verdict` to cover the path the discovery run didn't produce. Sequencing: ideally before phase-2-complete; can be slotted in around the test-restructuring work.
+
+6. **Safety-net validation** — delete `bin/sequence_registry.py`, expect zero diffs. This is `phase-2-complete`.
+
+7. **`tests/old_full_test/` deletion** on HPC and `tests/full_test_run/example_output_files/` retirement on Mac. Both stay until step 4 is done.
 
 ---
 
 ## Important Context Not Captured Elsewhere
 
-These are decisions, framings, or observations that matter for future sessions but aren't formalized in the inventory or synthesis documents.
-
 ### Why we pivoted
 
-The original Phase 2 plan assumed the supervisor-demo run (~6 hours) would be both the source of reference outputs and the verification target during Phase 3+ iteration. Three problems:
+The original plan assumed the supervisor-demo run (~6 hours) would be the iteration target. Three problems forced a revision: (1) 6-hour iterations unworkable across many Phase 3 commits; (2) path coverage was retroactively-discovered, not designed-in; (3) per-module tests were silently chained, defeating their isolation. The pivot uses per-module tests as primary safety net with curated fixtures, full pipeline runs reserved for milestones. See `14_phase_2_revision_per_module_tests.md` §1.
 
-1. 6-hour iterations are unworkable across many Phase 3 commits.
-2. Path coverage was retroactively-discovered, not designed-in.
-3. Per-module tests were silently chained to each other, defeating their isolation.
+### Negative-steering path semantics
 
-The pivot uses per-module tests as primary safety net with curated input fixtures, and reserves full pipeline runs for milestone verification. See `14_phase_2_revision_per_module_tests.md` §1 for full rationale.
+The full pathway taxonomy lives in `notes/inventory/15_discovery_run_path_coverage.md` §Negative steering — four orthogonal axes (cold-start outcome / per-seed verdict / aggregated verdict / cohort tier) and the eight observable per-MPNN-sequence outcome classes the discovery run produced (or failed to produce, in the case of Class 8). That document is the authority on negsteer semantics for fixture purposes; the producer code at `bin/boltz2_iterate_steering.py` and `bin/cross_sequence_summary.py` is the authority for code-level questions.
 
-### Negative-steering path semantics (recorded for clarity)
+### Reference-set sequence trio (currently)
 
-- **Cold-start**: predicting where the MPNN sequence's effector lands. Can pass (correct placement) or fail (incorrect placement).
-- **Steering**: introducing mutations. May produce contamination if mutations interact with the target.
-- **Reversion**: rolling back contaminating mutations to test whether correct placement persists.
+Trio used by the existing 184 characterization tests:
+- `input_control_polyA` — control, cold-start-only path
+- `design_0_seq_0` — empty reversion (n_contaminated=0)
+- `design_13_seq_2` — populated reversion (n_contaminated=33)
 
-The path-coverage outcomes the discovery run aims to capture: cold-start fail; cold-start pass + clean steering; cold-start pass + contaminated + reversion succeeds; cold-start pass + contaminated + reversion fails. Plus the two controls (polyA, scrambled) which the test workflow generates from `params.input_pdb`.
+These names are baked into `tests/characterization/test_negsteer_per_sequence.py` and `TRACEABILITY.md`. **The new fixtures from the discovery run produce different names** — see `notes/inventory/15_discovery_run_path_coverage.md` for the locked candidate list (8 sequences across Classes 1, 2, 3a, 4, 5, 6, 7). Test restructuring is next concrete step #4.
 
-### "Golden master" is the wrong framing
+### "Golden master" framing
 
-Phase 2's reference outputs are **current pipeline behavior**, not verified-correct outputs. Some outputs almost certainly contain undetected logical errors. Numbers can look realistic without being correct.
+Phase 2 reference outputs are *current pipeline behavior*, not verified-correct outputs. Tests assert *stability*, not *correctness*. A test failing during refactoring may indicate a legitimate behavior change or a fix to a latent bug — investigate, don't roll back automatically.
 
-This means:
+### Phase 3+ work currently deferred
 
-- Characterization tests assert *stability*, not *correctness*. Their job is to make changes visible, not to certify behavior as right.
-- A test failing during refactoring does not necessarily indicate the refactor is wrong. It indicates behavior changed.
-- Some refactoring may *fix* latent bugs, which will appear as test failures. Investigate, don't roll back automatically.
+- File-by-file simplification (Phase 4, after characterization tests are fully in place).
+- Strict-syntax migration of `main.nf` and test workflows (deferred until HPC's Nextflow forces it).
+- Closing cache-busting residual gaps for indirectly-loaded sub-scripts.
+- Renaming `scaffold_rmsd` field (semantically motif RMSD).
+- Investigating `merge_orthogonal_metrics.py` test-vs-production divergence.
+- Investigating suspected `--n-cycles 1` silent-skip-reversion bug.
 
-### File-by-file simplification belongs to Phase 4
+### Specific known issues
 
-The original plan included consolidation of duplicated functionality in Phase 3. A deeper "rewrite for clarity" pass is intentionally deferred to Phase 4 (deep modules), for two reasons:
-
-- Phase 2 characterization tests need to exist first to make rewrite-for-clarity safe.
-- A file-by-file deep simplification pass is more rigorous than a bird's-eye redundancy sweep across the whole codebase. It's also more naturally combined with the architectural restructuring of Phase 4.
-
-Phase 3 will still consolidate obvious duplication that the inventory has already surfaced (e.g., the four identical blocks in `boltz2_iterate_steering.py`), but ambitious simplification waits.
-
-### Dead-code deletion deferred for safety-net validation
-
-`bin/sequence_registry.py` (vulture-confirmed unreachable) is intentionally **not** being deleted yet. Per the revision plan §4.2 step 9, it is reserved as the canonical safety-net validation commit — the smallest possible change to validate that the per-module tests + characterization framework correctly detect (or correctly don't detect) behavior changes. The empty `main` file at the repo root has already been removed.
-
-### Specific known issues to track
-
-- **`bin/boltz2_iterate_steering.py`** is the largest file (5,500+ lines), contains four identical code blocks that build the same `cmd` and call `subprocess.run` on `submit_script`, and references a `submit_boltz2_iterate_steering.sh` that does not exist on disk. The script has fallback handling for this missing file (`if not submit_script.exists(): print(WARN...)`), so the dead path doesn't break execution — but it represents an entire orphaned self-resubmission feature from a pre-Nextflow workflow.
-- **`bin/reversion.py::harvest_reversion_results`** has cyclomatic complexity 74 — pathological. Top refactoring target.
-- **`bin/cross_sequence_summary.py::aggregate`** has cyclomatic complexity 58. Second-worst offender.
-- **`bin/rfdiffusion_plots.py`** contains several D-rated functions (CC 21–24). Plotting code, but worth attention.
-- **Vulture's 8 high-confidence findings** (`08_vulture_high_confidence.txt`) are the safest dead-code candidates to remove first.
+- **`bin/boltz2_iterate_steering.py`** is the largest file (5,500+ lines), four identical code blocks, references a non-existent submit script. Top refactoring target.
+- **`bin/reversion.py::harvest_reversion_results`** has cyclomatic complexity 74. Pathological.
+- **`bin/cross_sequence_summary.py::aggregate`** has CC 58. Second-worst.
+- **`bin/rfdiffusion_plots.py`** several D-rated functions (CC 21–24).
+- **Vulture's 8 high-confidence findings** (`08_vulture_high_confidence.txt`) are safest dead-code candidates; `bin/sequence_registry.py` is reserved for safety-net validation commit.
 
 ### HPC workflow constraint
 
-The pipeline runs on HPC. The Mac is for development with Claude Code only — code cannot be tested there. Workflow:
+Mac is authoritative. HPC has no git. Workflow: edit on Mac, sync via `./scripts/sync_to_hpc.sh`, run on HPC, iterate. Round-trips are slow.
 
-1. Develop changes locally with Claude Code.
-2. Sync via `./scripts/sync_to_hpc.sh` (the HPC home is mounted at `/Volumes/HPC-Home/`).
-3. Run pipeline / tests on HPC.
-4. Iterate.
+### Tooling
 
-Round-trips are slow. Plan thoroughly before each transfer; batch related changes; lean on `pytest -m local_unit` and static analysis (which run locally) for fast feedback during development.
-
-### Tooling baseline
-
-Local Mac has:
-
-- Homebrew (installed during Phase 1 setup)
-- Node.js + npm (via Homebrew)
-- Claude Code (`@anthropic-ai/claude-code`, npm-global, runs as `claude`)
-- Conda (miniforge base) with `ruff`, `vulture`, `radon` installed
-- Conda env `receptor-tests` (Python 3.10) with the test framework's dependencies — created via `pyproject.toml`'s `[test]` extra
-- Git, with project pushed to https://github.com/joshuandwilliams/receptor-resurfacing-pipeline
-- HPC home mounted at `/Volumes/HPC-Home/` (read+write; treat as read-only when prompting Claude Code)
-
-The HPC does not have git installed. Work happens on Mac; HPC receives synced code only.
+- Mac: Homebrew, Node.js, Claude Code, miniforge conda, `receptor-tests` env (Python 3.10), Nextflow v26.04.0.0 (Mac-only syntax checks; `-stub-run` works).
+- HPC home mounted at `/Volumes/HPC-Home/` (treat as read-only when prompting Claude Code; explicit guardrail).
+- HPC: older Nextflow via Singularity (legacy parser default — that's why the codebase still works there despite v26 strictness on Mac).
 
 ### Branch and tag state
 
-- Default branch: `main` (pristine baseline; do not modify).
-- Active branch: `remediation` (all work happens here).
-- Tags so far:
-  - `baseline-pre-remediation`
-  - `phase-1.1-inventory-complete`
-  - `phase-1.2-glossary-complete`
-  - `phase-1.3-static-analysis-complete`
-  - `phase-1-complete`
-  - `phase-2.1-plan-complete`
-  - `phase-2.2-scaffolding-complete`
-  - `phase-2.3-comparators-complete`
-  - `phase-2.4-cache-busting-complete`
-  - `phase-2.5-reference-rebuild-complete`
+- Default branch: `main` (pristine baseline).
+- Active branch: `remediation`.
+- Tags: `baseline-pre-remediation`, `phase-1.1` through `phase-1-complete`, `phase-2.1-plan-complete` through `phase-2.5-reference-rebuild-complete`.
+- **Next anticipated tag**: `phase-2.7-discovery-run-complete` — applied once the curated fixtures have been confirmed working on HPC (next concrete step #1). The previously-anticipated `phase-2.6-revision-plan-complete` was never tagged; the revision plan + decoupling work was done but the planned tag boundary was overtaken by the curation work and is being skipped.
 
-Tag at the completion of each phase or significant sub-step.
+### Anticipated remaining Phase 2 tag sequence
 
-### Anticipated remaining Phase 2 tag sequence (under the revision)
-
-- `phase-2.6-revision-plan-complete` — when the revision plan and updated state document are committed (this commit).
-- `phase-2.7-discovery-run-complete` — after the discovery run executes and is curated.
-- `phase-2.8-fixtures-and-references-complete` — after per-module fixtures and reference sets are in place.
-- `phase-2.9-tests-restructured-complete` — after the 184 characterization tests are updated to the per-module structure.
-- `phase-2-complete` — after the safety-net validation deletion commit produces zero diffs.
-
-The earlier-anticipated `phase-2.6-hpc-tier-complete` is superseded — the equivalent verification now happens at `phase-2.9`.
+- `phase-2.7-discovery-run-complete` — once the curated fixtures are confirmed working on HPC (next concrete step #1). The eleven commits in this session sit at the boundary of this tag.
+- `phase-2.8-fixtures-and-references-complete` — after per-module reference sets are subtractive-rebuilt and committed.
+- `phase-2.9-tests-restructured-complete` — after the 184 characterization tests are updated and the small RFDiffusion fail-branch unit test is added.
+- `phase-2-complete` — after Class 8 standalone task plus safety-net validation deletion produces zero diffs.
 
 ---
 
@@ -169,38 +149,60 @@ The earlier-anticipated `phase-2.6-hpc-tier-complete` is superseded — the equi
 Outputs or behaviors to scrutinize for correctness, but not investigated immediately. Revisited during or after refactoring.
 
 > - **What:** `merge_orthogonal_metrics.py` semantic divergence between production and test versions.
-> - **Why suspicious:** Finding A4 in `05_findings.md` flags this as a latent bug — production gates on AF3 presence; test demotes it to a flag-only column. Reference output reflects whichever version actually ran in the supervisor-demo cohort, and the Phase 2 test pin will lock that behavior — including the bug — until Phase 3.
-> - **How to verify:** Compare the production `merge_orthogonal_metrics.py` against the test-tree copy. Inspect the cohort's AF3 column distribution. If the production version was used, expect this test to fail when Phase 3 fixes the divergence; update the reference at that point.
+> - **Why suspicious:** Finding A4 in `05_findings.md`. Reference output may bake in this divergence.
+> - **How to verify:** Compare scripts and inspect AF3 column distribution in the discovery run's outputs.
 
 > - **What:** Suspected `--n-cycles 1` silent-skip-reversion bug from notes6.
-> - **Why suspicious:** Synthesis §5 records the bug as not verified during Phase 1. The supervisor-demo ran with `--n-cycles 1`, so reference outputs may bake in skipped reversion behavior.
-> - **How to verify:** Inspect a per-sequence run's `pathways.json` and reversion JSONs; cross-check whether reversion was actually attempted on contaminated sequences. If skipped where it should not have been, the reversion-related JSONs need regenerating from a `--n-cycles >= 2` run before Phase 3.
+> - **Why suspicious:** Synthesis §5 records this as not verified during Phase 1.
+> - **How to verify:** Inspect `pathways.json` and reversion JSONs for cohort sequences; check whether reversion was actually attempted on contaminated cases.
 
 > - **What:** `scaffold_rmsd` field in `rfdiffusion_metrics.json` is actually motif RMSD.
-> - **Why suspicious:** Glossary §F3 — field name is inverted from Baker-lab convention. Semantics likely fine; naming is misleading.
-> - **How to verify:** Naming-only fix in Phase 3.3. Test will need to be updated at that point — reference file's field name changes, not its values.
+> - **Why suspicious:** Glossary §F3 — field name inverted from Baker-lab convention.
+> - **How to verify:** Naming-only fix in Phase 3.3.
 
-> - **What:** Cache-busting residual gaps — sub-scripts loaded indirectly are not content-hashed by Nextflow.
-> - **Why suspicious:** `bin/negative_steering_run_one.sh` loads sub-scripts via `--bin-dir` at runtime; `cross_sequence_summary.py` and the `NEGSTEER_CONTROLS` heredoc import helpers via `sys.path.insert`. Edits to these indirectly-loaded scripts will not invalidate the corresponding process cache.
-> - **How to verify:** When testing whether a Phase 3 edit invalidates cache correctly, edit the orchestrator or a directly-tracked script to be safe. Closing this gap requires a new pattern (declaring all sub-scripts as `path` inputs, or staging the entire `bin/` directory) and is deferred.
+> - **What:** Cache-busting residual gaps — `bin/negative_steering_run_one.sh` and `cross_sequence_summary.py` use `--bin-dir` / `sys.path.insert` for sub-scripts; not content-hashed by Nextflow.
+> - **Why suspicious:** Edits to indirectly-loaded scripts won't invalidate Nextflow cache.
+> - **How to verify:** During Phase 3, prefer editing directly-tracked scripts; closing the gap requires declaring all sub-scripts as `path` inputs.
 
-> - **What:** Pre-existing `fastrelax_xml` mismatch in `tests/orthogonal_metrics/test_orthogonal_metrics.nf`.
-> - **Why suspicious:** The test harness was calling `NEGSTEER_ROSETTA_METRICS(rosetta_input_ch)` without the `fastrelax_xml` input the production module has required since the initial baseline. Corrected in passing during the cache-busting commit.
-> - **How to verify:** Confirm nothing else in the test tree relied on the old shape.
+> - **What:** Pre-existing `fastrelax_xml` mismatch in `tests/orthogonal_metrics/test_orthogonal_metrics.nf`, corrected during cache-busting.
+> - **How to verify:** Confirm nothing else relied on the old shape.
 
 > - **What:** 184 existing hpc-tier characterization tests are tied to the supervisor-demo reference paths and the trio `input_control_polyA, design_0_seq_0, design_13_seq_2`.
-> - **Why suspicious:** The revision plan replaces both the reference set location and the trio. The tests still encode comparator strategies and per-stage logic correctly, but their resolution paths and parametrize lists are stale.
-> - **How to verify:** Per revision §4.2 step 7, restructure tests once per-module references are built. The framework code (conftest.py, fixtures) needs updating so `reference_root` and `output_root` are per-stage. Each test file then resolves via per-stage fixtures.
+> - **Why suspicious:** The revision plan replaces both the reference set location and the trio. Resolution paths and parametrize lists are stale.
+> - **How to verify:** Restructure tests once per-module references are built.
+
+> - **What:** Codebase uses legacy Nextflow syntax (top-level `workflow.onComplete { }` handlers, top-level `if` blocks in `main.nf:43`). `NXF_SYNTAX_PARSER=v1` pinned in slurm wrappers as stopgap.
+> - **Why suspicious:** When HPC's Nextflow eventually upgrades and v1 parser is no longer available, the codebase will fail to compile.
+> - **How to verify:** Migrate event handlers to `nextflow.config` or appropriate workflow scopes; lift top-level `if` into a workflow body. Test against strict-default Nextflow on Mac before declaring done.
+
+> - **What:** Other potential `set -euo pipefail` + piped command sites that might have the same SIGPIPE-on-141 bug as the two we just fixed.
+> - **Why suspicious:** The pattern is easy to miss because failures are intermittent (only triggers when output is large enough).
+> - **How to verify:** Audit all `.nf` process bodies that combine `pipefail` with piped commands. Apply `|| true` to the diagnostic ones; use explicit error handling for any that should propagate failure.
+
+> - **What:** `contact_cutoff` parameter is documented under HADDOCK section but consumed by `rfdiffusion_filter.py` regardless of mode.
+> - **Why suspicious:** Misleading section header caused the discovery run's first attempt to use `contact_cutoff: 1.0`, breaking all Cα contact detection. Naming + grouping is bug-prone.
+> - **How to verify:** During Phase 3, consider renaming to `rfdiff_contact_cutoff` and moving to its own section in `params_example.yml`. (Note: this entry is on the lighter side of "verification queue" and could just be a Phase 3 todo.)
+
+> - **What:** Tier rule docstring at the top of `bin/cross_sequence_summary.py` (lines ~17–23) is stale relative to the implementation.
+> - **Why suspicious:** Docstring claims `n_seeds_pose_holds == n_seeds`; implementation at line 200 uses `n_pass = n_seeds_pose_holds + n_seeds_clean_steered`. `pipeline_notes/pipeline_notes3.md` agrees with the implementation. Anyone reading the docstring will form the wrong mental model.
+> - **How to verify:** Phase 3 docstring fix; one-line edit. Source: report 15 Open Q1.
+
+> - **What:** Production survivor manifest does not gate on `cross_tier`.
+> - **Why suspicious:** AF3 + biophys + rosetta are computed for tier-none representatives in the discovery cohort (95 of 122). In production with `negsteer_n_designs=20` this is meaningful GPU time. Whether the diagnostic-completeness behaviour is wanted, or whether a tier gate would save time without losing signal, is a product question.
+> - **How to verify:** Decision rather than verification. Source: report 15 Open Q5.
+
+> - **What:** `interface_plddt_median` column was blank in the `survivors_with_orthogonal_metrics.csv` row Claude Code inspected, but the `interface_plddt_too_low` gate fired on 70 sequences cohort-wide.
+> - **Why suspicious:** The gate must be reading a differently-named column than what gets emitted in the cross_summary join. Possibly a column-rename inconsistency between the gate input and the published output.
+> - **How to verify:** Trace `merge_orthogonal_metrics.py` to find which input column the gate consumes vs which output column it writes. Source: report 15 final VC row.
 
 ---
 
 ## Open Questions
 
-Genuine uncertainties that may need resolution at some point.
-
-1. **HADDOCK branch in the per-module strategy.** Branch A is out of Wave 1 scope. Should `tests/haddock/` get a per-module reference set under the new strategy at all, or stay deferred until Branch A is redesigned? Suggested: defer until the redesign.
-2. **Disk-space cost of per-module reference sets.** Each `tests/<module>/example_output_files/` mirrors that module's run outputs. Worth measuring after the first per-module rebuild to see whether further trimming is needed.
-3. **Stochasticity in per-module outputs.** Even with fixed inputs, some Boltz-2 prediction outputs may vary slightly run-to-run if seeds aren't fully pinned. The first per-module round-trip will reveal which outputs need the comparator strategy demoting.
+1. **HADDOCK branch in the per-module strategy.** Branch A is out of Wave 1 scope. Should `tests/haddock/` get a per-module reference set under the new strategy, or stay deferred? *Suggested: defer until Branch A is redesigned.*
+2. **Disk-space cost of per-module reference sets.** Worth measuring after the first per-module rebuild.
+3. **Stochasticity in per-module outputs.** Even with fixed inputs, some Boltz-2 outputs may vary slightly. The first per-module round-trip will reveal which need strategy demoting.
+4. **Class 8 standalone task — manufactured fixture vs unit test.** The discovery run produced no `new_contamination` examples at either per-seed or aggregated resolution. The path needs coverage before phase-2-complete. Two options: (a) manufacture an input that will trigger `new_contamination` aggregation through a small targeted negsteer run on HPC; (b) write a Python unit test against `classify_reversion_verdict` + `_classify_aggregated_verdict` with a hand-constructed reversion-result blob. (b) is cheaper but covers less; (a) is more representative but slower. Decision needed when this task is picked up.
 
 ---
 
@@ -210,7 +212,7 @@ Genuine uncertainties that may need resolution at some point.
 
 1. Read this document.
 2. Read `notes/codebase_remediation_plan.md` if it's been a while.
-3. Read `notes/inventory/10_phase_1_synthesis.md` for the substantive Phase 1 findings.
+3. Read `notes/inventory/10_phase_1_synthesis.md` for Phase 1 findings.
 4. Read `notes/inventory/14_phase_2_revision_per_module_tests.md` for the active Phase 2 spec.
 5. Begin work on the "Next Concrete Step" listed above.
 
@@ -223,8 +225,8 @@ Genuine uncertainties that may need resolution at some point.
 **At the end of a session:**
 
 - Update "Just Completed" with what was done.
-- Update "Next Concrete Step" with what should happen next.
+- Update "Next Concrete Step".
 - Update "Last Updated" date.
 - Commit and push.
 
-This document is the canonical source of "where am I in this work." If it disagrees with another document, this one wins (and the other should be updated).
+This document is the canonical "where am I" source. If it disagrees with another document, this one wins (and the other should be updated).
