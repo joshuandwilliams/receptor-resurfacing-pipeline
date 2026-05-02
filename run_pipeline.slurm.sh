@@ -47,7 +47,7 @@ AF2_DATA_DIR="/nbi/Reference-Data/AlphaFold/db-v2.3.2"
 EXPERIMENT_DIR="$(dirname "${PARAMS_FILE}")"
 
 # ── Java ──────────────────────────────────────────────────────────────────
-export JAVA_HOME="${PIPELINE_DIR}/jdk-17.0.2"
+export JAVA_HOME="/hpc-home/jowillia/singularity/jdk-17.0.2"
 export PATH="${JAVA_HOME}/bin:${PATH}"
 
 # ── Nextflow environment ──────────────────────────────────────────────────

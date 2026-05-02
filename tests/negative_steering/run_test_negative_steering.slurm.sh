@@ -36,7 +36,7 @@ NXF_WORK="${TEST_DIR}/work"
 NXF_TEMP="${TEST_DIR}/tmp"
 
 # ── Java ──────────────────────────────────────────────────────────────────
-export JAVA_HOME="${PIPELINE_DIR}/jdk-17.0.2"
+export JAVA_HOME="/hpc-home/jowillia/singularity/jdk-17.0.2"
 export PATH="${JAVA_HOME}/bin:${PATH}"
 
 # ── Nextflow environment ──────────────────────────────────────────────────
