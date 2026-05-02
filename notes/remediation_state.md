@@ -2,7 +2,7 @@
 
 A living document tracking where the codebase remediation effort currently stands. Read this at the start of every session; update it at the end of every session.
 
-**Last updated:** 2026-05-01
+**Last updated:** 2026-05-02
 
 ---
 
@@ -10,7 +10,7 @@ A living document tracking where the codebase remediation effort currently stand
 
 **Phase 2 (Establish Behavioral Tests) — in progress.**
 
-Plan written, framework scaffolded, comparators tested, Nextflow caching fixed. Remaining: reference set gap-fill, hpc-tier characterization tests, suspicions pass, safety-net validation.
+Plan written, framework scaffolded, comparators tested, Nextflow caching fixed, reference set rebuilt to mirror production structure. Remaining: hpc-tier characterization tests, suspicions pass, safety-net validation.
 
 ---
 
@@ -26,6 +26,7 @@ Plan written, framework scaffolded, comparators tested, Nextflow caching fixed. 
 - `pyproject.toml` — test dependencies, pytest config, marker registry with `--strict-markers`
 - `containers/` — Singularity definition files moved into the repo with a README
 - Nextflow cache-busting — orthogonal-metrics pattern (`path X_script` input, content-hashed) propagated to all modules that invoke `bin/*.py` scripts; corresponding call-site updates in `main.nf` and `tests/*/test_*.nf`
+- `tests/full_test_run/example_output_files/` — rebuilt subtractively from supervisor-demo `results/` tree. Structure mirrors production exactly (path-symmetric comparison enabled). Three sequences pinned in `negative_steering/runs/`: `input_control_polyA`, `design_0_seq_0` (empty reversion), `design_13_seq_2` (populated reversion, n_contaminated=33). Excluded: PDBs, NPZs, MSA files, Boltz prediction internals, the other 31 sequences. README rebuilt to document structure, exclusions, and reference-update procedure.
 
 **Phase 1 deliverables** remain in `notes/inventory/` (`01_module_map.md` through `10_phase_1_synthesis.md`).
 
@@ -33,21 +34,13 @@ Plan written, framework scaffolded, comparators tested, Nextflow caching fixed. 
 
 ## Next Concrete Step
 
-**Reference set gap-fill on HPC.**
+**Draft Prompt 3 — hpc-tier characterization tests.**
 
-Locate and copy missing files into `tests/full_test_run/example_output_files/` per the ⚠️ checklist in plan §2:
+The reference set is now structured to mirror production (path-symmetric comparison enabled), so test-to-file mappings can be written concretely against the on-disk files in `tests/full_test_run/example_output_files/`.
 
-- `rosetta_filter_summary.csv`
-- Per-design `mpnn_results.json`; full `top_fastas/` and `af2_fastas/` directories
-- All 34 per-sequence subdirectories under `negative_steering/` (32 designs + 2 controls), each containing the seven expected files
-- A populated-reversion per-sequence example (currently all reversion JSONs on disk are empty)
-- The two control sequence rows in `cross_sequence_summary.csv`
-- `cross_sequence_summary_with_interface_metrics.csv`
-- `merged_orthogonal_metrics.csv` / `survivors_with_orthogonal_metrics.csv` (confirm exact filenames)
+Prompt 3 will produce per-stage test files under `tests/characterization/` (e.g., `test_preprocessing.py`, `test_rfdiffusion.py`, etc.) that each invoke the appropriate comparator(s) for that stage's outputs. Each test marked `@pytest.mark.hpc` and added to `TRACEABILITY.md`.
 
-For each file copied in, update `tests/full_test_run/example_output_files/README.md` with a one-line note. Genuine gaps (files that don't exist on HPC) get noted in the Verification Queue.
-
-This is a manual HPC task — no Claude Code prompt. Required before Prompt 3 (hpc-tier characterization tests) can be drafted.
+Drafting happens in the chat with Claude; Claude Code runs the prompt to produce the tests. Acceptance: `pytest -m hpc` passes against a fresh HPC run with cache-busting in effect.
 
 ---
 
@@ -66,6 +59,16 @@ This means:
 - Some refactoring may *fix* latent bugs, which will appear as test failures. These are good outcomes that need investigation rather than rollback.
 
 The README in `example_output_files/` carries this caveat. It should be re-read at the start of Phase 2 work.
+
+### Reference-set sequence trio
+
+Of the 34 sequences in `negative_steering/runs/`, only three are pinned:
+
+- **`input_control_polyA`** — control. Tests the cold-start-only path; no contact residues, no reversion logic exercised.
+- **`design_0_seq_0`** — empty reversion. `n_contaminated=0`. Tests that the reversion path correctly handles "no contamination detected."
+- **`design_13_seq_2`** — populated reversion. `n_contaminated=33`. Tests the full reversion harvest path including path-bearing JSON outputs (workdir hashes appear in `contaminated.json`).
+
+These three exercise the three meaningfully-distinct paths through the negative-steering core. The other 31 sequences would only add repetition.
 
 ### File-by-file simplification belongs to Phase 4
 
@@ -127,12 +130,12 @@ The HPC does not have git installed. Work happens on Mac; HPC receives synced co
   - `phase-2.2-scaffolding-complete`
   - `phase-2.3-comparators-complete`
   - `phase-2.4-cache-busting-complete`
+  - `phase-2.5-reference-rebuild-complete`
 
 Tag at the completion of each phase or significant sub-step.
 
-### Anticipated Phase 2 tag sequence
+### Anticipated remaining Phase 2 tag sequence
 
-- `phase-2.5-gap-fill-complete` — after the HPC reference-set gap-fill
 - `phase-2.6-hpc-tier-complete` — after Prompt 3 (hpc-tier characterization tests, green on a fresh HPC run)
 - `phase-2.7-suspicions-complete` — after Prompt 4 (suspicion-finding pass producing `SUSPICIONS.md`)
 - `phase-2-complete` — after the dead-code deletion (`bin/sequence_registry.py`, empty `main` file) produces zero diffs in the test suite, validating the safety net
