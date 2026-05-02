@@ -44,6 +44,7 @@ rsync -av --delete $DRY_RUN \
     --exclude='*.pyc' \
     --exclude='.ruff_cache/' \
     --exclude='.mypy_cache/' \
+    --exclude='nxf_home/'
     --exclude='~$*' \
     --exclude='tests/*/work/' \
     --exclude='tests/*/tmp/' \
