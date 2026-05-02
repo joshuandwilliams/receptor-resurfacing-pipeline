@@ -80,7 +80,9 @@ process AF3_SETUP_DB {
         "\${AF3_DATA_DIR}/mgy_clusters_2022_05.fa"
 
     echo "AF3 database dir ready: \${AF3_DATA_DIR}"
-    ls "\${AF3_DATA_DIR}" | head -20
+    # Trailing `|| true` swallows SIGPIPE (141) propagated by pipefail
+    # when head closes early.  Same pattern as line 224 below.
+    ls "\${AF3_DATA_DIR}" | head -20 || true
 
     touch af3_db_ready.flag
     """

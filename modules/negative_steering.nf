@@ -278,7 +278,14 @@ process NEGSTEER_CROSS_SEQUENCE {
     done
 
     echo "Aggregator root:"
-    ls -la aggregator/ | head -40
+    # `ls | head -N` under `set -euo pipefail` is a SIGPIPE trap: when
+    # head closes its stdin after N lines, ls gets SIGPIPE and exits
+    # 141, which pipefail propagates as the pipeline's exit status,
+    # killing the process before the aggregator runs.  Trailing
+    # `|| true` swallows that 141 without disabling pipefail for the
+    # singularity invocation below.  Same pattern as
+    # negsteer_af3_nomsa.nf:224.
+    ls -la aggregator/ | head -40 || true
 
     singularity exec --bind \${PWD}:\${PWD} ${params.boltz2_container} \\
         python ${summary_script} \\
