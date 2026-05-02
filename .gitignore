@@ -98,3 +98,10 @@ desktop.ini
 tests/full_test_run/example_output_files/*
 !tests/full_test_run/example_output_files/README.md
 
+
+# Word lockfiles (temporary files Word creates while a doc is open)
+~$*
+
+# Slurm log files at any test path
+tests/*/*.out
+tests/*/*.err
