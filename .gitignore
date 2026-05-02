@@ -105,3 +105,6 @@ tests/full_test_run/example_output_files/*
 # Slurm log files at any test path
 tests/*/*.out
 tests/*/*.err
+
+# Pulled-from-HPC helper artefacts for path-coverage analysis
+tests/full_test_run/reference_data_helpers/
