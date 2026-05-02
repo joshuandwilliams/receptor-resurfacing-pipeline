@@ -45,7 +45,8 @@ For domain vocabulary, see
 ```
 bin/         Pipeline scripts (Python, called from Nextflow processes)
 modules/     Nextflow modules — one per pipeline stage
-tests/       Per-module tests + characterization tests + reference data
+tests/       Per-module tests, characterization tests, reference data,
+             and the curated fixtures each per-module test runs against
 containers/  Singularity definition files for HPC execution
 notes/       Inventory documents, remediation plan, decisions, glossaries
 scripts/     Repo tooling (sync_to_hpc.sh, etc.)
@@ -71,19 +72,28 @@ A reference small-scale params file lives at
 
 ## Running the tests
 
-Two tiers:
+Three layers, each with a different cost and a different question it answers:
+
+- **`pytest -m local_unit`** (Mac, fast). Tests the comparator framework itself — the helpers in `tests/characterization/helpers/` that pin reference outputs against fresh runs. Run on every commit during development.
+- **Per-module Nextflow tests** (HPC, minutes per stage). Each `tests/<module>/test_<module>.nf` runs one pipeline stage end-to-end against a curated fixture in `tests/<module>/data/`. The fixtures are hand-picked from a discovery pipeline run to exercise every distinct path through that stage. Run with the per-module wrappers, e.g. `sbatch tests/negative_steering/run_test_negative_steering.slurm.sh`. This is the primary characterization safety net during refactoring.
+- **`pytest -m hpc`** (HPC, slow). Cohort-level characterization tests that pin output files from a fresh pipeline run against committed reference outputs. Currently parametrized over a legacy sequence trio; restructuring against the per-module reference sets is in progress.
 
 ```bash
-# Local — comparator framework + helper unit tests (Mac, fast)
+# Local
 pytest -m local_unit
 
-# HPC — characterization tests against a fresh pipeline run
+# Per-module on HPC
+sbatch tests/<module>/run_test_<module>.slurm.sh
+
+# Cohort-level characterization on HPC
 RECEPTOR_OUTPUT_ROOT=<run-output-dir> pytest -m hpc
 ```
 
 See [`tests/characterization/README.md`](tests/characterization/README.md)
-for the full framing, marker tiers, and how to update reference
-outputs after intentional behavior changes.
+for the comparator framework, marker tiers, and how to update reference
+outputs after intentional behaviour changes.
+[`notes/inventory/14_phase_2_revision_per_module_tests.md`](notes/inventory/14_phase_2_revision_per_module_tests.md)
+covers the per-module testing strategy in full.
 
 ## Where to look for what
 
@@ -93,6 +103,7 @@ outputs after intentional behavior changes.
 | What does *\<term\>* mean? | [`notes/inventory/06_ubiquitous_language.md`](notes/inventory/06_ubiquitous_language.md) |
 | Where is the remediation at? | [`notes/remediation_state.md`](notes/remediation_state.md) |
 | What's the testing strategy? | [`notes/inventory/14_phase_2_revision_per_module_tests.md`](notes/inventory/14_phase_2_revision_per_module_tests.md) |
+| Why these test fixtures? | [`notes/inventory/15_discovery_run_path_coverage.md`](notes/inventory/15_discovery_run_path_coverage.md) |
 | How do I sync to HPC? | [`scripts/sync_to_hpc.sh`](scripts/sync_to_hpc.sh) |
 | How are containers built? | [`containers/README.md`](containers/README.md) |
 | What are the known issues? | [`notes/inventory/05_findings.md`](notes/inventory/05_findings.md) |
