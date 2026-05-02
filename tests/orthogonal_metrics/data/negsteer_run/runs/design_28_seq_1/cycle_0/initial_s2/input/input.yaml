@@ -1,0 +1,16 @@
+version: 1
+sequences:
+  - protein:
+      id: A
+      sequence: GLKQKIVIKVAMEGNNCRSKAMALVASTGGVDKVYAVPGSDKITVVGYGIDPIKLISALRKKVGDAELLQVGGMKRL
+      msa: /hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/full_test_run/work/75/863ea1966214f9c482559e576152fe/design_28_seq_1/cycle_0/initial_s2/input/msa/chain_A.a3m
+  - protein:
+      id: B
+      sequence: AIDLSRERDPNFFDNADIPVPECFWFMFKNNVRQDAGTCYSSWKMDKKVGPNWVHIKSDDNCNLSGDFPPGWIVLGKKRPGF
+      msa: /hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/full_test_run/work/75/863ea1966214f9c482559e576152fe/design_28_seq_1/cycle_0/initial_s2/input/msa/chain_B.a3m
+      templates:
+        - cif: /hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/full_test_run/work/75/863ea1966214f9c482559e576152fe/design_28_seq_1/cycle_0/effector_template.cif
+          chain_id: B
+          template_id: B
+          force: true
+          threshold: 1.0
