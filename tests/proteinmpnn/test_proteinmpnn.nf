@@ -6,7 +6,7 @@
  * =============================================================================
  * Mirrors main.nf Branch B end-to-end up to the MPNN block:
  *
- *   1. Load the input complex PDB.
+ *   1. Load the input complex PDB from this test's data/ directory.
  *   2. Call the *production* RESOLVE_CONTIGS to convert the user-supplied
  *      contig string into PDB-resolved coordinates.
  *   3. Call the *production* EXTRACT_SEQUENCES to extract receptor and
@@ -17,20 +17,14 @@
  * modules/preprocessing — no inline duplicates.  This guarantees the test
  * exercises the same code paths the production pipeline does.
  *
- * Test chaining
- * -------------
- * By default the ``design_pdbs`` glob consumes the Rosetta-passing
- * designs from a previous test_rosetta_filtering run:
- *
- *   test_rosetta_filtering/results/rosetta_filtering/passing/*.pdb
- *                            │
- *                            ▼
- *   test_proteinmpnn          (consumed here)
- *
- * The ``input_pdb`` (reference complex for RESOLVE_CONTIGS and
- * EXTRACT_SEQUENCES) is NOT chained — it's a first-in-chain input that
- * every test in this cascade takes directly.  Override ``--input_pdb``
- * on the command line for different targets.
+ * Inputs (canonical, no upstream chaining)
+ * ----------------------------------------
+ *   data/input_complex.pdb
+ *       Receptor+effector complex PDB.  Reference structure for
+ *       RESOLVE_CONTIGS and EXTRACT_SEQUENCES.
+ *   data/rosetta_passing/design_*.pdb
+ *       Curated split-PDB fixtures captured from a discovery run's
+ *       ROSETTA_FILTER ``passing/`` output.  See data/README.md.
  * =============================================================================
  */
 
@@ -40,23 +34,10 @@ nextflow.enable.dsl = 2
 // Parameter defaults
 // ---------------------------------------------------------------------------
 
-// ── Test-chaining: prefer upstream Rosetta passing designs, fall back to data/ ──
-params.upstream_rosetta_outdir = "${projectDir}/../rosetta_filtering/receptor_resurfacing_results"
-
-def _upstream_design_glob = "${params.upstream_rosetta_outdir}/rosetta_filtering/passing/*.pdb"
-def _fallback_design_glob = "${projectDir}/data/design_*.pdb"
-
-// files(glob) returns a (possibly empty) list — use data/ only if upstream empty.
-params.design_pdbs = files(_upstream_design_glob).size() > 0 \
-    ? _upstream_design_glob                                  \
-    : _fallback_design_glob
-
-// Reference complex — sourced from tests/rfdiffusion/data/ as the
-// authoritative location for the cascade's input complex PDB.  All
-// chained tests should reference this one file, so updating the input
-// complex (e.g. switching target) only needs to happen in one place.
-// Override --input_pdb on the command line for different targets.
-params.input_pdb         = "${projectDir}/../rfdiffusion/data/af3_pikp1_native_avrpikf_complex.pdb"
+// Canonical input paths: this test's own data/ directory.  No fallback to
+// upstream test outputs — per-module tests run from committed fixtures.
+params.design_pdbs = "${projectDir}/data/rosetta_passing/design_*.pdb"
+params.input_pdb   = "${projectDir}/data/input_complex.pdb"
 
 params.receptor_chain    = "A"
 params.effector_chain    = "C"
@@ -96,12 +77,8 @@ include { MPNN_SELECT_TOP          } from '../../modules/proteinmpnn'
 
 workflow {
 
-    // Log which design_pdbs source was chosen — upstream chain or cached data/.
-    def _selected = params.design_pdbs.startsWith(params.upstream_rosetta_outdir) \
-        ? "upstream (${params.upstream_rosetta_outdir})"                          \
-        : "cached test data (${projectDir}/data/)"
-    log.info "ProteinMPNN test — design_pdbs source: ${_selected}"
-    log.info "design_pdbs glob: ${params.design_pdbs}"
+    log.info "ProteinMPNN test — input_pdb : ${params.input_pdb}"
+    log.info "ProteinMPNN test — design_pdbs glob: ${params.design_pdbs}"
 
     input_pdb_ch = Channel.fromPath(params.input_pdb, checkIfExists: true)
 

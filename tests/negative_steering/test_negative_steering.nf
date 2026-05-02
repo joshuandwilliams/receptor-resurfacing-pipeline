@@ -8,34 +8,31 @@
  *
  *   NEGSTEER_DERIVE_INDICES  →  NEGSTEER_RUN_ONE  →  NEGSTEER_CROSS_SEQUENCE
  *
- * Uses pre-generated MPNN FASTAs, the parent RFDiffusion design PDB, and
+ * Uses pre-generated MPNN FASTAs, the parent RFDiffusion design PDBs, and
  * a real rfdiffusion_metrics.json as input — the test runs the full
  * single-cycle chain end-to-end on one GPU node per MPNN sequence.
  *
- * Required test data (under data/):
- *   data/design_3.pdb                   Parent RFDiffusion design PDB
- *                                        (chain A = Cα-only designed receptor,
- *                                         chain B = native effector)
- *   data/rfdiffusion_metrics.json       RFDIFFUSION_FILTER output that
- *                                        contains a 'design_3' entry with
- *                                        receptor_contact_residues,
- *                                        receptor_position_order, and
- *                                        per_design_design_residues.
- *   data/fastas/design_3_seq_1.fasta    MPNN-corrected FASTA (>receptor
- *                                        + >effector) for this design.  One
- *                                        FASTA is sufficient; add seq_2,
- *                                        seq_3 etc. to exercise the cross-
- *                                        sequence aggregator with multiple
- *                                        candidates.
+ * Inputs (canonical, no upstream chaining)
+ * ----------------------------------------
+ *   data/fastas/<design_stem>_seq_<N>.fasta
+ *       MPNN-corrected FASTAs (>receptor + >effector).  One file per
+ *       (design, sequence) pair.  Filename must match
+ *       /^design_\\d+_seq_\\d+\\.fasta$/ for the parser regex below.
+ *   data/design_pdbs/design_*.pdb
+ *       Parent RFDiffusion design PDBs (chain A = Cα-only designed
+ *       receptor, chain B = native effector).
+ *   data/rfdiffusion_metrics.json
+ *       RFDIFFUSION_FILTER metrics blob with one entry per design_*
+ *       containing receptor_contact_residues, receptor_position_order,
+ *       and per_design_design_residues.
+ *   data/input_complex.pdb
+ *       Receptor+effector complex PDB.  Used only when controls are
+ *       enabled (DERIVE_INPUT_INDICES).  Must match the contigs string.
  *
  * The bin/ directory should be symlinked into the test dir so the
  * module can find it:
  *
  *   ln -s ../../bin tests/negative_steering/bin
- *
- * (Test's projectDir == tests/negative_steering/, so ../../bin is the
- *  real bin/ at repo root.  The symlink approach matches the pattern
- *  used by the other per-module tests.)
  *
  * Usage:
  *   sbatch tests/negative_steering/run_test_negative_steering_slurm.sh
@@ -52,48 +49,12 @@ nextflow.enable.dsl = 2
 params.project_name   = "test_negative_steering"
 params.outdir         = "${projectDir}/results"
 
-// ── Test-chaining: prefer upstream test outputs, fall back to cached data/ ──
-// This test consumes three upstream-producible artifacts:
-//   1. FASTAs       — from test_proteinmpnn (qc_fastas/ always, top_fastas/
-//                     only if --mpnn_top_n > 0; we default to qc_fastas)
-//   2. Design PDBs  — from test_rfdiffusion's split/ directory
-//   3. rfdiffusion_metrics.json — from test_rfdiffusion
-//
-// For any of the three, if the upstream isn't present we fall back to
-// the stand-alone cached test data in this test's data/ dir so the test
-// can run in isolation on first invocation.
-params.upstream_mpnn_outdir   = "${projectDir}/../proteinmpnn/receptor_resurfacing_results"
-params.upstream_rfdiff_outdir = "${projectDir}/../rfdiffusion/receptor_resurfacing_results"
-
-// 1. FASTAs directory.  We chain from top_fastas/ (produced when MPNN
-//    is run with --mpnn_top_n > 0) because each FASTA here costs ~2
-//    GPU-hours downstream — running the top-N is almost always what
-//    we want.  When MPNN is run with --mpnn_top_n 0, top_fastas/ will
-//    not exist and the chaining falls through to the cached data/
-//    fallback; in that case either rerun MPNN with --mpnn_top_n > 0
-//    or override --fastas_dir on the CLI to point at qc_fastas/.
-def _upstream_fastas_dir   = "${params.upstream_mpnn_outdir}/sequences/top_fastas"
-def _fallback_fastas_dir   = "${projectDir}/data/fastas"
-params.fastas_dir = files(_upstream_fastas_dir).size() > 0 \
-    ? _upstream_fastas_dir                                 \
-    : _fallback_fastas_dir
-
-// 2. Design PDBs directory — RFDiffusion's split/ output dir.  Chained
-//    from test_rfdiffusion, not test_rosetta_filtering, because we want
-//    ALL split designs here (including those Rosetta filtered out — the
-//    test still works on them and tests the code path end-to-end).
-def _upstream_design_pdb_dir = "${params.upstream_rfdiff_outdir}/rfdiffusion/split"
-def _fallback_design_pdb_dir = "${projectDir}/data"
-params.design_pdb_dir = files("${_upstream_design_pdb_dir}/design_*.pdb").size() > 0 \
-    ? _upstream_design_pdb_dir                                                       \
-    : _fallback_design_pdb_dir
-
-// 3. rfdiffusion_metrics.json — lives at rfdiffusion/ root, not split/.
-def _upstream_metrics_json = "${params.upstream_rfdiff_outdir}/rfdiffusion/rfdiffusion_metrics.json"
-def _fallback_metrics_json = "${projectDir}/data/rfdiffusion_metrics.json"
-params.rfdiffusion_metrics = file(_upstream_metrics_json).exists() \
-    ? _upstream_metrics_json                                       \
-    : _fallback_metrics_json
+// Canonical input paths: this test's own data/ directory.  No fallback to
+// upstream test outputs — per-module tests run from committed fixtures.
+params.fastas_dir          = "${projectDir}/data/fastas"
+params.design_pdb_dir      = "${projectDir}/data/design_pdbs"
+params.rfdiffusion_metrics = "${projectDir}/data/rfdiffusion_metrics.json"
+params.input_pdb           = "${projectDir}/data/input_complex.pdb"
 
 // ── Chain identifiers ─────────────────────────────────────────────────
 // receptor_chain / effector_chain refer to the INPUT PDB convention
@@ -155,7 +116,6 @@ params.negsteer_postprocess_contact_cutoff = 5.0
 //                  controls' design region matches the steered runs'.
 params.run_negative_controls         = true
 params.negsteer_controls_n_designs   = 1
-params.input_pdb                     = "${projectDir}/../rfdiffusion/data/af3_pikp1_native_avrpikf_complex.pdb"
 // Contigs string for DERIVE_INPUT_INDICES.  Trailing chain-letter
 // token "C" matches the input PDB's effector chain (params.effector_chain
 // above), per the documented convention.
@@ -216,14 +176,11 @@ process EMPTY_DESIGN_REGION_PLACEHOLDER {
 
 workflow {
 
-    // ── Log which input sources were chosen ───────────────────────────
-    def _fastas_src = params.fastas_dir.startsWith(params.upstream_mpnn_outdir)       ? "upstream (${params.upstream_mpnn_outdir})"   : "cached test data"
-    def _pdbs_src   = params.design_pdb_dir.startsWith(params.upstream_rfdiff_outdir) ? "upstream (${params.upstream_rfdiff_outdir})" : "cached test data"
-    def _metr_src   = params.rfdiffusion_metrics.startsWith(params.upstream_rfdiff_outdir) ? "upstream" : "cached test data"
     log.info "Negative-steering test — input sources:"
-    log.info "  fastas_dir           : ${_fastas_src}"
-    log.info "  design_pdb_dir       : ${_pdbs_src}"
-    log.info "  rfdiffusion_metrics  : ${_metr_src}"
+    log.info "  fastas_dir           : ${params.fastas_dir}"
+    log.info "  design_pdb_dir       : ${params.design_pdb_dir}"
+    log.info "  rfdiffusion_metrics  : ${params.rfdiffusion_metrics}"
+    log.info "  input_pdb            : ${params.input_pdb}"
     log.info "  run_negative_controls: ${params.run_negative_controls}"
     log.info "  negsteer_no_kernels  : ${params.negsteer_no_kernels}"
 

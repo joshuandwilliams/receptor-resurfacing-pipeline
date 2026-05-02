@@ -22,20 +22,17 @@
  *      ▼
  *   NEGSTEER_ORTHOGONAL_METRICS              (merge + filter cascade)
  *
- * Expected input layout (produced by test_negative_steering.nf):
- *   <input_dir>/
- *       cross_sequence_summary.csv
- *       runs/
- *           design_0_seq_0/plan.json  effector_template.cif  cycle_0/...
- *           design_0_seq_1/...
- *           design_1_seq_0/...
- *           ...
+ * Inputs (canonical, no upstream chaining)
+ * ----------------------------------------
+ *   data/negsteer_run/cross_sequence_summary.csv
+ *       Cohort table from a curated negative-steering fixture run.
+ *   data/negsteer_run/runs/<seq_name>/
+ *       Per-sequence workdirs containing plan.json,
+ *       effector_template.cif, cycle_0/..., etc.  See data/README.md
+ *       for the expected per-workdir layout.
  *
  * Usage:
  *   sbatch tests/orthogonal_metrics/run_test_orthogonal_metrics_slurm.sh
- *   or directly:
- *     nextflow run test_orthogonal_metrics.nf \\
- *         --input_dir tests/negative_steering/receptor_resurfacing_results/negative_steering
  * =============================================================================
  */
 
@@ -48,12 +45,9 @@ nextflow.enable.dsl = 2
 params.project_name   = "test_orthogonal_metrics"
 params.outdir         = "${projectDir}/results"
 
-// ── Test-chaining: consume output of test_negative_steering ───────────
-// test_negative_steering publishes its negsteer aggregate to
-// <outdir>/negative_steering/.  Default to that sibling-test location
-// so the two tests form a cascade when run in order.
-params.upstream_negsteer_outdir = "${projectDir}/../negative_steering/receptor_resurfacing_results"
-params.input_dir                = "${params.upstream_negsteer_outdir}/negative_steering"
+// Canonical input path: this test's own data/ directory.  No fallback to
+// upstream test outputs — per-module tests run from committed fixtures.
+params.input_dir = "${projectDir}/data/negsteer_run"
 
 // Chains (must match what negative steering was run with).
 params.receptor_chain = "A"
@@ -114,10 +108,7 @@ include { NEGSTEER_ORTHOGONAL_METRICS  } from '../../modules/negsteer_orthogonal
 
 workflow {
 
-    // Log which upstream source is being consumed.
-    log.info "Orthogonal-metrics test — input source:"
-    log.info "  upstream_negsteer_outdir: ${params.upstream_negsteer_outdir}"
-    log.info "  input_dir               : ${params.input_dir}"
+    log.info "Orthogonal-metrics test — input_dir: ${params.input_dir}"
 
     // ── Inputs ─────────────────────────────────────────────────────
     cross_csv_ch = Channel
