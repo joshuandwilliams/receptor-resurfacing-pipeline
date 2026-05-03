@@ -1,0 +1,53 @@
+{
+  "designs": [
+    {
+      "design": "design_0.pdb",
+      "design_stem": "design_0",
+      "sc_value": 0.569,
+      "dG_separated": 57.223,
+      "dSASA_int": 1358.7,
+      "dG_dSASA_density": 4.211,
+      "packstat": 0.0,
+      "delta_unsatHbonds": 1.0,
+      "nres_int": 57,
+      "passes_filter": true
+    },
+    {
+      "design": "design_1.pdb",
+      "design_stem": "design_1",
+      "sc_value": 0.504,
+      "dG_separated": 19.044,
+      "dSASA_int": 1378.2,
+      "dG_dSASA_density": 1.382,
+      "packstat": 0.0,
+      "delta_unsatHbonds": 8.0,
+      "nres_int": 67,
+      "passes_filter": true
+    },
+    {
+      "design": "design_14.pdb",
+      "design_stem": "design_14",
+      "sc_value": 0.542,
+      "dG_separated": 18.725,
+      "dSASA_int": 1344.8,
+      "dG_dSASA_density": 1.392,
+      "packstat": 0.0,
+      "delta_unsatHbonds": 8.0,
+      "nres_int": 58,
+      "passes_filter": true
+    },
+    {
+      "design": "design_59.pdb",
+      "design_stem": "design_59",
+      "sc_value": 0.409,
+      "dG_separated": 33.287,
+      "dSASA_int": 1373.7,
+      "dG_dSASA_density": 2.423,
+      "packstat": 0.0,
+      "delta_unsatHbonds": 7.0,
+      "nres_int": 61,
+      "passes_filter": false
+    }
+  ],
+  "sc_threshold": 0.5
+}

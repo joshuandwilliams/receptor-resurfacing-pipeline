@@ -1,0 +1,9 @@
+{
+  "n_total": 4,
+  "n_passing": 3,
+  "n_filtered": 1,
+  "sc_threshold": 0.5,
+  "filtered_designs": [
+    "design_59.pdb"
+  ]
+}
