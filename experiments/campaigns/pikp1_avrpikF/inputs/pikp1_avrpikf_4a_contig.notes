@@ -1,0 +1,55 @@
+# Strategy 4a contig derivation
+
+Invocation: /Users/jowillia/Documents/GitHub/receptor-pipeline-experiments/experiments/param_derivation/contigs_4a.py --complex-pdb experiments/campaigns/pikp1_avrpikf/inputs/pikp1_avrpikf_complex.pdb --binder-chain A --target-chain C --output experiments/campaigns/pikp1_avrpikf/inputs/pikp1_avrpikf_4a_contig.txt --merge-threshold 2
+Complex PDB: experiments/campaigns/pikp1_avrpikf/inputs/pikp1_avrpikf_complex.pdb
+Binder chain: A
+Target chain: C
+Cutoff (A): 5.0
+Min multiplier: 0.7
+Max multiplier: 1.5
+Merge threshold: 2
+
+## Binder summary
+Total binder residues: 78 (resnums 1-78)
+Interface-facing residues identified (raw, pre-bridging): 20
+Anchor blocks absorbed during bridging: 9
+Final design regions count: 4
+Final anchor blocks count: 4
+
+## Target summary
+Total target residues: 82
+
+## Anchor blocks (non-interface, kept native)
+  A1-2  (length 2)
+  A6-31  (length 26)
+  A40-42  (length 3)
+  A50-67  (length 18)
+
+## Design regions (interface-facing, handed to RFDiffusion)
+  resnums 3-5  native_length=3  -> 2-4
+  resnums 32-39  native_length=8  -> 6-12
+  resnums 43-49  native_length=7  -> 5-10
+  resnums 68-78  native_length=11  -> 8-16
+
+## Bridging
+Absorbed A4-4 (native length 1) into surrounding design spanning A3-5
+Absorbed A34-34 (native length 1) into surrounding design spanning A32-35
+Absorbed A36-36 (native length 1) into surrounding design spanning A32-37
+Absorbed A38-38 (native length 1) into surrounding design spanning A32-39
+Absorbed A44-44 (native length 1) into surrounding design spanning A43-45
+Absorbed A46-46 (native length 1) into surrounding design spanning A43-47
+Absorbed A48-48 (native length 1) into surrounding design spanning A43-49
+Absorbed A70-70 (native length 1) into surrounding design spanning A68-74
+Absorbed A75-75 (native length 1) into surrounding design spanning A68-78
+
+## Final contig
+A1-2/2-4/A6-31/6-12/A40-42/5-10/A50-67/8-16 C
+
+## Notes on helpers
+Outward-facing test: is_surface_exposed (bin/boltz2_negative_steering.py).
+  Cbeta-vector heuristic: (Calpha->Cbeta).(Calpha->neighbour-centroid) < 0.
+  Glycine (no Cbeta) is excluded.
+Contact test: find_contact_residues_heavy (bin/boltz2_negative_steering.py).
+  Compares all heavy atoms (backbone + side chain) on both sides;
+  the 4a strategy doc specifies side-chain heavy on the binder,
+  but we reuse the helper rather than reimplementing.
