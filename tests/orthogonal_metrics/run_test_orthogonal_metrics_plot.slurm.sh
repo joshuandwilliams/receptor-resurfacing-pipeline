@@ -10,6 +10,7 @@
 #SBATCH --error=test_plots_%j.err
 #SBATCH --mail-type=END,FAIL
 #SBATCH --mail-user=jowillia@nbi.ac.uk
+#SBATCH --chdir=/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/orthogonal_metrics
 
 # =============================================================================
 # run_test_orthogonal_metrics_plots_slurm.sh

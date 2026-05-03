@@ -10,6 +10,7 @@
 #SBATCH --error=test_plots_%j.err
 #SBATCH --mail-type=END,FAIL
 #SBATCH --mail-user=jowillia@nbi.ac.uk
+#SBATCH --chdir=/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/rfdiffusion
 
 # =============================================================================
 # run_test_rfdiffusion_plots_slurm.sh

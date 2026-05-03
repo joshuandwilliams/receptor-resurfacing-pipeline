@@ -10,6 +10,7 @@
 #SBATCH --error=test_plots_%j.err
 #SBATCH --mail-type=END,FAIL
 #SBATCH --mail-user=jowillia@nbi.ac.uk
+#SBATCH --chdir=/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering
 
 # =============================================================================
 # run_test_negsteer_within_sequence_plots_slurm.sh

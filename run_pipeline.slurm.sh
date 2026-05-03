@@ -10,6 +10,7 @@
 #SBATCH --error=nextflow_pipeline_%j.err
 #SBATCH --mail-type=END,FAIL
 #SBATCH --mail-user=jowillia@nbi.ac.uk
+#SBATCH --chdir=/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline
 
 set -euo pipefail
 

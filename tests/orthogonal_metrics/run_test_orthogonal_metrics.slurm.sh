@@ -10,6 +10,7 @@
 #SBATCH --error=slurm_%j.err
 #SBATCH --mail-type=END,FAIL
 #SBATCH --mail-user=jowillia@nbi.ac.uk
+#SBATCH --chdir=/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/orthogonal_metrics
 
 # -----------------------------------------------------------------------------
 # Launch wrapper for the orthogonal-metrics test (P0-31).
