@@ -1,0 +1,10 @@
+Sequence QC Report
+============================================================
+
+Total input sequences: 2
+Passed QC: 2
+Duplicates removed: 0
+Final unique sequences: 2
+Failed QC: 0
+
+Failed sequences:

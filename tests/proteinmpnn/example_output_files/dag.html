@@ -1,0 +1,147 @@
+<!--
+  ~ Copyright 2013-2024, Seqera Labs
+  ~
+  ~ Licensed under the Apache License, Version 2.0 (the "License");
+  ~ you may not use this file except in compliance with the License.
+  ~ You may obtain a copy of the License at
+  ~
+  ~     http://www.apache.org/licenses/LICENSE-2.0
+  ~
+  ~ Unless required by applicable law or agreed to in writing, software
+  ~ distributed under the License is distributed on an "AS IS" BASIS,
+  ~ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  ~ See the License for the specific language governing permissions and
+  ~ limitations under the License.
+  -->
+<html>
+<head>
+<meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1, maximum-scale=1">
+</head>
+<body>
+<pre class="mermaid" style="text-align: center;">
+%%{
+  init: {
+    'theme': 'base',
+    'themeVariables': {
+      'primaryColor': '#B6ECE2',
+      'primaryTextColor': '#160F26',
+      'primaryBorderColor': '#065647',
+      'lineColor': '#545555',
+      'clusterBkg': '#BABCBD22',
+      'clusterBorder': '#DDDEDE',
+      'fontFamily': 'arial'
+    }
+  }
+}%%
+flowchart TB
+    subgraph " "
+    v0["Channel.fromPath"]
+    v1["raw_contigs"]
+    v2["contigs_script"]
+    v6["receptor_chain"]
+    v7["effector_chain"]
+    v14["Channel.fromPath"]
+    v16["correct_script"]
+    v18["num_seqs"]
+    v19["sampling_temp"]
+    v20["rm_aa"]
+    v23["num_seqs"]
+    v24["correct_script"]
+    v27["max_poly_x"]
+    v28["min_pct_identity"]
+    v29["max_pct_identity"]
+    v30["qc_script"]
+    v39["score_script"]
+    v41["cluster_script"]
+    v43["plots_script"]
+    v46["top_n"]
+    v47["select_script"]
+    end
+    v3(["RESOLVE_CONTIGS"])
+    v8(["EXTRACT_SEQUENCES"])
+    v17(["MPNN_FIXED_POSITIONS"])
+    v21(["PROTEINMPNN"])
+    v25(["SEQUENCE_CORRECTION"])
+    subgraph " "
+    v26[" "]
+    v32[" "]
+    v45[" "]
+    v49[" "]
+    v50[" "]
+    v51[" "]
+    end
+    v31(["SEQUENCE_QC"])
+    v40(["MPNN_DESIGN_REGION_SCORE"])
+    v42(["MPNN_CLUSTER"])
+    v44(["MPNN_PLOTS"])
+    v48(["MPNN_SELECT_TOP"])
+    v4(( ))
+    v9(( ))
+    v15(( ))
+    v22(( ))
+    v33(( ))
+    v35(( ))
+    v37(( ))
+    v0 --> v3
+    v0 --> v8
+    v1 --> v3
+    v2 --> v3
+    v3 --> v4
+    v6 --> v8
+    v7 --> v8
+    v8 --> v9
+    v14 --> v17
+    v14 --> v15
+    v16 --> v17
+    v4 --> v17
+    v9 --> v17
+    v17 --> v21
+    v18 --> v21
+    v19 --> v21
+    v20 --> v21
+    v21 --> v22
+    v21 --> v33
+    v21 --> v35
+    v21 --> v37
+    v23 --> v25
+    v24 --> v25
+    v4 --> v25
+    v9 --> v25
+    v15 --> v25
+    v22 --> v25
+    v25 --> v31
+    v25 --> v26
+    v27 --> v31
+    v28 --> v31
+    v29 --> v31
+    v30 --> v31
+    v9 --> v31
+    v31 --> v48
+    v31 --> v40
+    v31 --> v32
+    v39 --> v40
+    v33 --> v40
+    v35 --> v40
+    v37 --> v40
+    v40 --> v42
+    v40 --> v44
+    v40 --> v48
+    v41 --> v42
+    v42 --> v44
+    v43 --> v44
+    v4 --> v44
+    v9 --> v44
+    v44 --> v45
+    v46 --> v48
+    v47 --> v48
+    v48 --> v51
+    v48 --> v50
+    v48 --> v49
+
+</pre>
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  mermaid.initialize({ startOnLoad: true, maxTextSize: Number.MAX_SAFE_INTEGER, maxEdges: Number.MAX_SAFE_INTEGER });
+</script>
+</body>
+</html>
