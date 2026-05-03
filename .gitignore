@@ -83,6 +83,7 @@ nxf_home/
 # ----- Archive / scratch directories -----
 archive/
 scratch/
+experiments/
 
 # ----- Large data that shouldn't be tracked -----
 # Be cautious — your tests/ directory has small PDB files

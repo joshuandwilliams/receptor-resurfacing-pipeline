@@ -236,7 +236,9 @@ params.max_pct_identity   = 100.0
 // ── HADDOCK3 ────────────────────────────────────────────────────────────
 params.haddock_sampling   = 10000  // Rigid-body sampling (10000=semi-blind)
 params.haddock_seletop    = 400    // Top N rigid-body models passed to flexref
-params.contact_cutoff     = 8.0    // Angstrom cutoff for hotspot extraction
+params.rfdiff_contact_cutoff = 8.0 // Cα–Cα cutoff (Å) for rfdiffusion_filter contact
+                                   // detection; also reused as heavy-atom cutoff for
+                                   // HADDOCK hotspot extraction.
 params.effector_active_residues = ""  // Comma-separated effector residues for HADDOCK AIRs
                                       // e.g. "24,25,26,40,41" to steer docking toward
                                       // specific effector surface patches.  Leave empty to
@@ -387,7 +389,7 @@ workflow {
             HADDOCK3_DOCK.out.best_model,
             params.receptor_chain,
             params.effector_chain,
-            params.contact_cutoff,
+            params.rfdiff_contact_cutoff,
             params.receptor_seq ?: "",
             params.effector_seq ?: "",
             Channel.value(file("${projectDir}/bin/extract_hotspots.py"))
@@ -488,7 +490,7 @@ workflow {
         hotspot_ch,
         params.receptor_chain,
         params.effector_chain,
-        params.contact_cutoff,
+        params.rfdiff_contact_cutoff,
         params.min_hotspot_frac,
         Channel.value(file("${projectDir}/bin/rfdiffusion_filter.py"))
     )

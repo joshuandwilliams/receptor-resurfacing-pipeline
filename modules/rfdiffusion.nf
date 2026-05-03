@@ -122,7 +122,7 @@ process RFDIFFUSION_FILTER {
     val  hotspot
     val  receptor_chain
     val  effector_chain
-    val  contact_cutoff
+    val  rfdiff_contact_cutoff
     val  min_hotspot_frac
     path filter_script
 
@@ -144,7 +144,7 @@ process RFDIFFUSION_FILTER {
             ${hotspot_arg} \\
             --receptor-chain ${receptor_chain} \\
             --effector-chain ${effector_chain} \\
-            --contact-cutoff ${contact_cutoff} \\
+            --rfdiff-contact-cutoff ${rfdiff_contact_cutoff} \\
             --min-hotspot-frac ${min_hotspot_frac}
 
     # ─── Copy passing designs to a subdirectory for the output channel ────

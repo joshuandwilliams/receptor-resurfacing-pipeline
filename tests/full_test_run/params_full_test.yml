@@ -49,7 +49,7 @@ contigs: "A1-32/10-20/A46-72/6-6 C"
 num_designs: 64
 rfdiff_iterations: 50
 min_hotspot_frac: 0.0
-contact_cutoff: 8.0
+rfdiff_contact_cutoff: 8.0
 
 # ── Rosetta pre-validation ────────────────────────────────────────────
 sc_threshold: 0.5

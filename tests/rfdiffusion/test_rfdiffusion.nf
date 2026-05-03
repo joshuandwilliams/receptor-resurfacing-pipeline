@@ -30,7 +30,7 @@ params.contigs           = "A1-32/10-20/A46-72/6-6 C"
 params.hotspot           = ""              // leave blank to test without hotspots
 params.num_designs       = 8               // small number for fast test
 params.rfdiff_iterations = 50
-params.contact_cutoff    = 8.0
+params.rfdiff_contact_cutoff = 8.0
 params.min_hotspot_frac  = 0.0             // 0.0 = no filtering (test all designs pass)
 params.project_name      = "test_rfdiffusion"
 params.outdir            = "${projectDir}/results"
@@ -72,7 +72,7 @@ workflow {
         hotspot_ch,
         params.receptor_chain,
         params.effector_chain,
-        params.contact_cutoff,
+        params.rfdiff_contact_cutoff,
         params.min_hotspot_frac,
         Channel.value(file("${projectDir}/bin/rfdiffusion_filter.py"))
     )

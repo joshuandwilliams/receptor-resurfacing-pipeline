@@ -58,7 +58,7 @@ def test_canonicalize_workdir_paths_non_path_strings_pass_through():
         "1234567890",
         "hello world",
         "RFDIFFUSION_FILTER",
-        "scaffold_rmsd",
+        "motif_rmsd",
     ]:
         assert canonicalize_workdir_paths(s) == s
 

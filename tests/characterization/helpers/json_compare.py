@@ -32,7 +32,7 @@ def compare_json_deep(
     does NOT match JSON ``1`` even though ``isinstance(True, int)`` is
     True in Python.
 
-    Mismatches report nested locations like ``designs[3].scaffold_rmsd``;
+    Mismatches report nested locations like ``designs[3].motif_rmsd``;
     the ``differences`` list is capped at ~10 entries.
     """
     early = _file_check(reference, actual, _STRATEGY_DEEP)

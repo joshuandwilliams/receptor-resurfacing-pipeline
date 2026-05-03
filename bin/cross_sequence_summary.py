@@ -15,12 +15,16 @@ within that experiment.
 
 For cross-sequence triage we want one representative row PER MPNN
 SEQUENCE, picked using the tier-then-composite policy documented in
-notes 11:
+notes 11.  Define n_pass = n_seeds_pose_holds + n_seeds_clean_steered
+(a clean_steered seed is one whose steered prediction had zero
+contamination on mutated positions, so reversion was correctly
+skipped — the steered structure counts as pass-equivalent):
 
     Tier A: aggregated_verdict == no_reversion
-            OR n_seeds_pose_holds == n_seeds (e.g. 3/3)
-    Tier B: 1 < n_seeds_pose_holds < n_seeds  (e.g. 2/3)
-    Tier C: n_seeds_pose_holds == 1           (e.g. 1/3)
+            OR n_pass == n_seeds   (e.g. 3/3 pass-equivalent)
+    Tier B: 1 < n_pass < n_seeds   (e.g. 2/3)
+    Tier C: n_pass == 1            (e.g. 1/3)
+    else:   "none"
 
 Within each sequence, the best non-empty tier wins and the top-
 ranked row from that tier (lowest ``rank_by_composite_score``) is

@@ -216,7 +216,7 @@ process EXTRACT_HOTSPOTS {
     path best_model
     val  receptor_chain
     val  effector_chain
-    val  contact_cutoff
+    val  rfdiff_contact_cutoff
     val  receptor_seq
     val  effector_seq
     path extract_script
@@ -234,7 +234,7 @@ process EXTRACT_HOTSPOTS {
             --complex ${best_model} \\
             --receptor-chain ${receptor_chain} \\
             --effector-chain ${effector_chain} \\
-            --cutoff ${contact_cutoff} \\
+            --cutoff ${rfdiff_contact_cutoff} \\
             ${rec_seq_arg} \\
             ${eff_seq_arg}
     """

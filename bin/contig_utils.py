@@ -15,6 +15,21 @@ Provides functions to:
 import sys
 
 
+# Three-letter to one-letter amino acid map.  Covers the 20 standard
+# residues plus common non-standard / modified codes encountered in PDB
+# and mmCIF files (selenomethionine MSE, selenocysteine SEC, pyrrolysine
+# PYL, hydroxyproline HYP, phospho-Thr/Ser/Tyr TPO/SEP/PTR).  Unknown
+# residue codes should map to "X" by callers using `.get(code, "X")`.
+THREE_TO_ONE: dict[str, str] = {
+    "ALA": "A", "ARG": "R", "ASN": "N", "ASP": "D", "CYS": "C",
+    "GLN": "Q", "GLU": "E", "GLY": "G", "HIS": "H", "ILE": "I",
+    "LEU": "L", "LYS": "K", "MET": "M", "PHE": "F", "PRO": "P",
+    "SER": "S", "THR": "T", "TRP": "W", "TYR": "Y", "VAL": "V",
+    "SEC": "U", "PYL": "O",
+    "MSE": "M", "HYP": "P", "TPO": "T", "SEP": "S", "PTR": "Y",
+}
+
+
 def get_chain_residue_range(pdb_path, chain_id):
     """Return (min_resnum, max_resnum) for a chain, or (None, None) if absent."""
     resnums = set()

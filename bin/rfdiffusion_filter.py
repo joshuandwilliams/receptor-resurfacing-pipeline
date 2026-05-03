@@ -52,7 +52,7 @@ def parse_args():
     parser.add_argument("--hotspot", default="", help="Hotspot residues (e.g. 'B24,B25')")
     parser.add_argument("--receptor-chain", default="A")
     parser.add_argument("--effector-chain", default="B")
-    parser.add_argument("--contact-cutoff", type=float, default=8.0,
+    parser.add_argument("--rfdiff-contact-cutoff", type=float, default=8.0,
                         help="Cα–Cα distance cutoff in Å (default: 8.0)")
     parser.add_argument("--min-hotspot-frac", type=float, default=0.0,
                         help="Min fraction of contacts in design region (default: 0.0)")
@@ -452,12 +452,12 @@ def find_contacts(rec_atoms, eff_atoms, cutoff):
     return contacts
 
 
-def calc_scaffold_and_region_metrics(
+def calc_motif_and_region_metrics(
     input_rec_atoms, design_rec_atoms, resnum_map, fixed_residues,
     seg_descs, per_region_atom_ranges,
 ):
     """
-    Compute scaffold and per-region structural change metrics for one design.
+    Compute motif and per-region structural change metrics for one design.
 
     Uses **resnum-keyed correspondence**: each design atom is matched to its
     input atom via resnum_map (which records, per design positional index,
@@ -469,11 +469,12 @@ def calc_scaffold_and_region_metrics(
 
     Metrics returned (all in Å):
 
-      scaffold_rmsd: float
-        RMSD over the fixed-segment Cα atoms after Kabsch superposition on
-        those same atoms.  Sanity check on RFDiffusion's faithfulness to
-        the contig — should be small (typically <1 Å) for a well-behaved
-        design where the fixed residues were genuinely held in place.
+      motif_rmsd: float
+        RMSD over the fixed-segment (motif) Cα atoms after Kabsch
+        superposition on those same atoms.  Sanity check on RFDiffusion's
+        faithfulness to the contig — should be small (typically <1 Å) for
+        a well-behaved design where the motif residues were genuinely held
+        in place.
 
       per_region_endpoint_distance_input: list[float]
       per_region_endpoint_distance_design: list[float]
@@ -512,7 +513,7 @@ def calc_scaffold_and_region_metrics(
         different in space.  NaN only when there are no corresponding
         input residues at all.
 
-    Returns NaN scaffold_rmsd (and empty per-region lists) if there are
+    Returns NaN motif_rmsd (and empty per-region lists) if there are
     no fixed residues to align on at all.
     """
     if not input_rec_atoms or not design_rec_atoms:
@@ -561,9 +562,9 @@ def calc_scaffold_and_region_metrics(
     # Transform the entire design coord set into the input frame.
     design_aligned = (design_coords_all - P_centroid) @ R.T + Q_centroid
 
-    # Scaffold RMSD: how well the fixed residues line up after Kabsch.
-    scaffold_diffs = design_aligned[matched_design_idx] - Q
-    scaffold_rmsd = float(np.sqrt(np.mean(np.sum(scaffold_diffs ** 2, axis=1))))
+    # Motif RMSD: how well the fixed residues line up after Kabsch.
+    motif_diffs = design_aligned[matched_design_idx] - Q
+    motif_rmsd = float(np.sqrt(np.mean(np.sum(motif_diffs ** 2, axis=1))))
 
     # ── Per-region endpoint distances and COM displacement ──────────────
     # For each design region we identify two pieces of input information:
@@ -667,7 +668,7 @@ def calc_scaffold_and_region_metrics(
         per_region_endpoint_distance_design.append(ep_design)
         per_region_com_displacement.append(com_disp)
 
-    return (scaffold_rmsd,
+    return (motif_rmsd,
             per_region_endpoint_distance_input,
             per_region_endpoint_distance_design,
             per_region_com_displacement)
@@ -739,7 +740,7 @@ def main():
     print(f"Input receptor Cα atoms: {len(input_rec_atoms)}")
 
     # Pre-parse the contig segment descriptors once.  Same input for every
-    # design, used by calc_scaffold_and_region_metrics to find input gaps.
+    # design, used by calc_motif_and_region_metrics to find input gaps.
     seg_descs_for_metrics = _parse_receptor_segments(resolved_contigs, args.receptor_chain)
 
     os.makedirs("split", exist_ok=True)
@@ -772,7 +773,7 @@ def main():
         print(f"  {name}: {len(all_atoms)} total Cα, rec={len(rec_atoms)}, eff={len(eff_atoms)}")
 
         resnum_map, segment_info = build_receptor_resnum_map(rec_atoms, resolved_contigs, args.receptor_chain)
-        contacts = find_contacts(rec_atoms, eff_atoms, args.contact_cutoff)
+        contacts = find_contacts(rec_atoms, eff_atoms, args.rfdiff_contact_cutoff)
         n_contacts = len(contacts)
 
         rec_contact_resnums = sorted(set(
@@ -810,10 +811,10 @@ def main():
         design_coverage = (len(design_contacted_indices) / n_design_this
                            if n_design_this > 0 else 0.0)
 
-        (scaffold_rmsd,
+        (motif_rmsd,
          endpoint_dist_input,
          endpoint_dist_design,
-         com_displacement) = calc_scaffold_and_region_metrics(
+         com_displacement) = calc_motif_and_region_metrics(
             input_rec_atoms, rec_atoms, resnum_map, fixed_residues,
             seg_descs_for_metrics, segment_info["per_region_atom_ranges"],
         )
@@ -854,7 +855,7 @@ def main():
             "n_contacts_outside_design": n_out,
             "frac_contacts_in_design": round(frac_in, 4),
             "design_region_coverage": round(design_coverage, 4),
-            "scaffold_rmsd": round(scaffold_rmsd, 3) if not np.isnan(scaffold_rmsd) else None,
+            "motif_rmsd": round(motif_rmsd, 3) if not np.isnan(motif_rmsd) else None,
             "endpoint_distance_input": [
                 round(v, 3) if not np.isnan(v) else None for v in endpoint_dist_input
             ],
@@ -877,13 +878,13 @@ def main():
 
         (passing if passes else filtered).append(name)
 
-        scaffold_str = f"{scaffold_rmsd:.2f}" if not np.isnan(scaffold_rmsd) else "N/A"
+        motif_str = f"{motif_rmsd:.2f}" if not np.isnan(motif_rmsd) else "N/A"
         com_summary = ",".join(
             f"{v:.1f}" if not np.isnan(v) else "N/A" for v in com_displacement
         ) or "N/A"
         status = "PASS" if passes else "FAIL"
         print(f"    contacts={n_contacts} (in={n_in}, out={n_out}, "
-              f"frac={frac_in:.2f}) scaffold_rmsd={scaffold_str}Å "
+              f"frac={frac_in:.2f}) motif_rmsd={motif_str}Å "
               f"com_disp=[{com_summary}]Å [{status}]")
 
     # Write outputs.  Note: per-design design residues live inside each
@@ -899,7 +900,7 @@ def main():
             "designs": metrics,
             "fixed_residues": sorted(fixed_residues),
             "hotspot_residues": sorted(hotspot_residues),
-            "contact_cutoff": args.contact_cutoff,
+            "rfdiff_contact_cutoff": args.rfdiff_contact_cutoff,
             "min_hotspot_frac": args.min_hotspot_frac,
         }, f, indent=2)
 

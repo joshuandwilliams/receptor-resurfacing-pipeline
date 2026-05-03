@@ -62,11 +62,13 @@ hotspot: ""            # auto-derived from HADDOCK3 in modes 1-3
 num_designs: 32
 rfdiff_iterations: 100
 min_hotspot_frac: 0.5      # Min fraction of effector contacts inside design region to keep a design (0.0 = no filter)
+rfdiff_contact_cutoff: 8.0 # Cα–Cα distance cutoff (Å) for receptor–effector contact
+                           # detection in rfdiffusion_filter.py.  Also reused as the
+                           # heavy-atom cutoff for HADDOCK hotspot extraction.
 
 # ── HADDOCK3 (modes 1-3 only) ────────────────────────────────────────
 haddock_sampling: 10000    # 10000 = semi-blind, 1000 = targeted
 haddock_seletop: 400       # Top N rigid-body models passed to flexref
-contact_cutoff: 8.0        # Angstrom cutoff for hotspot extraction
 effector_active_residues: ""  # Comma-separated effector residue numbers to steer
                               # HADDOCK docking toward specific effector surface patches.
                               # e.g. "24,25,26,40,41,42,43,44,45,46,47" for AVR-PikD

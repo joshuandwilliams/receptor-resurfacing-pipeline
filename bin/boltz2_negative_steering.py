@@ -22,8 +22,9 @@ Three subcommands so the workflow can be split across SLURM jobs:
 
 The receptor-aligned effector RMSD machinery is inlined at the top
 of this file (Kabsch superposition + Needleman-Wunsch sequence
-alignment) so the script has no external dependencies on the rest
-of the pipeline beyond the singularity container.
+alignment).  The only project-level dependency is ``contig_utils``
+(for the canonical ``THREE_TO_ONE`` amino-acid map), so the script
+must be dropped alongside ``contig_utils.py`` in the same directory.
 
 Negative-steering rationale
 ---------------------------
@@ -53,6 +54,8 @@ from pathlib import Path
 from typing import List, Tuple, Dict
 
 import numpy as np
+
+from contig_utils import THREE_TO_ONE
 
 # Module-level constants.  Also redefined as local variables inside
 # _cmd_aggregate_results for historical reasons; keep the two in sync.
@@ -84,16 +87,6 @@ except ImportError as _e:
     )
     sys.exit(1)
 
-_THREE_TO_ONE_RMSD = {
-    "ALA": "A", "ARG": "R", "ASN": "N", "ASP": "D", "CYS": "C",
-    "GLN": "Q", "GLU": "E", "GLY": "G", "HIS": "H", "ILE": "I",
-    "LEU": "L", "LYS": "K", "MET": "M", "PHE": "F", "PRO": "P",
-    "SER": "S", "THR": "T", "TRP": "W", "TYR": "Y", "VAL": "V",
-    "SEC": "U", "PYL": "O",
-    "MSE": "M", "HYP": "P", "TPO": "T", "SEP": "S", "PTR": "Y",
-}
-
-
 def _read_ca_seq_by_chain(pdb_path):
     """Return {chain_id: (coords (N,3), sequence_str)}.
 
@@ -119,7 +112,7 @@ def _read_ca_seq_by_chain(pdb_path):
                     continue
                 seen.add(key)
                 resname = line[17:20].strip()
-                one = _THREE_TO_ONE_RMSD.get(resname, "X")
+                one = THREE_TO_ONE.get(resname, "X")
                 xyz = (
                     float(line[30:38]),
                     float(line[38:46]),
@@ -302,15 +295,6 @@ def compute_binding_rmsds(pred_pdb, design_pdb,
 # ───────────────────────────────────────────────────────────────────────
 # Sequence extraction from PDB (reusing project's extract_sequences.py)
 # ───────────────────────────────────────────────────────────────────────
-THREE_TO_ONE = {
-    "ALA": "A", "ARG": "R", "ASN": "N", "ASP": "D", "CYS": "C",
-    "GLN": "Q", "GLU": "E", "GLY": "G", "HIS": "H", "ILE": "I",
-    "LEU": "L", "LYS": "K", "MET": "M", "PHE": "F", "PRO": "P",
-    "SER": "S", "THR": "T", "TRP": "W", "TYR": "Y", "VAL": "V",
-    "SEC": "U", "PYL": "O",
-    # Non-standard → X
-    "MSE": "M", "HYP": "P", "TPO": "T", "SEP": "S", "PTR": "Y",
-}
 
 
 def extract_sequences_gemmi(path):

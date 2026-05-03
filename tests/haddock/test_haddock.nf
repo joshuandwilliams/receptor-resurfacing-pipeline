@@ -26,7 +26,7 @@ params.effector_chain    = "B"
 params.contigs           = "B A1-390/20-40/A421-438"
 params.haddock_sampling  = 100    // reduced from 10000 for faster test runs
 params.haddock_seletop   = 20
-params.contact_cutoff    = 8.0
+params.rfdiff_contact_cutoff = 8.0
 params.effector_active_residues = ""   // Comma-separated effector residues for HADDOCK AIRs
 params.receptor_seq      = null   // Optional: reference sequence for chain disambiguation
 params.effector_seq      = null   // Optional: reference sequence for chain disambiguation
@@ -94,7 +94,7 @@ workflow {
         HADDOCK3_DOCK.out.best_model,
         params.receptor_chain,
         params.effector_chain,
-        params.contact_cutoff,
+        params.rfdiff_contact_cutoff,
         params.receptor_seq ?: "",
         params.effector_seq ?: "",
         Channel.value(file("${projectDir}/bin/extract_hotspots.py"))

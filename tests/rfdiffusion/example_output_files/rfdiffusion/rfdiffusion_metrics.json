@@ -10,7 +10,7 @@
       "n_contacts_outside_design": 13,
       "frac_contacts_in_design": 0.5667,
       "design_region_coverage": 0.5882,
-      "scaffold_rmsd": 0.113,
+      "motif_rmsd": 0.113,
       "endpoint_distance_input": [
         8.19,
         null
@@ -469,7 +469,7 @@
       "n_contacts_outside_design": 13,
       "frac_contacts_in_design": 0.5667,
       "design_region_coverage": 0.5882,
-      "scaffold_rmsd": 0.114,
+      "motif_rmsd": 0.114,
       "endpoint_distance_input": [
         8.19,
         null
@@ -928,7 +928,7 @@
       "n_contacts_outside_design": 13,
       "frac_contacts_in_design": 0.5517,
       "design_region_coverage": 0.375,
-      "scaffold_rmsd": 0.124,
+      "motif_rmsd": 0.124,
       "endpoint_distance_input": [
         8.19,
         null
@@ -1465,7 +1465,7 @@
       "n_contacts_outside_design": 13,
       "frac_contacts_in_design": 0.5806,
       "design_region_coverage": 0.4231,
-      "scaffold_rmsd": 0.143,
+      "motif_rmsd": 0.143,
       "endpoint_distance_input": [
         8.19,
         null
@@ -2037,7 +2037,7 @@
       "n_contacts_outside_design": 13,
       "frac_contacts_in_design": 0.5,
       "design_region_coverage": 0.4444,
-      "scaffold_rmsd": 0.114,
+      "motif_rmsd": 0.114,
       "endpoint_distance_input": [
         8.19,
         null
@@ -2490,7 +2490,7 @@
       "n_contacts_outside_design": 13,
       "frac_contacts_in_design": 0.4348,
       "design_region_coverage": 0.375,
-      "scaffold_rmsd": 0.118,
+      "motif_rmsd": 0.118,
       "endpoint_distance_input": [
         8.19,
         null
@@ -2904,7 +2904,7 @@
       "n_contacts_outside_design": 13,
       "frac_contacts_in_design": 0.6061,
       "design_region_coverage": 0.5789,
-      "scaffold_rmsd": 0.112,
+      "motif_rmsd": 0.112,
       "endpoint_distance_input": [
         8.19,
         null
@@ -3403,7 +3403,7 @@
       "n_contacts_outside_design": 13,
       "frac_contacts_in_design": 0.6286,
       "design_region_coverage": 0.4348,
-      "scaffold_rmsd": 0.121,
+      "motif_rmsd": 0.121,
       "endpoint_distance_input": [
         8.19,
         null
@@ -4010,6 +4010,6 @@
     72
   ],
   "hotspot_residues": [],
-  "contact_cutoff": 8.0,
+  "rfdiff_contact_cutoff": 8.0,
   "min_hotspot_frac": 0.0
 }

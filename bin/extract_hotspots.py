@@ -16,16 +16,8 @@ import argparse
 import json
 import sys
 
+from contig_utils import THREE_TO_ONE
 from haddock_utils import extract_heavy_atoms, find_interface_residues
-
-
-# Three-letter to one-letter amino acid map for sequence extraction.
-THREE_TO_ONE = {
-    'ALA':'A','ARG':'R','ASN':'N','ASP':'D','CYS':'C','GLN':'Q','GLU':'E',
-    'GLY':'G','HIS':'H','ILE':'I','LEU':'L','LYS':'K','MET':'M','PHE':'F',
-    'PRO':'P','SER':'S','THR':'T','TRP':'W','TYR':'Y','VAL':'V',
-    'MSE':'M','SEC':'U','PYL':'O',
-}
 
 
 def parse_args():

@@ -10,7 +10,7 @@
       "n_contacts_outside_design": 13,
       "frac_contacts_in_design": 0.4583,
       "design_region_coverage": 0.35,
-      "scaffold_rmsd": 0.119,
+      "motif_rmsd": 0.119,
       "endpoint_distance_input": [
         8.19,
         null
@@ -477,7 +477,7 @@
       "n_contacts_outside_design": 13,
       "frac_contacts_in_design": 0.5517,
       "design_region_coverage": 0.4167,
-      "scaffold_rmsd": 0.119,
+      "motif_rmsd": 0.119,
       "endpoint_distance_input": [
         8.19,
         null
@@ -1018,7 +1018,7 @@
       "n_contacts_outside_design": 13,
       "frac_contacts_in_design": 0.5185,
       "design_region_coverage": 0.3913,
-      "scaffold_rmsd": 0.123,
+      "motif_rmsd": 0.123,
       "endpoint_distance_input": [
         8.19,
         null
@@ -1537,7 +1537,7 @@
       "n_contacts_outside_design": 13,
       "frac_contacts_in_design": 0.5667,
       "design_region_coverage": 0.4762,
-      "scaffold_rmsd": 0.122,
+      "motif_rmsd": 0.122,
       "endpoint_distance_input": [
         8.19,
         null
@@ -2044,7 +2044,7 @@
       "n_contacts_outside_design": 12,
       "frac_contacts_in_design": 0.6667,
       "design_region_coverage": 0.5417,
-      "scaffold_rmsd": 0.111,
+      "motif_rmsd": 0.111,
       "endpoint_distance_input": [
         8.19,
         null
@@ -2617,7 +2617,7 @@
       "n_contacts_outside_design": 13,
       "frac_contacts_in_design": 0.6286,
       "design_region_coverage": 0.6667,
-      "scaffold_rmsd": 0.117,
+      "motif_rmsd": 0.117,
       "endpoint_distance_input": [
         8.19,
         null
@@ -3112,7 +3112,7 @@
       "n_contacts_outside_design": 13,
       "frac_contacts_in_design": 0.5517,
       "design_region_coverage": 0.45,
-      "scaffold_rmsd": 0.122,
+      "motif_rmsd": 0.122,
       "endpoint_distance_input": [
         8.19,
         null
@@ -3601,7 +3601,7 @@
       "n_contacts_outside_design": 13,
       "frac_contacts_in_design": 0.6061,
       "design_region_coverage": 0.4348,
-      "scaffold_rmsd": 0.12,
+      "motif_rmsd": 0.12,
       "endpoint_distance_input": [
         8.19,
         null
@@ -4146,7 +4146,7 @@
       "n_contacts_outside_design": 13,
       "frac_contacts_in_design": 0.4583,
       "design_region_coverage": 0.3889,
-      "scaffold_rmsd": 0.114,
+      "motif_rmsd": 0.114,
       "endpoint_distance_input": [
         8.19,
         null
@@ -4590,7 +4590,7 @@
       "n_contacts_outside_design": 13,
       "frac_contacts_in_design": 0.4348,
       "design_region_coverage": 0.2692,
-      "scaffold_rmsd": 0.125,
+      "motif_rmsd": 0.125,
       "endpoint_distance_input": [
         8.19,
         null
@@ -5125,7 +5125,7 @@
       "n_contacts_outside_design": 13,
       "frac_contacts_in_design": 0.5517,
       "design_region_coverage": 0.4091,
-      "scaffold_rmsd": 0.125,
+      "motif_rmsd": 0.125,
       "endpoint_distance_input": [
         8.19,
         null
@@ -5641,7 +5641,7 @@
       "n_contacts_outside_design": 13,
       "frac_contacts_in_design": 0.5806,
       "design_region_coverage": 0.45,
-      "scaffold_rmsd": 0.113,
+      "motif_rmsd": 0.113,
       "endpoint_distance_input": [
         8.19,
         null
@@ -6142,7 +6142,7 @@
       "n_contacts_outside_design": 13,
       "frac_contacts_in_design": 0.6061,
       "design_region_coverage": 0.45,
-      "scaffold_rmsd": 0.114,
+      "motif_rmsd": 0.114,
       "endpoint_distance_input": [
         8.19,
         null
@@ -6652,7 +6652,7 @@
       "n_contacts_outside_design": 13,
       "frac_contacts_in_design": 0.5806,
       "design_region_coverage": 0.5556,
-      "scaffold_rmsd": 0.114,
+      "motif_rmsd": 0.114,
       "endpoint_distance_input": [
         8.19,
         null
@@ -7127,7 +7127,7 @@
       "n_contacts_outside_design": 13,
       "frac_contacts_in_design": 0.6061,
       "design_region_coverage": 0.5,
-      "scaffold_rmsd": 0.123,
+      "motif_rmsd": 0.123,
       "endpoint_distance_input": [
         8.19,
         null
@@ -7661,7 +7661,7 @@
       "n_contacts_outside_design": 13,
       "frac_contacts_in_design": 0.5,
       "design_region_coverage": 0.3077,
-      "scaffold_rmsd": 0.14,
+      "motif_rmsd": 0.14,
       "endpoint_distance_input": [
         8.19,
         null
@@ -8212,7 +8212,7 @@
       "n_contacts_outside_design": 13,
       "frac_contacts_in_design": 0.5357,
       "design_region_coverage": 0.5625,
-      "scaffold_rmsd": 0.115,
+      "motif_rmsd": 0.115,
       "endpoint_distance_input": [
         8.19,
         null
@@ -8650,7 +8650,7 @@
       "n_contacts_outside_design": 13,
       "frac_contacts_in_design": 0.4348,
       "design_region_coverage": 0.375,
-      "scaffold_rmsd": 0.117,
+      "motif_rmsd": 0.117,
       "endpoint_distance_input": [
         8.19,
         null
@@ -9064,7 +9064,7 @@
       "n_contacts_outside_design": 13,
       "frac_contacts_in_design": 0.5,
       "design_region_coverage": 0.5625,
-      "scaffold_rmsd": 0.116,
+      "motif_rmsd": 0.116,
       "endpoint_distance_input": [
         8.19,
         null
@@ -9493,7 +9493,7 @@
       "n_contacts_outside_design": 13,
       "frac_contacts_in_design": 0.6486,
       "design_region_coverage": 0.6316,
-      "scaffold_rmsd": 0.111,
+      "motif_rmsd": 0.111,
       "endpoint_distance_input": [
         8.19,
         null
@@ -10010,7 +10010,7 @@
       "n_contacts_outside_design": 13,
       "frac_contacts_in_design": 0.5806,
       "design_region_coverage": 0.5556,
-      "scaffold_rmsd": 0.116,
+      "motif_rmsd": 0.116,
       "endpoint_distance_input": [
         8.19,
         null
@@ -10486,7 +10486,7 @@
       "n_contacts_outside_design": 13,
       "frac_contacts_in_design": 0.5806,
       "design_region_coverage": 0.5556,
-      "scaffold_rmsd": 0.117,
+      "motif_rmsd": 0.117,
       "endpoint_distance_input": [
         8.19,
         null
@@ -10961,7 +10961,7 @@
       "n_contacts_outside_design": 13,
       "frac_contacts_in_design": 0.5806,
       "design_region_coverage": 0.5882,
-      "scaffold_rmsd": 0.111,
+      "motif_rmsd": 0.111,
       "endpoint_distance_input": [
         8.19,
         null
@@ -11424,7 +11424,7 @@
       "n_contacts_outside_design": 13,
       "frac_contacts_in_design": 0.5938,
       "design_region_coverage": 0.44,
-      "scaffold_rmsd": 0.14,
+      "motif_rmsd": 0.14,
       "endpoint_distance_input": [
         8.19,
         null
@@ -11989,7 +11989,7 @@
       "n_contacts_outside_design": 13,
       "frac_contacts_in_design": 0.5517,
       "design_region_coverage": 0.5625,
-      "scaffold_rmsd": 0.116,
+      "motif_rmsd": 0.116,
       "endpoint_distance_input": [
         8.19,
         null
@@ -12431,7 +12431,7 @@
       "n_contacts_outside_design": 13,
       "frac_contacts_in_design": 0.675,
       "design_region_coverage": 0.6316,
-      "scaffold_rmsd": 0.112,
+      "motif_rmsd": 0.112,
       "endpoint_distance_input": [
         8.19,
         null
@@ -12961,7 +12961,7 @@
       "n_contacts_outside_design": 13,
       "frac_contacts_in_design": 0.5806,
       "design_region_coverage": 0.5,
-      "scaffold_rmsd": 0.119,
+      "motif_rmsd": 0.119,
       "endpoint_distance_input": [
         8.19,
         null
@@ -13461,7 +13461,7 @@
       "n_contacts_outside_design": 13,
       "frac_contacts_in_design": 0.5938,
       "design_region_coverage": 0.5263,
-      "scaffold_rmsd": 0.111,
+      "motif_rmsd": 0.111,
       "endpoint_distance_input": [
         8.19,
         null
@@ -13955,7 +13955,7 @@
       "n_contacts_outside_design": 13,
       "frac_contacts_in_design": 0.6667,
       "design_region_coverage": 0.6,
-      "scaffold_rmsd": 0.115,
+      "motif_rmsd": 0.115,
       "endpoint_distance_input": [
         8.19,
         null
@@ -14493,7 +14493,7 @@
       "n_contacts_outside_design": 13,
       "frac_contacts_in_design": 0.4348,
       "design_region_coverage": 0.375,
-      "scaffold_rmsd": 0.115,
+      "motif_rmsd": 0.115,
       "endpoint_distance_input": [
         8.19,
         null
@@ -14907,7 +14907,7 @@
       "n_contacts_outside_design": 13,
       "frac_contacts_in_design": 0.5357,
       "design_region_coverage": 0.5556,
-      "scaffold_rmsd": 0.114,
+      "motif_rmsd": 0.114,
       "endpoint_distance_input": [
         8.19,
         null
@@ -15370,7 +15370,7 @@
       "n_contacts_outside_design": 12,
       "frac_contacts_in_design": 0.6,
       "design_region_coverage": 0.3913,
-      "scaffold_rmsd": 0.121,
+      "motif_rmsd": 0.121,
       "endpoint_distance_input": [
         8.19,
         null
@@ -15902,7 +15902,7 @@
       "n_contacts_outside_design": 13,
       "frac_contacts_in_design": 0.5806,
       "design_region_coverage": 0.3913,
-      "scaffold_rmsd": 0.118,
+      "motif_rmsd": 0.118,
       "endpoint_distance_input": [
         8.19,
         null
@@ -16438,7 +16438,7 @@
       "n_contacts_outside_design": 13,
       "frac_contacts_in_design": 0.5938,
       "design_region_coverage": 0.5882,
-      "scaffold_rmsd": 0.113,
+      "motif_rmsd": 0.113,
       "endpoint_distance_input": [
         8.19,
         null
@@ -16905,7 +16905,7 @@
       "n_contacts_outside_design": 13,
       "frac_contacts_in_design": 0.6389,
       "design_region_coverage": 0.5789,
-      "scaffold_rmsd": 0.113,
+      "motif_rmsd": 0.113,
       "endpoint_distance_input": [
         8.19,
         null
@@ -17417,7 +17417,7 @@
       "n_contacts_outside_design": 13,
       "frac_contacts_in_design": 0.5,
       "design_region_coverage": 0.3077,
-      "scaffold_rmsd": 0.144,
+      "motif_rmsd": 0.144,
       "endpoint_distance_input": [
         8.19,
         null
@@ -17966,7 +17966,7 @@
       "n_contacts_outside_design": 13,
       "frac_contacts_in_design": 0.5185,
       "design_region_coverage": 0.5556,
-      "scaffold_rmsd": 0.115,
+      "motif_rmsd": 0.115,
       "endpoint_distance_input": [
         8.19,
         null
@@ -18424,7 +18424,7 @@
       "n_contacts_outside_design": 13,
       "frac_contacts_in_design": 0.48,
       "design_region_coverage": 0.32,
-      "scaffold_rmsd": 0.137,
+      "motif_rmsd": 0.137,
       "endpoint_distance_input": [
         8.19,
         null
@@ -18957,7 +18957,7 @@
       "n_contacts_outside_design": 13,
       "frac_contacts_in_design": 0.6905,
       "design_region_coverage": 0.625,
-      "scaffold_rmsd": 0.11,
+      "motif_rmsd": 0.11,
       "endpoint_distance_input": [
         8.19,
         null
@@ -19557,7 +19557,7 @@
       "n_contacts_outside_design": 13,
       "frac_contacts_in_design": 0.6176,
       "design_region_coverage": 0.5455,
-      "scaffold_rmsd": 0.123,
+      "motif_rmsd": 0.123,
       "endpoint_distance_input": [
         8.19,
         null
@@ -20096,7 +20096,7 @@
       "n_contacts_outside_design": 13,
       "frac_contacts_in_design": 0.5,
       "design_region_coverage": 0.3333,
-      "scaffold_rmsd": 0.123,
+      "motif_rmsd": 0.123,
       "endpoint_distance_input": [
         8.19,
         null
@@ -20620,7 +20620,7 @@
       "n_contacts_outside_design": 13,
       "frac_contacts_in_design": 0.5806,
       "design_region_coverage": 0.4762,
-      "scaffold_rmsd": 0.122,
+      "motif_rmsd": 0.122,
       "endpoint_distance_input": [
         8.19,
         null
@@ -21132,7 +21132,7 @@
       "n_contacts_outside_design": 13,
       "frac_contacts_in_design": 0.5667,
       "design_region_coverage": 0.4783,
-      "scaffold_rmsd": 0.121,
+      "motif_rmsd": 0.121,
       "endpoint_distance_input": [
         8.19,
         null
@@ -21665,7 +21665,7 @@
       "n_contacts_outside_design": 13,
       "frac_contacts_in_design": 0.6061,
       "design_region_coverage": 0.6111,
-      "scaffold_rmsd": 0.117,
+      "motif_rmsd": 0.117,
       "endpoint_distance_input": [
         8.19,
         null
@@ -22150,7 +22150,7 @@
       "n_contacts_outside_design": 12,
       "frac_contacts_in_design": 0.6757,
       "design_region_coverage": 0.5652,
-      "scaffold_rmsd": 0.12,
+      "motif_rmsd": 0.12,
       "endpoint_distance_input": [
         8.19,
         null
@@ -22715,7 +22715,7 @@
       "n_contacts_outside_design": 13,
       "frac_contacts_in_design": 0.5667,
       "design_region_coverage": 0.375,
-      "scaffold_rmsd": 0.123,
+      "motif_rmsd": 0.123,
       "endpoint_distance_input": [
         8.19,
         null
@@ -23257,7 +23257,7 @@
       "n_contacts_outside_design": 13,
       "frac_contacts_in_design": 0.4583,
       "design_region_coverage": 0.4375,
-      "scaffold_rmsd": 0.115,
+      "motif_rmsd": 0.115,
       "endpoint_distance_input": [
         8.19,
         null
@@ -23676,7 +23676,7 @@
       "n_contacts_outside_design": 13,
       "frac_contacts_in_design": 0.5517,
       "design_region_coverage": 0.5625,
-      "scaffold_rmsd": 0.114,
+      "motif_rmsd": 0.114,
       "endpoint_distance_input": [
         8.19,
         null
@@ -24117,7 +24117,7 @@
       "n_contacts_outside_design": 13,
       "frac_contacts_in_design": 0.6389,
       "design_region_coverage": 0.48,
-      "scaffold_rmsd": 0.111,
+      "motif_rmsd": 0.111,
       "endpoint_distance_input": [
         8.19,
         null
@@ -24701,7 +24701,7 @@
       "n_contacts_outside_design": 12,
       "frac_contacts_in_design": 0.6667,
       "design_region_coverage": 0.5217,
-      "scaffold_rmsd": 0.123,
+      "motif_rmsd": 0.123,
       "endpoint_distance_input": [
         8.19,
         null
@@ -25260,7 +25260,7 @@
       "n_contacts_outside_design": 13,
       "frac_contacts_in_design": 0.5357,
       "design_region_coverage": 0.36,
-      "scaffold_rmsd": 0.136,
+      "motif_rmsd": 0.136,
       "endpoint_distance_input": [
         8.19,
         null
@@ -25806,7 +25806,7 @@
       "n_contacts_outside_design": 13,
       "frac_contacts_in_design": 0.5667,
       "design_region_coverage": 0.36,
-      "scaffold_rmsd": 0.138,
+      "motif_rmsd": 0.138,
       "endpoint_distance_input": [
         8.19,
         null
@@ -26362,7 +26362,7 @@
       "n_contacts_outside_design": 13,
       "frac_contacts_in_design": 0.6486,
       "design_region_coverage": 0.6,
-      "scaffold_rmsd": 0.116,
+      "motif_rmsd": 0.116,
       "endpoint_distance_input": [
         8.19,
         null
@@ -26890,7 +26890,7 @@
       "n_contacts_outside_design": 13,
       "frac_contacts_in_design": 0.4091,
       "design_region_coverage": 0.375,
-      "scaffold_rmsd": 0.115,
+      "motif_rmsd": 0.115,
       "endpoint_distance_input": [
         8.19,
         null
@@ -27299,7 +27299,7 @@
       "n_contacts_outside_design": 13,
       "frac_contacts_in_design": 0.5357,
       "design_region_coverage": 0.5,
-      "scaffold_rmsd": 0.115,
+      "motif_rmsd": 0.115,
       "endpoint_distance_input": [
         8.19,
         null
@@ -27762,7 +27762,7 @@
       "n_contacts_outside_design": 13,
       "frac_contacts_in_design": 0.6176,
       "design_region_coverage": 0.4783,
-      "scaffold_rmsd": 0.122,
+      "motif_rmsd": 0.122,
       "endpoint_distance_input": [
         8.19,
         null
@@ -28312,7 +28312,7 @@
       "n_contacts_outside_design": 12,
       "frac_contacts_in_design": 0.6757,
       "design_region_coverage": 0.5909,
-      "scaffold_rmsd": 0.116,
+      "motif_rmsd": 0.116,
       "endpoint_distance_input": [
         8.19,
         null
@@ -28864,7 +28864,7 @@
       "n_contacts_outside_design": 13,
       "frac_contacts_in_design": 0.5357,
       "design_region_coverage": 0.3478,
-      "scaffold_rmsd": 0.119,
+      "motif_rmsd": 0.119,
       "endpoint_distance_input": [
         8.19,
         null
@@ -29385,7 +29385,7 @@
       "n_contacts_outside_design": 13,
       "frac_contacts_in_design": 0.5938,
       "design_region_coverage": 0.5882,
-      "scaffold_rmsd": 0.113,
+      "motif_rmsd": 0.113,
       "endpoint_distance_input": [
         8.19,
         null
@@ -29852,7 +29852,7 @@
       "n_contacts_outside_design": 13,
       "frac_contacts_in_design": 0.7045,
       "design_region_coverage": 0.625,
-      "scaffold_rmsd": 0.11,
+      "motif_rmsd": 0.11,
       "endpoint_distance_input": [
         8.19,
         null
@@ -30462,7 +30462,7 @@
       "n_contacts_outside_design": 13,
       "frac_contacts_in_design": 0.6579,
       "design_region_coverage": 0.6316,
-      "scaffold_rmsd": 0.112,
+      "motif_rmsd": 0.112,
       "endpoint_distance_input": [
         8.19,
         null
@@ -30983,7 +30983,7 @@
       "n_contacts_outside_design": 13,
       "frac_contacts_in_design": 0.5517,
       "design_region_coverage": 0.4091,
-      "scaffold_rmsd": 0.12,
+      "motif_rmsd": 0.12,
       "endpoint_distance_input": [
         8.19,
         null
@@ -31499,7 +31499,7 @@
       "n_contacts_outside_design": 13,
       "frac_contacts_in_design": 0.5806,
       "design_region_coverage": 0.4,
-      "scaffold_rmsd": 0.134,
+      "motif_rmsd": 0.134,
       "endpoint_distance_input": [
         8.19,
         null
@@ -32059,7 +32059,7 @@
       "n_contacts_outside_design": 13,
       "frac_contacts_in_design": 0.4583,
       "design_region_coverage": 0.28,
-      "scaffold_rmsd": 0.125,
+      "motif_rmsd": 0.125,
       "endpoint_distance_input": [
         8.19,
         null
@@ -32639,6 +32639,6 @@
     72
   ],
   "hotspot_residues": [],
-  "contact_cutoff": 8.0,
+  "rfdiff_contact_cutoff": 8.0,
   "min_hotspot_frac": 0.0
 }

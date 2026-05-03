@@ -19,6 +19,8 @@ import csv
 import json
 import os
 
+from contig_utils import THREE_TO_ONE
+
 
 # ---------------------------------------------------------------------------
 # Contig parsing
@@ -132,13 +134,6 @@ def get_pdb_chain_residues(pdb_path):
 
 def get_pdb_sequence(pdb_path, chain_id):
     """Extract amino acid sequence from a PDB file for a given chain."""
-    THREE_TO_ONE = {
-        'ALA': 'A', 'ARG': 'R', 'ASN': 'N', 'ASP': 'D', 'CYS': 'C',
-        'GLN': 'Q', 'GLU': 'E', 'GLY': 'G', 'HIS': 'H', 'ILE': 'I',
-        'LEU': 'L', 'LYS': 'K', 'MET': 'M', 'PHE': 'F', 'PRO': 'P',
-        'SER': 'S', 'THR': 'T', 'TRP': 'W', 'TYR': 'Y', 'VAL': 'V',
-        'MSE': 'M', 'SEC': 'U', 'PYL': 'O',
-    }
     residues = {}
     with open(pdb_path) as f:
         for line in f:
