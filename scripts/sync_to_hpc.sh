@@ -13,8 +13,9 @@
 #
 # Excludes:
 #   - .git/, Python/IDE caches, macOS metadata, Word lockfiles
-#   - run artefacts (work/, tmp/, results/, .nextflow/, receptor_resurfacing_results/)
-#   - slurm log files in tests/*/
+#   - run artefacts in tests/*/ and experiments/campaigns/*/runs/*/
+#     (work/, tmp/, results/, .nextflow*, receptor_resurfacing_results/)
+#   - slurm log files in tests/*/ and experiments/campaigns/*/runs/*/
 #   - tests/curation_staging/ -- temporary tarball staging area used
 #     during fixture curation; safe to recreate locally without syncing
 #   - tests/full_test_run/reference_data_helpers/ -- ad-hoc helpers
@@ -62,6 +63,12 @@ rsync -av --delete $DRY_RUN -e ssh \
     --exclude='tests/full_test_run/work/' \
     --exclude='tests/full_test_run/tmp/' \
     --exclude='tests/full_test_run/.nextflow*' \
+    --exclude='experiments/campaigns/*/runs/*/results/' \
+    --exclude='experiments/campaigns/*/runs/*/work/' \
+    --exclude='experiments/campaigns/*/runs/*/tmp/' \
+    --exclude='experiments/campaigns/*/runs/*/.nextflow*' \
+    --exclude='experiments/campaigns/*/runs/*/*.out' \
+    --exclude='experiments/campaigns/*/runs/*/*.err' \
     --exclude='tests/full_test_run/reference_data_helpers/' \
     --exclude='tests/curation_staging/' \
     --exclude='rsync_dryrun*.txt' \
