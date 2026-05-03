@@ -59,8 +59,8 @@ process NEGSTEER_INTERFACE_METRICS {
             --workdirs-glob 'workdirs/*' \\
             --plddt-threshold ${params.interface_plddt_trim_threshold} \\
             --intact-threshold ${params.interface_intact_threshold} \\
-            --receptor-chain ${params.receptor_chain} \\
-            --effector-chain ${params.effector_chain} \\
+            --receptor-chain ${params.rfdiff_output_receptor_chain} \\
+            --effector-chain ${params.rfdiff_output_effector_chain} \\
             --weighted-jaccard-pair-cutoff ${params.weighted_jaccard_pair_cutoff}
 
     echo "Interface metrics written."
