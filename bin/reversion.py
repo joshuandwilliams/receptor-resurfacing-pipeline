@@ -76,6 +76,71 @@ from typing import Dict, List, Optional, Set, Tuple
 
 
 # ───────────────────────────────────────────────────────────────────────
+# Reverted-confidence forwarding — single source of truth
+# ───────────────────────────────────────────────────────────────────────
+# Confidence-suite columns that boltz2_iterate_steering.py forwards en
+# bloc from a reverted prediction's per_seed_records entry into the
+# downstream candidate dict / aggregated CSVs.  The structural RMSD
+# subset (reverted_ra_eff*, reverted_independent_*), the contact-flag
+# fields (reverted_n_contact_residues, reverted_contact_residues,
+# reverted_mutated_contact_positions), reverted_prediction_pdb,
+# reverted_intact, and reverted_ra_eff_vs_steered are deliberately NOT
+# in this list — they are overlaid inline because they either rename to
+# canonical columns on pose_holds rows or are diagnostic-only.
+#
+# This tuple MUST stay in lockstep with the keys assigned into
+# `per_seed_records[(label, seed_index)]` inside
+# harvest_reversion_results below.  Six historical bugs have come from
+# the two drifting apart; defining the list here once and importing it
+# in boltz2_iterate_steering.py removes the dual-source surface.
+_REVERTED_CONFIDENCE_FIELDS = (
+    "reverted_ipsae_min",
+    "reverted_ipsae_ab",
+    "reverted_ipsae_ba",
+    # 15Å iPSAE variants — added so reverted predictions carry the
+    # same metric set as steered ones.  harvest_reversion_results
+    # harvests these from compute_metrics.py.
+    "reverted_ipsae_min_15",
+    "reverted_ipsae_ab_15",
+    "reverted_ipsae_ba_15",
+    "reverted_iptm",
+    "reverted_ptm",
+    "reverted_actifptm",
+    "reverted_af_rank_score",
+    "reverted_complex_plddt",
+    "reverted_avg_plddt",
+    "reverted_ipae",
+    "reverted_pae_mean",
+    "reverted_pae_pass_frac",
+    # Native-PDB-dependent metrics (require --native-pdb to
+    # compute_metrics.py — harvest_reversion_results passes it).
+    # Without propagation here the values would be harvested but
+    # dropped before the aggregator.
+    "reverted_interface_plddt",
+    "reverted_intact_core",
+    "reverted_weighted_jaccard",
+    # Structural-Jaccard fields — harvest_reversion_results computes
+    # these per seed by re-running find_contact_residues_heavy on each
+    # reverted PDB and comparing to the cycle_0 plan's
+    # true_interface_idx and initial_wrong_interface_idx.  Mirrors
+    # what boltz2_negative_steering._write_initial_multiseed_csv does
+    # on the steered side.  Without these the aggregator's
+    # reverted_true_jaccard_median / reverted_wrong_jaccard_median /
+    # reverted_n_shared_*_median /
+    # reverted_n_design_interface_residues_median columns are blank,
+    # which in turn means cross_summary's representative_*_median
+    # values can't fall back to the reverted side for pose_holds rows
+    # and the dispersion plots drop those seeds because tj is None.
+    "reverted_true_jaccard",
+    "reverted_wrong_jaccard",
+    "reverted_n_shared_true",
+    "reverted_n_shared_wrong",
+    "reverted_n_design_interface_residues",
+    "reverted_n_contacts_on_mutated_positions",
+)
+
+
+# ───────────────────────────────────────────────────────────────────────
 # Pure sequence-level reversion
 # ───────────────────────────────────────────────────────────────────────
 
@@ -530,10 +595,9 @@ def harvest_reversion_results(
         reverted_n_contact_residues       int
         reverted_contact_residues         List[int]
         reverted_mutated_contact_positions  List[int]
-        reverted_ipsae_min                float
-        reverted_iptm                     float
-        reverted_complex_plddt            float
         reverted_prediction_pdb           str  (path)
+        plus every entry in `_REVERTED_CONFIDENCE_FIELDS` (the
+        confidence-suite forwarded en bloc to downstream CSVs).
     If a reverted prediction failed or is missing, the value is a
     dict with {"error": "..."} and no metric fields.
     """

@@ -78,6 +78,20 @@ from typing import Dict, List, Optional, Set, Tuple
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 
+# Make sibling bin/ modules importable at module load time so the
+# reversion-confidence constant below can be imported unconditionally.
+# reversion.py is pure-stdlib at module level (its header guarantees
+# this), so this insert does NOT pull numpy / Bio.Align into Phase-2
+# entry points.  boltz2_negative_steering import stays lazy because it
+# DOES transitively import numpy and Bio.Align.
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
+
+# Single source of truth for the reverted-confidence column set —
+# defined in reversion.py next to the per_seed_records dict it must
+# stay in sync with.  See that file for the field-by-field rationale.
+from reversion import _REVERTED_CONFIDENCE_FIELDS  # noqa: E402
+
 # Lazy import of boltz2_negative_steering — it transitively imports
 # numpy and Bio.Align which are only present inside the singularity
 # container.  Phase-2 entry points (iterate-collect, kickoff,
@@ -961,61 +975,12 @@ def _is_nan(x):
 # ───────────────────────────────────────────────────────────────────────
 # Reverted-confidence forwarding
 # ───────────────────────────────────────────────────────────────────────
-# The full set of "reverted_*" fields emitted by
-# reversion.harvest_reversion_results.  The structural subset
-# (reverted_ra_eff*, reverted_independent_*) and the contact-flag
-# fields are handled inline in the finalize functions because they
-# also overlay the canonical columns on pose_holds rows.  The
-# confidence suite (ipSAE, iptm, ptm, actifptm, complex_plddt,
-# avg_plddt, ipae, pae_*) is forwarded en bloc by _copy_reverted_confidence
-# below — these are the metrics Boltz computed on the reverted
-# prediction and they are the wet-lab-relevant ranking signal for
-# any design that went through the reversion pass.
-_REVERTED_CONFIDENCE_FIELDS = (
-    "reverted_ipsae_min",
-    "reverted_ipsae_ab",
-    "reverted_ipsae_ba",
-    # 15Å iPSAE variants — added so reverted predictions carry the
-    # same metric set as steered ones.  reversion.py now harvests
-    # these from compute_metrics.py.
-    "reverted_ipsae_min_15",
-    "reverted_ipsae_ab_15",
-    "reverted_ipsae_ba_15",
-    "reverted_iptm",
-    "reverted_ptm",
-    "reverted_actifptm",
-    "reverted_af_rank_score",
-    "reverted_complex_plddt",
-    "reverted_avg_plddt",
-    "reverted_ipae",
-    "reverted_pae_mean",
-    "reverted_pae_pass_frac",
-    # Native-PDB-dependent metrics (require --native-pdb in
-    # compute_metrics.py — reversion.py now passes it).  Without
-    # propagation here the values would be harvested by reversion
-    # but dropped before the aggregator.
-    "reverted_interface_plddt",
-    "reverted_intact_core",
-    "reverted_weighted_jaccard",
-    # Structural-Jaccard fields — reversion.py now computes these per
-    # seed by re-running find_contact_residues_heavy on each reverted
-    # PDB and comparing to the cycle_0 plan's true_interface_idx and
-    # initial_wrong_interface_idx.  Mirrors what
-    # boltz2_negative_steering._write_initial_multiseed_csv does on
-    # the steered side.  Without these the aggregator's
-    # reverted_true_jaccard_median / reverted_wrong_jaccard_median /
-    # reverted_n_shared_*_median / reverted_n_design_interface_residues_median
-    # columns are blank, which in turn means cross_summary's
-    # representative_*_median values can't fall back to the reverted
-    # side for pose_holds rows and the dispersion plots drop those
-    # seeds because tj is None.
-    "reverted_true_jaccard",
-    "reverted_wrong_jaccard",
-    "reverted_n_shared_true",
-    "reverted_n_shared_wrong",
-    "reverted_n_design_interface_residues",
-    "reverted_n_contacts_on_mutated_positions",
-)
+# `_REVERTED_CONFIDENCE_FIELDS` (imported at module top from reversion)
+# is the canonical en-bloc forward set.  Structural RMSDs and
+# contact-flag fields are NOT in it — they are overlaid inline in
+# the finalize / aggregate paths because they also rename to canonical
+# columns on pose_holds rows.  See reversion.py for the rationale and
+# the lockstep requirement with per_seed_records.
 
 
 def _copy_reverted_confidence(dst: Dict, rev: Dict) -> None:
