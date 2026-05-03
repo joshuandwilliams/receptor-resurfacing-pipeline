@@ -26,7 +26,7 @@ Output: survivors_with_orthogonal_metrics.csv with columns:
   af3_nomsa_best_iptm, af3_nomsa_mean_iptm,
   af3_nomsa_n_correct_interface, af3_nomsa_total_predictions,
   af3_nomsa_failures,
-  bsa, interface_plddt, interface_hbonds, biophysical_failures,
+  bsa, interface_hbonds, biophysical_failures,
   sc, rosetta_ddg, rosetta_failures,
   orthogonal_flags, passes_orthogonal_filters
 
