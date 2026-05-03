@@ -80,14 +80,14 @@ params.negsteer_mode                 = "mild"
 params.negsteer_max_mutations        = 6
 params.negsteer_candidate_pool_size  = 10
 params.negsteer_protected_set_source = "design_region_union"
-params.negsteer_n_designs            = 3
+params.negsteer_n_designs            = 4
 params.negsteer_num_seeds            = 3
 params.negsteer_n_cycles             = 1
 
 // ── Boltz prediction hyperparameters ──────────────────────────────────
 // Test defaults match production; lower diffusion_samples/recycling if
 // the test box is slow.
-params.negsteer_diffusion_samples    = 2
+params.negsteer_diffusion_samples    = 5
 params.negsteer_recycling_steps      = 3
 params.negsteer_rmsd_threshold       = 6.0
 params.negsteer_contact_cutoff       = 4.5
@@ -123,7 +123,7 @@ params.contigs                       = "A1-32/10-20/A46-72/6-6 C"
 
 // ── Infrastructure ────────────────────────────────────────────────────
 // params.boltz2_container is inherited from nextflow.config.
-params.max_boltz2_parallel     = 16
+params.max_boltz2_parallel     = 24
 
 // ---------------------------------------------------------------------------
 // Includes

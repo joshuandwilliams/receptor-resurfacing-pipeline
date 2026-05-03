@@ -43,7 +43,7 @@ params.receptor_chain    = "A"
 params.effector_chain    = "C"
 params.contigs           = "A1-32/10-20/A46-72/6-6 C"
 
-params.num_seqs           = 4
+params.num_seqs           = 2
 params.mpnn_sampling_temp = 0.25
 params.rm_aa              = "C"
 params.mpnn_top_n         = 8

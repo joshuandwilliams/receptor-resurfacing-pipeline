@@ -49,16 +49,24 @@ params.outdir         = "${projectDir}/results"
 // upstream test outputs — per-module tests run from committed fixtures.
 params.input_dir = "${projectDir}/data/negsteer_run"
 
-// Chains (must match what negative steering was run with).
-params.receptor_chain = "A"
-params.effector_chain = "B"
-
-// ── Negative controls (Task 6) — OFF for this test ────────────────────
-// test_negative_steering also sets this to false; surface it here so
-// the param is declared even though this test doesn't directly invoke
-// the controls code path (relevant only if the user sets it true and
-// then re-runs; see main.nf for how controls feed cross_sequence_summary).
-params.run_negative_controls = false
+// ── Chain conventions ────────────────────────────────────────────────
+// Per pipeline_notes10 §"chain-param wiring bug":
+//   receptor_chain / effector_chain      — INPUT PDB convention.
+//   rfdiff_output_*_chain                — prediction-PDB convention
+//                                          (always A/B; hardcoded by
+//                                          rfdiffusion_filter.py).
+// Every orthogonal-metrics module operates on prediction PDBs (Boltz
+// canonical_pdb + RFDiffusion split ground_truth — both A/B), so all
+// five — NEGSTEER_INTERFACE_METRICS, EXTRACT_SURVIVOR_MANIFEST,
+// AF3_NOMSA_ON_SURVIVORS, NEGSTEER_BIOPHYSICAL_METRICS,
+// NEGSTEER_ROSETTA_METRICS — read params.rfdiff_output_*_chain.
+// receptor_chain / effector_chain are also set to A/B because this
+// test consumes pre-baked prediction-PDB workdirs only — there is no
+// input PDB present in the fixture.
+params.receptor_chain               = "A"
+params.effector_chain               = "B"
+params.rfdiff_output_receptor_chain = "A"
+params.rfdiff_output_effector_chain = "B"
 
 // ── P0-29 defaults (forwarded to NEGSTEER_INTERFACE_METRICS) ──────────
 params.interface_plddt_trim_threshold = 50.0
