@@ -3,6 +3,12 @@
 Pins the outputs of ``modules/preprocessing.nf``:
 - ``RESOLVE_CONTIGS`` → ``bin/rfdiffusion_contigs.py`` produces ``processed_contigs.txt``.
 - ``EXTRACT_SEQUENCES`` (inline Python in ``modules/preprocessing.nf``) produces ``sequences.json``.
+
+Preprocessing has no per-module test (its outputs are emitted as part of
+upstream stages' fixtures rather than from a dedicated
+``test_preprocessing.nf``). All tests in this file skip cleanly until
+either the full pipeline run reference is retired or a preprocessing
+per-module test is added.
 """
 from __future__ import annotations
 
@@ -10,6 +16,14 @@ import pytest
 
 from tests.characterization.helpers.json_compare import compare_json_deep
 from tests.characterization.helpers.text_compare import compare_text_exact
+
+pytestmark = pytest.mark.skip(
+    reason=(
+        "preprocessing has no per-module reference set; tests deferred until "
+        "the full pipeline run reference is retired or a preprocessing "
+        "per-module test is added."
+    ),
+)
 
 
 @pytest.mark.hpc
