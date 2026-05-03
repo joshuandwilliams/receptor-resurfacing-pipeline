@@ -1,0 +1,87 @@
+{
+  "label": "design_03_s0",
+  "all_labels": [
+    "design_03_s0",
+    "design_03_s1",
+    "design_03_s2"
+  ],
+  "design_idx": 9,
+  "design_workdir": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/4d/8cbef140f997ec888c3c145f1b7269/design_3_seq_1/cycle_0/steered/design_03_s0",
+  "steered_receptor_fasta": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/4d/8cbef140f997ec888c3c145f1b7269/design_3_seq_1/cycle_0/steered/design_03_s0/receptor.fasta",
+  "steered_prediction_pdb": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/4d/8cbef140f997ec888c3c145f1b7269/design_3_seq_1/cycle_0/steered/design_03_s0/prediction.pdb",
+  "reverted_receptor_fasta": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/4d/8cbef140f997ec888c3c145f1b7269/design_3_seq_1/cycle_0/reversions/rev_design_03_s0_s1/receptor.fasta",
+  "positions_to_revert": [
+    5,
+    9
+  ],
+  "applied_reversions": [
+    {
+      "pos1": 5,
+      "steered": "R",
+      "wild_type": "K"
+    },
+    {
+      "pos1": 9,
+      "steered": "R",
+      "wild_type": "K"
+    }
+  ],
+  "steered_ra_eff_vs_truth": 4.995,
+  "steered_contact_residues": [
+    5,
+    9,
+    33,
+    34,
+    35,
+    36,
+    37,
+    38,
+    39,
+    49,
+    51,
+    53,
+    75,
+    76,
+    77,
+    78,
+    79,
+    80,
+    81,
+    82,
+    84
+  ],
+  "cumulative_mutations": [
+    {
+      "pos1": 5,
+      "wt": "K",
+      "mut": "R"
+    },
+    {
+      "pos1": 7,
+      "wt": "V",
+      "mut": "D"
+    },
+    {
+      "pos1": 9,
+      "wt": "K",
+      "mut": "R"
+    },
+    {
+      "pos1": 22,
+      "wt": "M",
+      "mut": "R"
+    },
+    {
+      "pos1": 26,
+      "wt": "A",
+      "mut": "K"
+    },
+    {
+      "pos1": 31,
+      "wt": "V",
+      "mut": "E"
+    }
+  ],
+  "sequence_hash": "07b9c7034880",
+  "seed_index": 1
+}

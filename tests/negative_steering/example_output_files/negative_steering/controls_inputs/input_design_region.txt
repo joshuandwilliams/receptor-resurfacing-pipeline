@@ -1,0 +1,7 @@
+# derived from input structure input_complex.pdb + contigs
+# contigs: A1-32/10-20/A46-72/6-6 C
+# receptor chain: A
+# design region size: 19 residues
+# coordinate system: 1-based positional indices on the receptor
+#                    chain, matching input PDB sequence order
+33,34,35,36,37,38,39,40,41,42,43,44,45,73,74,75,76,77,78

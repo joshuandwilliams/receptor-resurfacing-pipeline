@@ -1,0 +1,8 @@
+{
+  "workdir": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/fe/2fcd71465cb78202bc2014abf89208/input_control_scrambled/cycle_0",
+  "n_contaminated": 0,
+  "n_staged": 0,
+  "pred_receptor_chain": "A",
+  "pred_effector_chain": "B",
+  "entries": []
+}

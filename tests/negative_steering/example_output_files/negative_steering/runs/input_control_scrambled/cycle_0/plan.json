@@ -1,0 +1,342 @@
+{
+  "ground_truth": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/data/input_complex.pdb",
+  "truth_receptor_chain": "A",
+  "truth_effector_chain": "C",
+  "pred_receptor_chain": "A",
+  "pred_effector_chain": "B",
+  "wild_type_receptor_seq": "GLKQKIVIKVAMEGNNCRSKAMALVASTGGVDLDDQLNVSRSKVIVVGYGIDPIKLISALRKKVGDAELLQVEADGAK",
+  "initial_receptor_aligned_effector_rmsd": 39.887,
+  "initial_independent_receptor_rmsd": 5.361,
+  "initial_independent_effector_rmsd": 0.499,
+  "rmsd_threshold": 6.0,
+  "contact_cutoff": 4.5,
+  "max_mutations": 6,
+  "candidate_pool_size": 10,
+  "mode": "mild",
+  "effector_template_cif": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/fe/2fcd71465cb78202bc2014abf89208/input_control_scrambled/cycle_0/effector_template.cif",
+  "n_designs": 1,
+  "num_seeds": 3,
+  "boltz_container": "/hpc-home/jowillia/singularity/Boltz1_Boltz2_Chai1_ColabFold/boltz2_negsteer.img",
+  "recycling_steps": 3,
+  "diffusion_samples": 5,
+  "seed": 0,
+  "no_kernels": true,
+  "receptor_fasta_override": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/fe/2fcd71465cb78202bc2014abf89208/input_control_scrambled/inputs/control_scrambled_receptor.fasta",
+  "effector_fasta_override": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/fe/2fcd71465cb78202bc2014abf89208/input_control_scrambled/inputs/effector.fasta",
+  "designs": [
+    {
+      "index": 0,
+      "name": "design_00_s0",
+      "dir": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/fe/2fcd71465cb78202bc2014abf89208/input_control_scrambled/cycle_0/steered/design_00_s0",
+      "yaml": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/fe/2fcd71465cb78202bc2014abf89208/input_control_scrambled/cycle_0/steered/design_00_s0/input/input.yaml",
+      "total_mutations": 6,
+      "mutated_positions": [
+        19,
+        22,
+        25,
+        26,
+        54,
+        61
+      ],
+      "sequence_group": 0,
+      "seed_index": 0,
+      "boltz_seed": 1
+    },
+    {
+      "index": 1,
+      "name": "design_00_s1",
+      "dir": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/fe/2fcd71465cb78202bc2014abf89208/input_control_scrambled/cycle_0/steered/design_00_s1",
+      "yaml": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/fe/2fcd71465cb78202bc2014abf89208/input_control_scrambled/cycle_0/steered/design_00_s1/input/input.yaml",
+      "total_mutations": 6,
+      "mutated_positions": [
+        19,
+        22,
+        25,
+        26,
+        54,
+        61
+      ],
+      "sequence_group": 0,
+      "seed_index": 1,
+      "boltz_seed": 2
+    },
+    {
+      "index": 2,
+      "name": "design_00_s2",
+      "dir": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/fe/2fcd71465cb78202bc2014abf89208/input_control_scrambled/cycle_0/steered/design_00_s2",
+      "yaml": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/fe/2fcd71465cb78202bc2014abf89208/input_control_scrambled/cycle_0/steered/design_00_s2/input/input.yaml",
+      "total_mutations": 6,
+      "mutated_positions": [
+        19,
+        22,
+        25,
+        26,
+        54,
+        61
+      ],
+      "sequence_group": 0,
+      "seed_index": 2,
+      "boltz_seed": 3
+    }
+  ],
+  "true_interface_idx": [
+    2,
+    4,
+    31,
+    32,
+    34,
+    36,
+    37,
+    38,
+    42,
+    44,
+    46,
+    48,
+    67,
+    68,
+    69,
+    70,
+    71,
+    72,
+    73,
+    74,
+    75,
+    76,
+    77
+  ],
+  "true_interface_source": "pre_computed",
+  "cold_start_seeds": [
+    {
+      "seed_offset": 0,
+      "boltz_seed": 0,
+      "ra_eff": 39.887,
+      "ind_rec": 5.361,
+      "ind_eff": 0.499,
+      "pdb_path": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/fe/2fcd71465cb78202bc2014abf89208/input_control_scrambled/cycle_0/initial_prediction.pdb"
+    },
+    {
+      "seed_offset": 1,
+      "boltz_seed": 1,
+      "ra_eff": 35.494,
+      "ind_rec": 5.433,
+      "ind_eff": 0.574,
+      "pdb_path": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/fe/2fcd71465cb78202bc2014abf89208/input_control_scrambled/cycle_0/initial_prediction_s1.pdb"
+    },
+    {
+      "seed_offset": 2,
+      "boltz_seed": 2,
+      "ra_eff": 38.988,
+      "ind_rec": 4.748,
+      "ind_eff": 0.694,
+      "pdb_path": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/fe/2fcd71465cb78202bc2014abf89208/input_control_scrambled/cycle_0/initial_prediction_s2.pdb"
+    }
+  ],
+  "cold_start_n_clean": 0,
+  "cold_start_all_clean": false,
+  "design_region_idx": [
+    32,
+    33,
+    34,
+    35,
+    36,
+    37,
+    38,
+    39,
+    40,
+    41,
+    42,
+    43,
+    44,
+    72,
+    73,
+    74,
+    75,
+    76,
+    77
+  ],
+  "protected_set_source": "design_region_union",
+  "protected_set_idx": [
+    2,
+    4,
+    31,
+    32,
+    33,
+    34,
+    35,
+    36,
+    37,
+    38,
+    39,
+    40,
+    41,
+    42,
+    43,
+    44,
+    46,
+    48,
+    67,
+    68,
+    69,
+    70,
+    71,
+    72,
+    73,
+    74,
+    75,
+    76,
+    77
+  ],
+  "initial_wrong_interface_idx": [
+    2,
+    19,
+    21,
+    22,
+    23,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    48,
+    54,
+    58,
+    61,
+    62
+  ],
+  "candidate_pool": [
+    19,
+    21,
+    22,
+    25,
+    26,
+    30,
+    54,
+    58,
+    61
+  ],
+  "effector_interface_residues": [
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    35,
+    36,
+    37,
+    40,
+    44,
+    45,
+    46,
+    47,
+    48,
+    49
+  ],
+  "effector_interface_atom_cutoff_angstroms": 8.0,
+  "effector_interface_atoms": [
+    [
+      10,
+      "any"
+    ],
+    [
+      11,
+      "any"
+    ],
+    [
+      12,
+      "any"
+    ],
+    [
+      13,
+      "any"
+    ],
+    [
+      14,
+      "any"
+    ],
+    [
+      15,
+      "any"
+    ],
+    [
+      16,
+      "any"
+    ],
+    [
+      17,
+      "any"
+    ],
+    [
+      18,
+      "any"
+    ],
+    [
+      19,
+      "any"
+    ],
+    [
+      20,
+      "any"
+    ],
+    [
+      21,
+      "any"
+    ],
+    [
+      35,
+      "any"
+    ],
+    [
+      36,
+      "any"
+    ],
+    [
+      37,
+      "any"
+    ],
+    [
+      40,
+      "any"
+    ],
+    [
+      44,
+      "any"
+    ],
+    [
+      45,
+      "any"
+    ],
+    [
+      46,
+      "any"
+    ],
+    [
+      47,
+      "any"
+    ],
+    [
+      48,
+      "any"
+    ],
+    [
+      49,
+      "any"
+    ]
+  ],
+  "n_protected": 4,
+  "interfaces_overlap": 0.2222,
+  "second_shell_fallback_used": false,
+  "second_shell_pool_size": 0,
+  "max_mutations_effective": 6,
+  "n_unique_sequences": 1,
+  "total_predictions": 3
+}

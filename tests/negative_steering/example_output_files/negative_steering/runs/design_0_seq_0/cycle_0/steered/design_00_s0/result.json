@@ -1,0 +1,26 @@
+{
+  "index": 0,
+  "design": "design_00_s0",
+  "total_mutations": 6,
+  "receptor_aligned_effector_rmsd": 28.826,
+  "independent_receptor_rmsd": 3.286,
+  "independent_effector_rmsd": 10.005,
+  "wrong_jaccard": 0.10344827586206896,
+  "true_jaccard": 0.047619047619047616,
+  "n_shared_wrong": 3,
+  "n_shared_true": 1,
+  "n_design_interface_residues": 9,
+  "steered_interface_idx": [
+    8,
+    10,
+    11,
+    12,
+    39,
+    40,
+    41,
+    68,
+    70
+  ],
+  "pdb": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/56/9c58e4e8e413aab432d2e90419d00b/design_0_seq_0/cycle_0/steered/design_00_s0/prediction.pdb",
+  "status": "ok"
+}

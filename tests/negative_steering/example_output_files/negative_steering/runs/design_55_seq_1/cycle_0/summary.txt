@@ -1,0 +1,37 @@
+Boltz negative steering — summary
+=================================
+Ground truth:           /hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/data/design_pdbs/design_55.pdb
+Receptor chain (truth): A
+Effector chain (truth): B
+Contact cutoff:         4.5 Å (heavy-atom)
+Effector template used: yes
+Steering mode:          mild
+Max mutations / design: 6
+Candidate pool size:    10
+Seeds per sequence:     3
+Unique sequences:       4
+Designs predicted:      12
+Designs intact:         9 of 12  (independent_receptor_rmsd ≤ 5.0 Å AND independent_effector_rmsd ≤ 5.0 Å)
+
+True binding site:      15 residue(s)
+Initial wrong site:     28 residue(s)
+Protected (overlap):    6 residue(s)
+Candidate pool:         9 residue(s)
+
+Initial receptor_aligned_effector_rmsd: 32.390 Å
+Initial independent_receptor_rmsd:      4.443 Å
+Initial independent_effector_rmsd:      0.560 Å
+
+Best overall (any fold): 3.552 Å (design_03_s2)
+  delta_receptor_aligned_effector_rmsd: +28.838 Å
+  independent_receptor_rmsd:            3.847 Å
+  independent_effector_rmsd:            0.385 Å
+  wrong_jaccard:                        0.243 (9 of 18 shared with initial wrong site)
+  true_jaccard:                         0.500 (11 of 18 shared with true site)
+
+Best with intact proteins: 3.552 Å (design_03_s2)
+  delta_receptor_aligned_effector_rmsd: +28.838 Å
+  independent_receptor_rmsd:            3.847 Å
+  independent_effector_rmsd:            0.385 Å
+  wrong_jaccard:                        0.243 (9 of 18 shared with initial wrong site)
+  true_jaccard:                         0.500 (11 of 18 shared with true site)

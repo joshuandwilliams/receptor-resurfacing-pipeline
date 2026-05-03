@@ -1,0 +1,17 @@
+{
+  "cycle": 0,
+  "parent_pathway": null,
+  "novelty_cutoff": 10.0,
+  "max_passing": 5,
+  "n_generated": 3,
+  "n_intact": 0,
+  "n_novel": 0,
+  "n_selected": 0,
+  "pose_holds_count": 0,
+  "pose_collapses_count": 0,
+  "new_contamination_count": 0,
+  "reverted_labels": [],
+  "dropped_labels": [],
+  "all_candidates": [],
+  "selected": []
+}

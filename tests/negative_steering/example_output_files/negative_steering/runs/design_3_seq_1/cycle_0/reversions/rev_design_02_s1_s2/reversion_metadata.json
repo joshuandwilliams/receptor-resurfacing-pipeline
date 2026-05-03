@@ -1,0 +1,93 @@
+{
+  "label": "design_02_s1",
+  "all_labels": [
+    "design_02_s1"
+  ],
+  "design_idx": 7,
+  "design_workdir": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/4d/8cbef140f997ec888c3c145f1b7269/design_3_seq_1/cycle_0/steered/design_02_s1",
+  "steered_receptor_fasta": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/4d/8cbef140f997ec888c3c145f1b7269/design_3_seq_1/cycle_0/steered/design_02_s1/receptor.fasta",
+  "steered_prediction_pdb": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/4d/8cbef140f997ec888c3c145f1b7269/design_3_seq_1/cycle_0/steered/design_02_s1/prediction.pdb",
+  "reverted_receptor_fasta": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/4d/8cbef140f997ec888c3c145f1b7269/design_3_seq_1/cycle_0/reversions/rev_design_02_s1_s2/receptor.fasta",
+  "positions_to_revert": [
+    5,
+    9,
+    22
+  ],
+  "applied_reversions": [
+    {
+      "pos1": 5,
+      "steered": "E",
+      "wild_type": "K"
+    },
+    {
+      "pos1": 9,
+      "steered": "R",
+      "wild_type": "K"
+    },
+    {
+      "pos1": 22,
+      "steered": "R",
+      "wild_type": "M"
+    }
+  ],
+  "steered_ra_eff_vs_truth": 5.999,
+  "steered_contact_residues": [
+    2,
+    3,
+    5,
+    9,
+    22,
+    33,
+    34,
+    35,
+    36,
+    37,
+    38,
+    39,
+    40,
+    49,
+    51,
+    53,
+    77,
+    78,
+    79,
+    80,
+    81,
+    82,
+    84
+  ],
+  "cumulative_mutations": [
+    {
+      "pos1": 5,
+      "wt": "K",
+      "mut": "E"
+    },
+    {
+      "pos1": 7,
+      "wt": "V",
+      "mut": "E"
+    },
+    {
+      "pos1": 9,
+      "wt": "K",
+      "mut": "R"
+    },
+    {
+      "pos1": 22,
+      "wt": "M",
+      "mut": "R"
+    },
+    {
+      "pos1": 26,
+      "wt": "A",
+      "mut": "R"
+    },
+    {
+      "pos1": 32,
+      "wt": "D",
+      "mut": "R"
+    }
+  ],
+  "sequence_hash": "d630d822ad6f",
+  "seed_index": 2
+}

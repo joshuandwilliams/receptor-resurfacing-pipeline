@@ -1,0 +1,30 @@
+# derived from input structure input_complex.pdb
+# heavy-atom contacts <= 4.5 Angstroms
+# receptor chain: A
+# effector chain: C
+# n contacts: 23
+# coordinate system: 0-based positional indices on the receptor chain,
+#                    matching input PDB sequence order
+2
+4
+31
+32
+34
+36
+37
+38
+42
+44
+46
+48
+67
+68
+69
+70
+71
+72
+73
+74
+75
+76
+77

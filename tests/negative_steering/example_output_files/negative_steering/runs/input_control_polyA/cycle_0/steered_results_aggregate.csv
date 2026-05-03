@@ -1,0 +1,2 @@
+sequence_group,n_seeds,total_mutations,representative_design,receptor_aligned_effector_rmsd_mean,receptor_aligned_effector_rmsd_std,receptor_aligned_effector_rmsd_min,receptor_aligned_effector_rmsd_max,independent_receptor_rmsd_mean,independent_receptor_rmsd_std,independent_receptor_rmsd_min,independent_receptor_rmsd_max,independent_effector_rmsd_mean,independent_effector_rmsd_std,independent_effector_rmsd_min,independent_effector_rmsd_max,n_intact_seeds,any_seed_intact
+0,3,6,design_00_s0,15.184,7.2439,7.037,20.899,13.1887,0.8273,12.332,13.983,0.913,0.3098,0.569,1.17,0,0

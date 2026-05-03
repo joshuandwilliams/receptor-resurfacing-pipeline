@@ -1,0 +1,20 @@
+# derived from rfdiffusion_metrics.json
+# design: design_55
+# source field: receptor_contact_residues (15 residues)
+# coordinate system: 0-based positional indices on the receptor chain,
+#                    matching prediction PDB sequence order
+2
+32
+34
+36
+38
+52
+74
+75
+76
+77
+78
+79
+81
+82
+83

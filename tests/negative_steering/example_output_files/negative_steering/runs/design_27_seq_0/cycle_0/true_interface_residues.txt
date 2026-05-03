@@ -1,0 +1,17 @@
+# 1-based receptor residue, wt one-letter, min_heavy_dist_to_eff (Å) — protected from mutation
+3	K	nan
+33	A	nan
+35	Y	nan
+37	D	nan
+40	T	nan
+46	V	nan
+68	L	nan
+69	L	nan
+70	Q	nan
+71	V	nan
+72	G	nan
+73	G	nan
+74	M	nan
+75	E	nan
+76	A	nan
+77	K	nan

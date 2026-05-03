@@ -1,0 +1,9 @@
+{
+  "cycle": 0,
+  "parent_pathway": null,
+  "skip_steering": true,
+  "exhausted": true,
+  "n_generated": 0,
+  "n_intact": 0,
+  "intact_candidates": []
+}

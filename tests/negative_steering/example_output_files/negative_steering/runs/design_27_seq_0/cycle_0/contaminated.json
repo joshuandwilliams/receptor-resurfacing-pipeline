@@ -1,0 +1,222 @@
+{
+  "cycle": 0,
+  "parent_pathway": null,
+  "n_checked": 4,
+  "n_contaminated": 4,
+  "contaminated": [
+    {
+      "label": "design_00_s0",
+      "design_idx": 0,
+      "seed_index": 0,
+      "design_workdir": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/70/64ee45c154af71f7e68c7ce9e3157b/design_27_seq_0/cycle_0/steered/design_00_s0",
+      "cumulative_mutations": [
+        [
+          5,
+          "K",
+          "E"
+        ],
+        [
+          26,
+          "A",
+          "R"
+        ],
+        [
+          32,
+          "D",
+          "K"
+        ]
+      ],
+      "positions_to_revert": [
+        5,
+        32
+      ],
+      "steered_ra_eff_vs_truth": 2.953,
+      "steered_contact_residues": [
+        4,
+        5,
+        9,
+        32,
+        33,
+        35,
+        36,
+        37,
+        40,
+        44,
+        46,
+        48,
+        67,
+        68,
+        69,
+        70,
+        71,
+        72,
+        73,
+        74,
+        75,
+        76,
+        77
+      ]
+    },
+    {
+      "label": "design_00_s1",
+      "design_idx": 1,
+      "seed_index": 1,
+      "design_workdir": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/70/64ee45c154af71f7e68c7ce9e3157b/design_27_seq_0/cycle_0/steered/design_00_s1",
+      "cumulative_mutations": [
+        [
+          5,
+          "K",
+          "E"
+        ],
+        [
+          26,
+          "A",
+          "R"
+        ],
+        [
+          32,
+          "D",
+          "K"
+        ]
+      ],
+      "positions_to_revert": [
+        5,
+        32
+      ],
+      "steered_ra_eff_vs_truth": 2.772,
+      "steered_contact_residues": [
+        2,
+        5,
+        9,
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        40,
+        44,
+        45,
+        46,
+        48,
+        67,
+        68,
+        69,
+        70,
+        71,
+        72,
+        73,
+        74,
+        75
+      ]
+    },
+    {
+      "label": "design_00_s2",
+      "design_idx": 2,
+      "seed_index": 2,
+      "design_workdir": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/70/64ee45c154af71f7e68c7ce9e3157b/design_27_seq_0/cycle_0/steered/design_00_s2",
+      "cumulative_mutations": [
+        [
+          5,
+          "K",
+          "E"
+        ],
+        [
+          26,
+          "A",
+          "R"
+        ],
+        [
+          32,
+          "D",
+          "K"
+        ]
+      ],
+      "positions_to_revert": [
+        5,
+        32
+      ],
+      "steered_ra_eff_vs_truth": 3.021,
+      "steered_contact_residues": [
+        2,
+        4,
+        5,
+        9,
+        32,
+        33,
+        35,
+        36,
+        37,
+        39,
+        40,
+        44,
+        46,
+        48,
+        67,
+        68,
+        69,
+        70,
+        71,
+        72,
+        73,
+        74,
+        75
+      ]
+    },
+    {
+      "label": "design_03_s1",
+      "design_idx": 10,
+      "seed_index": 1,
+      "design_workdir": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/70/64ee45c154af71f7e68c7ce9e3157b/design_27_seq_0/cycle_0/steered/design_03_s1",
+      "cumulative_mutations": [
+        [
+          5,
+          "K",
+          "E"
+        ],
+        [
+          22,
+          "M",
+          "R"
+        ],
+        [
+          32,
+          "D",
+          "R"
+        ]
+      ],
+      "positions_to_revert": [
+        5,
+        22,
+        32
+      ],
+      "steered_ra_eff_vs_truth": 4.682,
+      "steered_contact_residues": [
+        2,
+        5,
+        9,
+        22,
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        38,
+        39,
+        40,
+        42,
+        46,
+        67,
+        68,
+        69,
+        70,
+        71,
+        72,
+        73,
+        74,
+        77
+      ]
+    }
+  ]
+}

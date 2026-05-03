@@ -1,0 +1,139 @@
+<!--
+  ~ Copyright 2013-2024, Seqera Labs
+  ~
+  ~ Licensed under the Apache License, Version 2.0 (the "License");
+  ~ you may not use this file except in compliance with the License.
+  ~ You may obtain a copy of the License at
+  ~
+  ~     http://www.apache.org/licenses/LICENSE-2.0
+  ~
+  ~ Unless required by applicable law or agreed to in writing, software
+  ~ distributed under the License is distributed on an "AS IS" BASIS,
+  ~ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  ~ See the License for the specific language governing permissions and
+  ~ limitations under the License.
+  -->
+<html>
+<head>
+<meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1, maximum-scale=1">
+</head>
+<body>
+<pre class="mermaid" style="text-align: center;">
+%%{
+  init: {
+    'theme': 'base',
+    'themeVariables': {
+      'primaryColor': '#B6ECE2',
+      'primaryTextColor': '#160F26',
+      'primaryBorderColor': '#065647',
+      'lineColor': '#545555',
+      'clusterBkg': '#BABCBD22',
+      'clusterBorder': '#DDDEDE',
+      'fontFamily': 'arial'
+    }
+  }
+}%%
+flowchart TB
+    subgraph " "
+    v0["Channel.fromPath"]
+    v1["Channel.fromPath"]
+    v4["Channel.fromPath"]
+    v8["design_region_script"]
+    v9["true_interface_script"]
+    v14["receptor_chain"]
+    v15["effector_chain"]
+    v16["plan_extra_args"]
+    v17["postprocess_rmsd_threshold"]
+    v18["postprocess_metric_column"]
+    v19["postprocess_contact_cutoff"]
+    v20["orchestrator_script"]
+    v22["Channel.fromPath"]
+    v23["contigs_ch"]
+    v24["receptor_chain"]
+    v25["effector_chain"]
+    v26["contact_cutoff"]
+    v27["derive_script"]
+    v29["Channel.of"]
+    v37["receptor_chain"]
+    v38["effector_chain"]
+    v39["plan_extra_args"]
+    v40["postprocess_rmsd_threshold"]
+    v41["postprocess_metric_column"]
+    v42["postprocess_contact_cutoff"]
+    v43["build_script"]
+    v44["orchestrator_script"]
+    v48["summary_script"]
+    v51["plots_script"]
+    v54["plots_script"]
+    end
+    v10(["NEGSTEER_DERIVE_INDICES"])
+    v21(["NEGSTEER_RUN_ONE"])
+    v28(["DERIVE_INPUT_INDICES"])
+    v45(["NEGSTEER_CONTROLS"])
+    v49(["NEGSTEER_CROSS_SEQUENCE"])
+    v52(["NEGSTEER_PLOTS"])
+    subgraph " "
+    v53[" "]
+    v56[" "]
+    end
+    v55(["NEGSTEER_WITHIN_SEQUENCE_PLOTS"])
+    v2(( ))
+    v7(( ))
+    v30(( ))
+    v46(( ))
+    v50(( ))
+    v0 --> v2
+    v1 --> v7
+    v4 --> v2
+    v8 --> v10
+    v9 --> v10
+    v2 --> v10
+    v7 --> v10
+    v10 --> v2
+    v14 --> v21
+    v15 --> v21
+    v16 --> v21
+    v17 --> v21
+    v18 --> v21
+    v19 --> v21
+    v20 --> v21
+    v2 --> v21
+    v21 --> v46
+    v22 --> v28
+    v23 --> v28
+    v24 --> v28
+    v25 --> v28
+    v26 --> v28
+    v27 --> v28
+    v28 --> v30
+    v28 --> v50
+    v29 --> v30
+    v37 --> v45
+    v38 --> v45
+    v39 --> v45
+    v40 --> v45
+    v41 --> v45
+    v42 --> v45
+    v43 --> v45
+    v44 --> v45
+    v30 --> v45
+    v45 --> v46
+    v48 --> v49
+    v46 --> v49
+    v49 --> v52
+    v49 --> v55
+    v51 --> v52
+    v46 --> v52
+    v50 --> v52
+    v52 --> v53
+    v54 --> v55
+    v46 --> v55
+    v55 --> v56
+
+</pre>
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  mermaid.initialize({ startOnLoad: true, maxTextSize: Number.MAX_SAFE_INTEGER, maxEdges: Number.MAX_SAFE_INTEGER });
+</script>
+</body>
+</html>
