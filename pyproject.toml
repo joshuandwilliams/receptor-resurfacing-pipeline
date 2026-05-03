@@ -16,6 +16,8 @@ test = [
     "Pillow>=10.0",
     "scikit-image>=0.21",
 ]
+experiments = [
+]
 
 [tool.setuptools]
 packages = []

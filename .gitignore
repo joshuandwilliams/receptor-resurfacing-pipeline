@@ -83,7 +83,14 @@ nxf_home/
 # ----- Archive / scratch directories -----
 archive/
 scratch/
-experiments/
+
+# ----- Experiments — campaign outputs -----
+experiments/campaigns/*/results/
+experiments/campaigns/*/analyses/
+experiments/campaigns/*/work/
+experiments/campaigns/*/.nextflow*
+experiments/campaigns/*/*.out
+experiments/campaigns/*/*.err
 
 # ----- Large data that shouldn't be tracked -----
 # Be cautious — your tests/ directory has small PDB files
