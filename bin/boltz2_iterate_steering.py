@@ -458,6 +458,58 @@ def append_cycle_statistics(experiment_root: Path,
 
 
 # ───────────────────────────────────────────────────────────────────────
+# Pathway resubmission
+# ───────────────────────────────────────────────────────────────────────
+def resubmit_pathway_chains(
+    *,
+    submit_script: Path,
+    selected: List[Dict],
+    parent_label: Optional[str],
+    cycle: int,
+    experiment_root: Path,
+    max_cycles: int,
+    max_passing: int,
+    novelty_cutoff: float,
+    n_designs: Optional[int],
+    announce: str,
+    failure_prefix: str,
+) -> None:
+    """sbatch one cycle-(cycle+1) follow-up chain per selected design.
+
+    Shared scaffolding for cmd_iterate_collect, cmd_iterate_collect_finalize,
+    cmd_kickoff, and cmd_kickoff_finalize.  Prints ``announce``, then for
+    each candidate builds the standard sbatch command and runs it.  A
+    subprocess failure logs "{failure_prefix} {label}: {e}" to stderr but
+    does NOT abort the rest of the batch — losing one resubmission is
+    preferable to losing the whole pathway.
+
+    The caller is responsible for verifying ``submit_script.exists()`` and
+    handling the missing-script case (the warning wording differs between
+    iterate and kickoff call sites, which is why that check stays at the
+    caller).
+    """
+    print(announce)
+    for sel in selected:
+        new_label = make_pathway_label(parent_label, cycle, sel["design_idx"])
+        cmd = [
+            str(submit_script),
+            "--experiment-root", str(experiment_root),
+            "--parent-pathway", new_label,
+            "--cycle", str(cycle + 1),
+            "--max-cycles", str(max_cycles),
+            "--max-passing", str(max_passing),
+            "--novelty-cutoff", str(novelty_cutoff),
+        ]
+        if n_designs is not None:
+            cmd.extend(["--n-designs", str(n_designs)])
+        print(f"    -> {' '.join(cmd)}")
+        try:
+            subprocess.run(cmd, check=True)
+        except subprocess.CalledProcessError as e:
+            print(f"    {failure_prefix} {new_label}: {e}", file=sys.stderr)
+
+
+# ───────────────────────────────────────────────────────────────────────
 # Subcommand: iterate-plan
 # ───────────────────────────────────────────────────────────────────────
 def cmd_iterate_plan(args: argparse.Namespace) -> int:
@@ -1103,26 +1155,19 @@ def cmd_iterate_collect(args: argparse.Namespace) -> int:
               f"survivors will not be iterated further", file=sys.stderr)
         return 0
 
-    print(f"  resubmitting {n_selected} cycle-{cycle + 1} chain(s)")
-    for sel in selected:
-        new_label = make_pathway_label(parent_label, cycle, sel["design_idx"])
-        cmd = [
-            str(submit_script),
-            "--experiment-root", str(experiment_root),
-            "--parent-pathway", new_label,
-            "--cycle", str(cycle + 1),
-            "--max-cycles", str(max_cycles),
-            "--max-passing", str(max_passing),
-            "--novelty-cutoff", str(novelty_cutoff),
-        ]
-        if args.n_designs is not None:
-            cmd.extend(["--n-designs", str(args.n_designs)])
-        print(f"    -> {' '.join(cmd)}")
-        try:
-            subprocess.run(cmd, check=True)
-        except subprocess.CalledProcessError as e:
-            print(f"    FAILED to resubmit {new_label}: {e}", file=sys.stderr)
-
+    resubmit_pathway_chains(
+        submit_script=submit_script,
+        selected=selected,
+        parent_label=parent_label,
+        cycle=cycle,
+        experiment_root=experiment_root,
+        max_cycles=max_cycles,
+        max_passing=max_passing,
+        novelty_cutoff=novelty_cutoff,
+        n_designs=args.n_designs,
+        announce=f"  resubmitting {n_selected} cycle-{cycle + 1} chain(s)",
+        failure_prefix="FAILED to resubmit",
+    )
     return 0
 
 
@@ -1870,26 +1915,19 @@ def cmd_iterate_collect_finalize(args: argparse.Namespace) -> int:
               f"survivors will not be iterated further", file=sys.stderr)
         return 0
 
-    print(f"  resubmitting {n_selected} cycle-{cycle + 1} chain(s)")
-    for sel in selected:
-        new_label = make_pathway_label(parent_label, cycle, sel["design_idx"])
-        cmd = [
-            str(submit_script),
-            "--experiment-root", str(experiment_root),
-            "--parent-pathway", new_label,
-            "--cycle", str(cycle + 1),
-            "--max-cycles", str(max_cycles),
-            "--max-passing", str(max_passing),
-            "--novelty-cutoff", str(novelty_cutoff),
-        ]
-        if args.n_designs is not None:
-            cmd.extend(["--n-designs", str(args.n_designs)])
-        print(f"    -> {' '.join(cmd)}")
-        try:
-            subprocess.run(cmd, check=True)
-        except subprocess.CalledProcessError as e:
-            print(f"    FAILED to resubmit {new_label}: {e}", file=sys.stderr)
-
+    resubmit_pathway_chains(
+        submit_script=submit_script,
+        selected=selected,
+        parent_label=parent_label,
+        cycle=cycle,
+        experiment_root=experiment_root,
+        max_cycles=max_cycles,
+        max_passing=max_passing,
+        novelty_cutoff=novelty_cutoff,
+        n_designs=args.n_designs,
+        announce=f"  resubmitting {n_selected} cycle-{cycle + 1} chain(s)",
+        failure_prefix="FAILED to resubmit",
+    )
     return 0
 
 
@@ -2088,27 +2126,19 @@ def cmd_kickoff(args: argparse.Namespace) -> int:
               file=sys.stderr)
         return 0
 
-    print(f"  submitting {n_selected} cycle-1 chain(s)")
-    for sel in selected:
-        new_label = make_pathway_label(None, 0, sel["design_idx"])
-        cmd = [
-            str(submit_script),
-            "--experiment-root", str(experiment_root),
-            "--parent-pathway", new_label,
-            "--cycle", "1",
-            "--max-cycles", str(max_cycles),
-            "--max-passing", str(max_passing),
-            "--novelty-cutoff", str(novelty_cutoff),
-        ]
-        if args.n_designs is not None:
-            cmd.extend(["--n-designs", str(args.n_designs)])
-        print(f"    -> {' '.join(cmd)}")
-        try:
-            subprocess.run(cmd, check=True)
-        except subprocess.CalledProcessError as e:
-            print(f"    FAILED to submit cycle 1 for {new_label}: {e}",
-                  file=sys.stderr)
-
+    resubmit_pathway_chains(
+        submit_script=submit_script,
+        selected=selected,
+        parent_label=None,
+        cycle=0,
+        experiment_root=experiment_root,
+        max_cycles=max_cycles,
+        max_passing=max_passing,
+        novelty_cutoff=novelty_cutoff,
+        n_designs=args.n_designs,
+        announce=f"  submitting {n_selected} cycle-1 chain(s)",
+        failure_prefix="FAILED to submit cycle 1 for",
+    )
     return 0
 
 
@@ -2451,27 +2481,19 @@ def cmd_kickoff_finalize(args: argparse.Namespace) -> int:
               file=sys.stderr)
         return 0
 
-    print(f"  submitting {n_selected} cycle-1 chain(s)")
-    for sel in selected:
-        new_label = make_pathway_label(None, 0, sel["design_idx"])
-        cmd = [
-            str(submit_script),
-            "--experiment-root", str(experiment_root),
-            "--parent-pathway", new_label,
-            "--cycle", "1",
-            "--max-cycles", str(max_cycles),
-            "--max-passing", str(max_passing),
-            "--novelty-cutoff", str(novelty_cutoff),
-        ]
-        if args.n_designs is not None:
-            cmd.extend(["--n-designs", str(args.n_designs)])
-        print(f"    -> {' '.join(cmd)}")
-        try:
-            subprocess.run(cmd, check=True)
-        except subprocess.CalledProcessError as e:
-            print(f"    FAILED to submit cycle 1 for {new_label}: {e}",
-                  file=sys.stderr)
-
+    resubmit_pathway_chains(
+        submit_script=submit_script,
+        selected=selected,
+        parent_label=None,
+        cycle=0,
+        experiment_root=experiment_root,
+        max_cycles=max_cycles,
+        max_passing=max_passing,
+        novelty_cutoff=novelty_cutoff,
+        n_designs=args.n_designs,
+        announce=f"  submitting {n_selected} cycle-1 chain(s)",
+        failure_prefix="FAILED to submit cycle 1 for",
+    )
     return 0
 
 
