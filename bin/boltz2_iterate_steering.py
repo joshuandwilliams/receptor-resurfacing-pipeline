@@ -4915,6 +4915,358 @@ def cmd_aggregate_per_sequence(args: argparse.Namespace) -> int:
     return 0
 
 
+def _passes_final_metrics_filter(row: Dict, args: argparse.Namespace,
+                                  metric_col: str, threshold: float,
+                                  skip_steering_cycle0: bool) -> bool:
+    """Apply the cmd_compute_final_metrics passing-row filter to one row."""
+    # P0.2 + P0-audit: --populate-all truly means "populate every
+    # row" — including rows dropped by reversion verdict routing.
+    # Per-seed aggregation requires every seed's steered_*
+    # confidence metrics so the median across seeds is meaningful;
+    # skipping reversion_dropped rows would leave the dropped
+    # seeds as holes in the per-seed CSV and bias the aggregate.
+    if args.populate_all:
+        return True
+    # Default (no --populate-all): skip rows dropped by reversion
+    # verdict routing — confidence metrics on a discarded
+    # prediction are wasted work.  pose_holds rows are NOT
+    # dropped (reversion_dropped == 0); we still compute steered_*
+    # cm metrics on them so the CSV shows what the steered
+    # prediction looked like before reversion.
+    try:
+        if int(row.get("reversion_dropped", "0") or "0") == 1:
+            return False
+    except (TypeError, ValueError):
+        pass
+    # Skip_steering exemption: include the initial row(s) if their
+    # parent workdir had skip_steering=true.  Applies only to
+    # cycle-0 initial baselines (cycle-1+ rows never have
+    # design=="initial").  Multi-seed cold-start (notes12) writes
+    # additional rows with design names "initial_s1", "initial_s2",
+    # ... — all are baseline rows that need confidence metrics.
+    _design = row.get("design", "")
+    if (skip_steering_cycle0
+            and (_design == "initial" or _design.startswith("initial_s"))
+            and str(row.get("cycle", "0")) == "0"):
+        if args.require_intact:
+            try:
+                if int(row.get("steered_receptor_intact", "0") or "0") != 1:
+                    return False
+            except (TypeError, ValueError):
+                return False
+        return True
+    # Require steered_receptor_intact == 1 unless explicitly disabled.
+    if args.require_intact:
+        try:
+            if int(row.get("steered_receptor_intact", "0") or "0") != 1:
+                return False
+        except (TypeError, ValueError):
+            return False
+    v = _float_or_none(row.get(metric_col))
+    if v is None:
+        return False
+    return v < threshold
+
+
+def _resume_key_for_row(row: Dict) -> str:
+    """Stable per-design resume key (pdb path is unique per design)."""
+    # Resume key is the absolute pdb path because the `pathway` field
+    # is shared across all cycle-0 designs (they all get the literal
+    # string "cycle_0" from cmd_aggregate, which would collide).  The
+    # pdb path is unique per design.  Falls back to pathway then to
+    # an empty string for safety.
+    return row.get("pdb") or row.get("pathway") or ""
+
+
+def _load_existing_metrics_rows(output_csv: Path,
+                                 prefixed_metric_keys: List[str]) -> Dict[str, Dict]:
+    """Load existing-output rows keyed by resume key, keeping only those with at least one populated metric."""
+    existing_by_key: Dict[str, Dict] = {}
+    if not output_csv.exists():
+        return existing_by_key
+    with open(output_csv) as f:
+        er = csv.DictReader(f)
+        for row in er:
+            key = _resume_key_for_row(row)
+            if not key:
+                continue
+            # Only treat as "done" if at least one metric field is non-empty.
+            has_any = any(row.get(k, "") not in ("", None)
+                          for k in prefixed_metric_keys)
+            if has_any:
+                existing_by_key[key] = row
+    return existing_by_key
+
+
+def _classify_steered_confidence_flag(
+    row: Dict,
+    flag_pass_frac_min: float,
+    flag_iptm_min: float,
+    flag_complex_plddt_min: float,
+    flag_ipae_max: float,
+) -> str:
+    """Classify steered confidence flag (ok, single trigger, or multiple); '' for rows without metrics."""
+    ipsae = _float_or_none(row.get("steered_ipsae_min"))
+    if ipsae is None:
+        # No metrics — nothing to classify.
+        return ""
+    triggered = []
+    pf = _float_or_none(row.get("steered_pae_pass_frac"))
+    if pf is not None and pf < flag_pass_frac_min:
+        triggered.append("low_pass_frac")
+    ip = _float_or_none(row.get("steered_iptm"))
+    if ip is not None and ip < flag_iptm_min:
+        triggered.append("low_iptm")
+    cp = _float_or_none(row.get("steered_complex_plddt"))
+    if cp is not None and cp < flag_complex_plddt_min:
+        triggered.append("low_plddt")
+    ipae = _float_or_none(row.get("steered_ipae"))
+    if ipae is not None and ipae > flag_ipae_max:
+        triggered.append("high_ipae")
+    if not triggered:
+        return "ok"
+    if len(triggered) == 1:
+        return triggered[0]
+    return "multiple"
+
+
+def _write_metrics_csv(output_csv: Path, joined_rows: List[Dict]) -> None:
+    """Write joined rows to output_csv using canonical Block A/B/C/End column order."""
+    fieldnames = _aggregate_csv_fieldnames(joined_rows)
+    with open(output_csv, "w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
+        w.writeheader()
+        for r2 in joined_rows:
+            w.writerow(r2)
+
+
+def _process_passing_row(
+    row: Dict,
+    args: argparse.Namespace,
+    prefixed_metric_keys: List[str],
+    metric_keys_raw: List[str],
+    metric_key_prefix: str,
+    existing_by_key: Dict[str, Dict],
+    scratch_dir: Path,
+    compute_metrics_script: Path,
+    cycle_0_plan: Dict,
+    cycle_0_plan_path: Path,
+    pred_rec_chain: str,
+    pred_eff_chain: str,
+    model_name: str,
+    metric_col: str,
+    passing_progress: int,
+    n_passing_total: int,
+) -> Tuple[Dict, str]:
+    """Process one passing row: returns (out_row, status) where status is 'resumed', 'computed', or 'failed'."""
+    pathway_key = _resume_key_for_row(row)
+    # pathway_label kept for human-readable progress messages
+    pathway_label = row.get("pathway") or row.get("pdb") or "?"
+    pdb_path_str = row.get("pdb", "")
+    pdb_path = Path(pdb_path_str) if pdb_path_str else None
+
+    # Resume.  Take the CURRENT base row (which may have fresh
+    # columns like mutations_aa, rank_by_truth, or new derived
+    # columns that a previous run didn't have) and overlay just
+    # the steered_* / reverted_* metric values from the cached row onto it.  This
+    # prevents the resume path from stomping fresh base columns
+    # with stale data from an older output CSV.
+    if args.skip_existing and pathway_key in existing_by_key:
+        cached = existing_by_key[pathway_key]
+        merged = dict(row)  # start from fresh base row
+        for k in prefixed_metric_keys:
+            v = cached.get(k, "")
+            if v not in ("", None):
+                merged[k] = v
+        # Also carry over steered_error if it was set (usually blank
+        # on success, but preserve failure state for diagnostics).
+        if cached.get("steered_error"):
+            merged["steered_error"] = cached["steered_error"]
+        return merged, "resumed"
+
+    out_row = dict(row)
+    for k in prefixed_metric_keys:
+        out_row.setdefault(k, "")
+    out_row.setdefault("steered_error", "")
+
+    if pdb_path is None or not pdb_path.exists():
+        msg = f"pdb not found: {pdb_path_str}"
+        print(f"  [{passing_progress}/{n_passing_total}] {pathway_label}: SKIP ({msg})")
+        out_row["steered_error"] = msg
+        return out_row, "failed"
+
+    # compute_metrics.py's Boltz-2 parser looks for
+    # confidence_<stem>.json, pae_<stem>.npz, plddt_<stem>.npz
+    # alongside each PDB.  The steering pipeline copies the chosen
+    # Boltz output to `prediction.pdb` but leaves those sidecar
+    # files nested under Boltz's native output layout (e.g.
+    # `<design>/predictions/<stem>/pdb/<stem>_model_0.pdb` with
+    # `confidence_<stem>_model_0.json` next to it).  If we pointed
+    # --prediction-dir at `prediction.pdb`'s parent we'd get
+    # metrics with ptm=0, iptm=0, pae=0 (only pLDDT would work,
+    # via the B-factor-column fallback).  Instead, locate the
+    # nested sidecar PDB and point the parser at its directory.
+    sidecar_pdb = _locate_boltz_sidecar_pdb(pdb_path)
+    if sidecar_pdb is not None:
+        pred_dir = sidecar_pdb.parent
+        lookup_stem = sidecar_pdb.stem
+        metric_pdb = sidecar_pdb
+    else:
+        pred_dir = pdb_path.parent
+        lookup_stem = pdb_path.stem
+        metric_pdb = pdb_path
+
+    # Determine chain lengths from the PDB we'll actually parse,
+    # so CA counts match whatever compute_metrics.py ingests.
+    ca_counts = _count_ca_per_chain(metric_pdb)
+    rec_len = ca_counts.get(pred_rec_chain, 0)
+    eff_len = ca_counts.get(pred_eff_chain, 0)
+    if rec_len == 0 or eff_len == 0:
+        # Fallback: use the two largest chains
+        ordered = sorted(ca_counts.items(), key=lambda kv: -kv[1])
+        if len(ordered) >= 2:
+            rec_len = rec_len or ordered[0][1]
+            eff_len = eff_len or ordered[1][1]
+    if rec_len == 0 or eff_len == 0:
+        msg = (f"could not determine chain lengths from {metric_pdb.name} "
+               f"(CA counts: {ca_counts})")
+        print(f"  [{passing_progress}/{n_passing_total}] {pathway_label}: SKIP ({msg})")
+        out_row["steered_error"] = msg
+        return out_row, "failed"
+
+    # One output CSV per row, lives in the scratch dir.  Use a
+    # short, filesystem-safe key derived from cycle + design name
+    # rather than the full pdb path.
+    cyc = row.get("cycle", "0")
+    des = row.get("design", "unknown")
+    safe_key = f"cycle{cyc}_{des}".replace("/", "_").replace(" ", "_")
+    per_row_csv = scratch_dir / f"{safe_key}.csv"
+
+    # Look up this row's cumulative mutation set.  After
+    # cmd_aggregate's _translate_aggregate_row pass, the column
+    # is named `steered_mutations_chimerax` (renamed from the
+    # legacy `mutations_chimerax`).  We read the post-rename name
+    # with a fallback to the legacy name for any path that
+    # bypasses _translate_aggregate_row.  Format is
+    # "/A:5,26,44,46" (chain letter + 1-based positions).
+    # compute_metrics.py's parse_mutated_positions accepts this
+    # form directly, so we forward the string as-is.  Blank string
+    # (cold start, no mutations) is fine: compute_metrics.py will
+    # emit the contact columns with blank mutated_contact_positions.
+    #
+    # Bug history: this previously read only `mutations_chimerax`,
+    # which after the _AGG_RENAME refactor is always blank after
+    # aggregate runs.  Consequence: compute_metrics.py ran without
+    # --mutated-positions on every row, blanking the
+    # steered_mutated_contact_positions and
+    # steered_n_contacts_on_mutated_positions columns for every
+    # design — INCLUDING the ones that HAD been correctly populated
+    # by _populate_reverted_mutations in cmd_aggregate (which
+    # compute-final-metrics runs after).
+    mutations_cx = (
+        row.get("steered_mutations_chimerax", "")
+        or row.get("mutations_chimerax", "")
+        or ""
+    )
+
+    cmd = [
+        args.python_executable, str(compute_metrics_script),
+        "--model", model_name,
+        "--prediction-dir", str(pred_dir),
+        "--chain-lengths", str(rec_len), str(eff_len),
+        "--output-csv", str(per_row_csv),
+        "--pae-cutoff", str(args.pae_cutoff),
+        "--receptor-chain", pred_rec_chain,
+        "--effector-chain", pred_eff_chain,
+        "--contact-cutoff", str(args.contact_cutoff),
+        # v8 Level 1: effector atom filter from cycle_0 plan.json.
+        # compute_metrics.py reads the 'effector_interface_atoms'
+        # key directly; no materialised filter file needed.
+        "--effector-atom-filter-json", str(cycle_0_plan_path),
+    ]
+    # Per-prediction native-PDB-dependent metrics (intact_core +
+    # weighted_jaccard).  cycle_0/plan.json carries the absolute
+    # path to the ground-truth PDB under "ground_truth" — pass it
+    # through so compute_metrics.py can populate those columns
+    # alongside the PAE-derived ones.  When the cycle_0 plan
+    # doesn't carry a ground_truth (defensive), we just omit the
+    # flag and the metrics columns come out blank.
+    _native_pdb = cycle_0_plan.get("ground_truth", "")
+    if _native_pdb:
+        cmd.extend(["--native-pdb", str(_native_pdb)])
+    if mutations_cx:
+        cmd.extend(["--mutated-positions", mutations_cx])
+    # No --reference-pdb: we only want confidence metrics here.
+    # Structural RMSDs come from all_results_multicycle.csv (base
+    # columns), which already uses the correct truth-vs-pred
+    # chain mapping.
+
+    print(f"  [{passing_progress}/{n_passing_total}] {pathway_label}  "
+          f"{metric_col}={row.get(metric_col)}  pdb={metric_pdb.name}")
+    try:
+        proc = subprocess.run(
+            cmd, capture_output=True, text=True,
+            timeout=args.subprocess_timeout,
+        )
+    except subprocess.TimeoutExpired:
+        msg = f"compute_metrics.py timed out after {args.subprocess_timeout}s"
+        print(f"    ERROR: {msg}")
+        out_row["steered_error"] = msg
+        return out_row, "failed"
+    except Exception as e:
+        msg = f"subprocess failed: {e}"
+        print(f"    ERROR: {msg}")
+        out_row["steered_error"] = msg
+        return out_row, "failed"
+
+    if proc.returncode != 0:
+        msg = (f"compute_metrics.py exited with {proc.returncode}: "
+               f"{(proc.stderr or '').strip()[:300]}")
+        print(f"    ERROR: {msg}")
+        if args.verbose and proc.stdout:
+            print("    --- stdout ---")
+            print(proc.stdout)
+        out_row["steered_error"] = msg
+        return out_row, "failed"
+
+    if not per_row_csv.exists():
+        msg = f"compute_metrics.py produced no CSV at {per_row_csv}"
+        print(f"    ERROR: {msg}")
+        out_row["steered_error"] = msg
+        return out_row, "failed"
+
+    # Read back the per-row CSV.  If multiple models were picked
+    # up (shouldn't happen with one-design-per-dir, but defend
+    # against it), select the row whose model_name matches the
+    # pdb stem we asked about.
+    try:
+        with open(per_row_csv) as f:
+            cm_rows = list(csv.DictReader(f))
+    except Exception as e:
+        msg = f"could not read {per_row_csv}: {e}"
+        print(f"    ERROR: {msg}")
+        out_row["steered_error"] = msg
+        return out_row, "failed"
+
+    if not cm_rows:
+        msg = "compute_metrics.py CSV was empty"
+        print(f"    ERROR: {msg}")
+        out_row["steered_error"] = msg
+        return out_row, "failed"
+
+    chosen = None
+    for cr in cm_rows:
+        if cr.get("model_name") == lookup_stem:
+            chosen = cr
+            break
+    if chosen is None:
+        chosen = cm_rows[0]  # fall back to first (and usually only)
+
+    for k in metric_keys_raw:
+        out_row[metric_key_prefix + k] = chosen.get(k, "")
+    return out_row, "computed"
+
+
 def cmd_compute_final_metrics(args: argparse.Namespace) -> int:
     """For every row in all_results_multicycle.csv that passes the
     final ranking filter, shell out to compute_metrics.py to compute
@@ -4994,56 +5346,12 @@ def cmd_compute_final_metrics(args: argparse.Namespace) -> int:
         print("  cycle_0 plan has skip_steering=true — will include "
               "the initial row in metrics regardless of ra_eff filter")
 
-    def _passes(row: Dict) -> bool:
-        # P0.2 + P0-audit: --populate-all truly means "populate every
-        # row" — including rows dropped by reversion verdict routing.
-        # Per-seed aggregation requires every seed's steered_*
-        # confidence metrics so the median across seeds is meaningful;
-        # skipping reversion_dropped rows would leave the dropped
-        # seeds as holes in the per-seed CSV and bias the aggregate.
-        if args.populate_all:
-            return True
-        # Default (no --populate-all): skip rows dropped by reversion
-        # verdict routing — confidence metrics on a discarded
-        # prediction are wasted work.  pose_holds rows are NOT
-        # dropped (reversion_dropped == 0); we still compute steered_*
-        # cm metrics on them so the CSV shows what the steered
-        # prediction looked like before reversion.
-        try:
-            if int(row.get("reversion_dropped", "0") or "0") == 1:
-                return False
-        except (TypeError, ValueError):
-            pass
-        # Skip_steering exemption: include the initial row(s) if their
-        # parent workdir had skip_steering=true.  Applies only to
-        # cycle-0 initial baselines (cycle-1+ rows never have
-        # design=="initial").  Multi-seed cold-start (notes12) writes
-        # additional rows with design names "initial_s1", "initial_s2",
-        # ... — all are baseline rows that need confidence metrics.
-        _design = row.get("design", "")
-        if (_skip_steering_cycle0
-                and (_design == "initial" or _design.startswith("initial_s"))
-                and str(row.get("cycle", "0")) == "0"):
-            if args.require_intact:
-                try:
-                    if int(row.get("steered_receptor_intact", "0") or "0") != 1:
-                        return False
-                except (TypeError, ValueError):
-                    return False
-            return True
-        # Require steered_receptor_intact == 1 unless explicitly disabled.
-        if args.require_intact:
-            try:
-                if int(row.get("steered_receptor_intact", "0") or "0") != 1:
-                    return False
-            except (TypeError, ValueError):
-                return False
-        v = _float_or_none(row.get(metric_col))
-        if v is None:
-            return False
-        return v < threshold
-
-    passing_rows = [r for r in base_rows if _passes(r)]
+    passing_rows = [
+        r for r in base_rows
+        if _passes_final_metrics_filter(
+            r, args, metric_col, threshold, _skip_steering_cycle0,
+        )
+    ]
     print(f"Read {len(base_rows)} rows from {all_results_csv.name}")
     if args.populate_all:
         print("  Filter: --populate-all set — all rows except "
@@ -5126,28 +5434,13 @@ def cmd_compute_final_metrics(args: argparse.Namespace) -> int:
     METRIC_KEY_PREFIX = "steered_"
     prefixed_metric_keys = [METRIC_KEY_PREFIX + k for k in METRIC_KEYS_RAW]
 
-    # Load existing output CSV for resume.
-    # Resume key is the absolute pdb path because the `pathway` field
-    # is shared across all cycle-0 designs (they all get the literal
-    # string "cycle_0" from cmd_aggregate, which would collide).  The
-    # pdb path is unique per design.  Falls back to pathway then to
-    # an empty string for safety.
-    def _resume_key(row: Dict) -> str:
-        return row.get("pdb") or row.get("pathway") or ""
-
+    # Load existing output CSV for resume (helper handles the file-exists
+    # gate and the "row has at least one populated metric" predicate).
     existing_by_key: Dict[str, Dict] = {}
-    if args.skip_existing and output_csv.exists():
-        with open(output_csv) as f:
-            er = csv.DictReader(f)
-            for row in er:
-                key = _resume_key(row)
-                if not key:
-                    continue
-                # Only treat as "done" if at least one metric field is non-empty.
-                has_any = any(row.get(k, "") not in ("", None)
-                              for k in prefixed_metric_keys)
-                if has_any:
-                    existing_by_key[key] = row
+    if args.skip_existing:
+        existing_by_key = _load_existing_metrics_rows(
+            output_csv, prefixed_metric_keys,
+        )
         if existing_by_key:
             print(f"  Resume: {len(existing_by_key)} rows already have metrics "
                   f"in {output_csv.name}")
@@ -5185,12 +5478,6 @@ def cmd_compute_final_metrics(args: argparse.Namespace) -> int:
     passing_progress = 0  # 1-based counter for the printed progress
 
     for row in base_rows:
-        pathway_key = _resume_key(row)
-        # pathway_label kept for human-readable progress messages
-        pathway_label = row.get("pathway") or row.get("pdb") or "?"
-        pdb_path_str = row.get("pdb", "")
-        pdb_path = Path(pdb_path_str) if pdb_path_str else None
-
         # Non-passing rows: preserve as-is with empty steered_* / reverted_* fields.
         if id(row) not in passing_set:
             out_row = dict(row)
@@ -5203,238 +5490,28 @@ def cmd_compute_final_metrics(args: argparse.Namespace) -> int:
 
         passing_progress += 1
 
-        # Resume.  Take the CURRENT base row (which may have fresh
-        # columns like mutations_aa, rank_by_truth, or new derived
-        # columns that a previous run didn't have) and overlay just
-        # the steered_* / reverted_* metric values from the cached row onto it.  This
-        # prevents the resume path from stomping fresh base columns
-        # with stale data from an older output CSV.
-        if args.skip_existing and pathway_key in existing_by_key:
-            cached = existing_by_key[pathway_key]
-            merged = dict(row)  # start from fresh base row
-            for k in prefixed_metric_keys:
-                v = cached.get(k, "")
-                if v not in ("", None):
-                    merged[k] = v
-            # Also carry over steered_error if it was set (usually blank
-            # on success, but preserve failure state for diagnostics).
-            if cached.get("steered_error"):
-                merged["steered_error"] = cached["steered_error"]
-            joined_rows.append(merged)
-            n_skipped_resume += 1
-            continue
-
-        out_row = dict(row)
-        for k in prefixed_metric_keys:
-            out_row.setdefault(k, "")
-        out_row.setdefault("steered_error", "")
-
-        if pdb_path is None or not pdb_path.exists():
-            msg = f"pdb not found: {pdb_path_str}"
-            print(f"  [{passing_progress}/{n_passing_total}] {pathway_label}: SKIP ({msg})")
-            out_row["steered_error"] = msg
-            joined_rows.append(out_row)
-            n_failed += 1
-            continue
-
-        # compute_metrics.py's Boltz-2 parser looks for
-        # confidence_<stem>.json, pae_<stem>.npz, plddt_<stem>.npz
-        # alongside each PDB.  The steering pipeline copies the chosen
-        # Boltz output to `prediction.pdb` but leaves those sidecar
-        # files nested under Boltz's native output layout (e.g.
-        # `<design>/predictions/<stem>/pdb/<stem>_model_0.pdb` with
-        # `confidence_<stem>_model_0.json` next to it).  If we pointed
-        # --prediction-dir at `prediction.pdb`'s parent we'd get
-        # metrics with ptm=0, iptm=0, pae=0 (only pLDDT would work,
-        # via the B-factor-column fallback).  Instead, locate the
-        # nested sidecar PDB and point the parser at its directory.
-        sidecar_pdb = _locate_boltz_sidecar_pdb(pdb_path)
-        if sidecar_pdb is not None:
-            pred_dir = sidecar_pdb.parent
-            lookup_stem = sidecar_pdb.stem
-            metric_pdb = sidecar_pdb
-        else:
-            pred_dir = pdb_path.parent
-            lookup_stem = pdb_path.stem
-            metric_pdb = pdb_path
-
-        # Determine chain lengths from the PDB we'll actually parse,
-        # so CA counts match whatever compute_metrics.py ingests.
-        ca_counts = _count_ca_per_chain(metric_pdb)
-        rec_len = ca_counts.get(pred_rec_chain, 0)
-        eff_len = ca_counts.get(pred_eff_chain, 0)
-        if rec_len == 0 or eff_len == 0:
-            # Fallback: use the two largest chains
-            ordered = sorted(ca_counts.items(), key=lambda kv: -kv[1])
-            if len(ordered) >= 2:
-                rec_len = rec_len or ordered[0][1]
-                eff_len = eff_len or ordered[1][1]
-        if rec_len == 0 or eff_len == 0:
-            msg = (f"could not determine chain lengths from {metric_pdb.name} "
-                   f"(CA counts: {ca_counts})")
-            print(f"  [{passing_progress}/{n_passing_total}] {pathway_label}: SKIP ({msg})")
-            out_row["steered_error"] = msg
-            joined_rows.append(out_row)
-            n_failed += 1
-            continue
-
-        # One output CSV per row, lives in the scratch dir.  Use a
-        # short, filesystem-safe key derived from cycle + design name
-        # rather than the full pdb path.
-        cyc = row.get("cycle", "0")
-        des = row.get("design", "unknown")
-        safe_key = f"cycle{cyc}_{des}".replace("/", "_").replace(" ", "_")
-        per_row_csv = scratch_dir / f"{safe_key}.csv"
-
-        # Look up this row's cumulative mutation set.  After
-        # cmd_aggregate's _translate_aggregate_row pass, the column
-        # is named `steered_mutations_chimerax` (renamed from the
-        # legacy `mutations_chimerax`).  We read the post-rename name
-        # with a fallback to the legacy name for any path that
-        # bypasses _translate_aggregate_row.  Format is
-        # "/A:5,26,44,46" (chain letter + 1-based positions).
-        # compute_metrics.py's parse_mutated_positions accepts this
-        # form directly, so we forward the string as-is.  Blank string
-        # (cold start, no mutations) is fine: compute_metrics.py will
-        # emit the contact columns with blank mutated_contact_positions.
-        #
-        # Bug history: this previously read only `mutations_chimerax`,
-        # which after the _AGG_RENAME refactor is always blank after
-        # aggregate runs.  Consequence: compute_metrics.py ran without
-        # --mutated-positions on every row, blanking the
-        # steered_mutated_contact_positions and
-        # steered_n_contacts_on_mutated_positions columns for every
-        # design — INCLUDING the ones that HAD been correctly populated
-        # by _populate_reverted_mutations in cmd_aggregate (which
-        # compute-final-metrics runs after).
-        mutations_cx = (
-            row.get("steered_mutations_chimerax", "")
-            or row.get("mutations_chimerax", "")
-            or ""
+        out_row, status = _process_passing_row(
+            row, args,
+            prefixed_metric_keys, METRIC_KEYS_RAW, METRIC_KEY_PREFIX,
+            existing_by_key, scratch_dir,
+            compute_metrics_script, cycle_0_plan, cycle_0_plan_path,
+            pred_rec_chain, pred_eff_chain,
+            model_name, metric_col,
+            passing_progress, n_passing_total,
         )
-
-        cmd = [
-            args.python_executable, str(compute_metrics_script),
-            "--model", model_name,
-            "--prediction-dir", str(pred_dir),
-            "--chain-lengths", str(rec_len), str(eff_len),
-            "--output-csv", str(per_row_csv),
-            "--pae-cutoff", str(args.pae_cutoff),
-            "--receptor-chain", pred_rec_chain,
-            "--effector-chain", pred_eff_chain,
-            "--contact-cutoff", str(args.contact_cutoff),
-            # v8 Level 1: effector atom filter from cycle_0 plan.json.
-            # compute_metrics.py reads the 'effector_interface_atoms'
-            # key directly; no materialised filter file needed.
-            "--effector-atom-filter-json", str(cycle_0_plan_path),
-        ]
-        # Per-prediction native-PDB-dependent metrics (intact_core +
-        # weighted_jaccard).  cycle_0/plan.json carries the absolute
-        # path to the ground-truth PDB under "ground_truth" — pass it
-        # through so compute_metrics.py can populate those columns
-        # alongside the PAE-derived ones.  When the cycle_0 plan
-        # doesn't carry a ground_truth (defensive), we just omit the
-        # flag and the metrics columns come out blank.
-        _native_pdb = cycle_0_plan.get("ground_truth", "")
-        if _native_pdb:
-            cmd.extend(["--native-pdb", str(_native_pdb)])
-        if mutations_cx:
-            cmd.extend(["--mutated-positions", mutations_cx])
-        # No --reference-pdb: we only want confidence metrics here.
-        # Structural RMSDs come from all_results_multicycle.csv (base
-        # columns), which already uses the correct truth-vs-pred
-        # chain mapping.
-
-        print(f"  [{passing_progress}/{n_passing_total}] {pathway_label}  "
-              f"{metric_col}={row.get(metric_col)}  pdb={metric_pdb.name}")
-        try:
-            proc = subprocess.run(
-                cmd, capture_output=True, text=True,
-                timeout=args.subprocess_timeout,
-            )
-        except subprocess.TimeoutExpired:
-            msg = f"compute_metrics.py timed out after {args.subprocess_timeout}s"
-            print(f"    ERROR: {msg}")
-            out_row["steered_error"] = msg
-            joined_rows.append(out_row)
-            n_failed += 1
-            continue
-        except Exception as e:
-            msg = f"subprocess failed: {e}"
-            print(f"    ERROR: {msg}")
-            out_row["steered_error"] = msg
-            joined_rows.append(out_row)
-            n_failed += 1
-            continue
-
-        if proc.returncode != 0:
-            msg = (f"compute_metrics.py exited with {proc.returncode}: "
-                   f"{(proc.stderr or '').strip()[:300]}")
-            print(f"    ERROR: {msg}")
-            if args.verbose and proc.stdout:
-                print("    --- stdout ---")
-                print(proc.stdout)
-            out_row["steered_error"] = msg
-            joined_rows.append(out_row)
-            n_failed += 1
-            continue
-
-        if not per_row_csv.exists():
-            msg = f"compute_metrics.py produced no CSV at {per_row_csv}"
-            print(f"    ERROR: {msg}")
-            out_row["steered_error"] = msg
-            joined_rows.append(out_row)
-            n_failed += 1
-            continue
-
-        # Read back the per-row CSV.  If multiple models were picked
-        # up (shouldn't happen with one-design-per-dir, but defend
-        # against it), select the row whose model_name matches the
-        # pdb stem we asked about.
-        try:
-            with open(per_row_csv) as f:
-                cm_rows = list(csv.DictReader(f))
-        except Exception as e:
-            msg = f"could not read {per_row_csv}: {e}"
-            print(f"    ERROR: {msg}")
-            out_row["steered_error"] = msg
-            joined_rows.append(out_row)
-            n_failed += 1
-            continue
-
-        if not cm_rows:
-            msg = "compute_metrics.py CSV was empty"
-            print(f"    ERROR: {msg}")
-            out_row["steered_error"] = msg
-            joined_rows.append(out_row)
-            n_failed += 1
-            continue
-
-        chosen = None
-        for cr in cm_rows:
-            if cr.get("model_name") == lookup_stem:
-                chosen = cr
-                break
-        if chosen is None:
-            chosen = cm_rows[0]  # fall back to first (and usually only)
-
-        for k in METRIC_KEYS_RAW:
-            out_row[METRIC_KEY_PREFIX + k] = chosen.get(k, "")
         joined_rows.append(out_row)
-        n_computed += 1
-
-        # Write output CSV after every successful row so resume works
-        # cleanly even if the job is killed mid-loop.  Use the same
-        # canonical Block A/B/C/End layout as the final writer so the
-        # column order is consistent whether the job completes or is
-        # killed.
-        incremental_fieldnames = _aggregate_csv_fieldnames(joined_rows)
-        with open(output_csv, "w", newline="") as f:
-            w = csv.DictWriter(f, fieldnames=incremental_fieldnames,
-                               extrasaction="ignore")
-            w.writeheader()
-            for r2 in joined_rows:
-                w.writerow(r2)
+        if status == "resumed":
+            n_skipped_resume += 1
+        elif status == "computed":
+            n_computed += 1
+            # Write output CSV after every successful row so resume works
+            # cleanly even if the job is killed mid-loop.  Use the same
+            # canonical Block A/B/C/End layout as the final writer so the
+            # column order is consistent whether the job completes or is
+            # killed.
+            _write_metrics_csv(output_csv, joined_rows)
+        else:  # "failed"
+            n_failed += 1
 
     # ── Post-processing pass: derive steered_pae_cutoff_used,
     # steered_confidence_flag, and recompute the unified ranks ─────────
@@ -5448,36 +5525,12 @@ def cmd_compute_final_metrics(args: argparse.Namespace) -> int:
     flag_complex_plddt_min = float(args.flag_complex_plddt_min)
     flag_ipae_max          = float(args.flag_ipae_max)
 
-    def _classify(row: Dict) -> str:
-        """Return the confidence flag for one populated row.
-        Returns '' for rows without computed metrics (the resume
-        path may stash partially-computed rows here)."""
-        ipsae = _float_or_none(row.get("steered_ipsae_min"))
-        if ipsae is None:
-            # No metrics — nothing to classify.
-            return ""
-        triggered = []
-        pf = _float_or_none(row.get("steered_pae_pass_frac"))
-        if pf is not None and pf < flag_pass_frac_min:
-            triggered.append("low_pass_frac")
-        ip = _float_or_none(row.get("steered_iptm"))
-        if ip is not None and ip < flag_iptm_min:
-            triggered.append("low_iptm")
-        cp = _float_or_none(row.get("steered_complex_plddt"))
-        if cp is not None and cp < flag_complex_plddt_min:
-            triggered.append("low_plddt")
-        ipae = _float_or_none(row.get("steered_ipae"))
-        if ipae is not None and ipae > flag_ipae_max:
-            triggered.append("high_ipae")
-        if not triggered:
-            return "ok"
-        if len(triggered) == 1:
-            return triggered[0]
-        return "multiple"
-
     for r in joined_rows:
         r["steered_pae_cutoff_used"] = pae_cutoff_used
-        r["steered_confidence_flag"] = _classify(r)
+        r["steered_confidence_flag"] = _classify_steered_confidence_flag(
+            r, flag_pass_frac_min, flag_iptm_min,
+            flag_complex_plddt_min, flag_ipae_max,
+        )
 
     # Recompute the unified ranks now that compute-final-metrics has
     # populated the steered_* confidence columns.  rank_by_ra_eff and
@@ -5494,13 +5547,7 @@ def cmd_compute_final_metrics(args: argparse.Namespace) -> int:
     # so the CSV the user actually reads has steered_* metrics inserted
     # into Block B alongside the steering RMSDs, not appended at the
     # end as legacy steered_* / reverted_* columns used to be.
-    final_fieldnames = _aggregate_csv_fieldnames(joined_rows)
-    with open(output_csv, "w", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=final_fieldnames,
-                           extrasaction="ignore")
-        w.writeheader()
-        for r2 in joined_rows:
-            w.writerow(r2)
+    _write_metrics_csv(output_csv, joined_rows)
 
     print()
     print(f"Wrote {output_csv} ({len(joined_rows)} rows)")
