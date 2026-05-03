@@ -1,10 +1,15 @@
 #!/bin/bash
 #
-# Sync the local repo to HPC via the mounted /Volumes/HPC-Home.
+# Sync the local repo to HPC via SSH (uses ~/.ssh/config alias 'slurm').
 #
 # Usage:
 #   ./scripts/sync_to_hpc.sh           # real sync
 #   ./scripts/sync_to_hpc.sh --dry     # dry run, no changes
+#
+# Transport:
+#   rsync over SSH, using the 'slurm' host alias defined in
+#   ~/.ssh/config.  Requires passwordless key auth -- the
+#   id_ed25519_nbi key is mapped to slurm.nbi.ac.uk in ~/.ssh/config.
 #
 # Excludes:
 #   - .git/, Python/IDE caches, macOS metadata, Word lockfiles
@@ -25,13 +30,8 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-HPC_DEST="/Volumes/HPC-Home/receptor_design/receptor-resurfacing-pipeline/"
-
-if [ ! -d "/Volumes/HPC-Home" ]; then
-    echo "ERROR: /Volumes/HPC-Home is not mounted." >&2
-    echo "Mount the HPC home directory first, then re-run." >&2
-    exit 1
-fi
+HPC_USER_HOST="slurm"
+HPC_DEST="receptor_design/receptor-resurfacing-pipeline/"
 
 DRY_RUN=""
 if [ "${1:-}" = "--dry" ]; then
@@ -41,7 +41,7 @@ fi
 
 cd "$REPO_ROOT"
 
-rsync -av --delete $DRY_RUN \
+rsync -av --delete $DRY_RUN -e ssh \
     --exclude='.git/' \
     --exclude='__pycache__/' \
     --exclude='.pytest_cache/' \
@@ -62,11 +62,11 @@ rsync -av --delete $DRY_RUN \
     --exclude='tests/full_test_run/work/' \
     --exclude='tests/full_test_run/tmp/' \
     --exclude='tests/full_test_run/.nextflow*' \
-    --exclude='rsync_dryrun*.txt' \
-    --exclude='rsync_deletions*.txt' \
     --exclude='tests/full_test_run/reference_data_helpers/' \
     --exclude='tests/curation_staging/' \
-    "$REPO_ROOT/" "$HPC_DEST"
+    --exclude='rsync_dryrun*.txt' \
+    --exclude='rsync_deletions*.txt' \
+    "$REPO_ROOT/" "${HPC_USER_HOST}:${HPC_DEST}"
 
 echo
 echo "Sync complete."

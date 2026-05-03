@@ -51,7 +51,6 @@ import argparse
 import importlib.util
 import json
 import os
-import sys
 from pathlib import Path
 
 import numpy as np
@@ -1110,7 +1109,7 @@ def main():
         if ok:
             print(f"  → {out}")
         else:
-            print(f"  (no plottable data)")
+            print("  (no plottable data)")
     except Exception as e:
         print(f"  FAILED: {type(e).__name__}: {e}")
 
@@ -1122,7 +1121,7 @@ def main():
         if ok:
             print(f"  → {out}")
         else:
-            print(f"  (no plottable data)")
+            print("  (no plottable data)")
     except Exception as e:
         print(f"  FAILED: {type(e).__name__}: {e}")
 
@@ -1151,7 +1150,7 @@ def main():
         if ok:
             print(f"  → {out}")
         else:
-            print(f"  (no plottable regions)")
+            print("  (no plottable regions)")
     except Exception as e:
         print(f"  FAILED: {type(e).__name__}: {e}")
 

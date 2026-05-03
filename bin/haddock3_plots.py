@@ -17,14 +17,12 @@ import sys
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
-import matplotlib.ticker as mticker
 import numpy as np
 
 from haddock_utils import (
     parse_capri_tsv, parse_clustfcc_tsv, get_numeric_col,
     model_stem, extract_heavy_atoms, contacted_residues,
-    collect_pdb_index, cluster_mean_score,
+    collect_pdb_index,
 )
 
 # ── Styling ──────────────────────────────────────────────────────────────────

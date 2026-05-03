@@ -189,8 +189,7 @@ def derive_positional_indices(entry):
     return sorted(indices)
 
 
-def cross_check_with_plan(plan_path, design_indices_0based,
-                          design_id_hint):
+def cross_check_with_plan(plan_path, design_indices_0based):
     """Cross-check the derived design region against the
     `true_interface_idx` field in `plan.json`.  Reports whether every
     residue in true_interface_idx is inside the derived design region
@@ -220,8 +219,8 @@ def cross_check_with_plan(plan_path, design_indices_0based,
 
     true_idx = plan.get("true_interface_idx")
     if not true_idx:
-        print(f"  cross-check: plan.json has no "
-              f"true_interface_idx field; skipping", file=sys.stderr)
+        print("  cross-check: plan.json has no "
+              "true_interface_idx field; skipping", file=sys.stderr)
         return True
 
     design_set = set(design_indices_0based)
@@ -235,13 +234,13 @@ def cross_check_with_plan(plan_path, design_indices_0based,
     if outside:
         print(f"  WARNING: true interface has residues OUTSIDE the "
               f"derived design region: {outside}", file=sys.stderr)
-        print(f"           This may indicate a coordinate-system "
-              f"mismatch between rfdiffusion_metrics.json and "
-              f"plan.json, or a design whose native binding site "
-              f"extends outside the de novo block.", file=sys.stderr)
+        print("           This may indicate a coordinate-system "
+              "mismatch between rfdiffusion_metrics.json and "
+              "plan.json, or a design whose native binding site "
+              "extends outside the de novo block.", file=sys.stderr)
         return False
-    print(f"               OK: true interface is a subset of the "
-          f"derived design region.", file=sys.stderr)
+    print("               OK: true interface is a subset of the "
+          "derived design region.", file=sys.stderr)
     return True
 
 
@@ -254,9 +253,9 @@ def format_output(indices_1based, metrics_path, design_id, ranges):
         f"# design: {design_id}",
         f"# source field: per_design_design_residues "
         f"({len(indices_1based)} residues)",
-        f"# coordinate system: 1-based positional indices on the "
-        f"receptor chain,",
-        f"#                    matching prediction PDB sequence order",
+        "# coordinate system: 1-based positional indices on the "
+        "receptor chain,",
+        "#                    matching prediction PDB sequence order",
     ]
     if not ranges:
         body = ",".join(str(p) for p in indices_1based)
@@ -335,7 +334,7 @@ def main():
         return 2
 
     if not indices_0based:
-        print(f"ERROR: derivation produced an empty index list",
+        print("ERROR: derivation produced an empty index list",
               file=sys.stderr)
         return 2
 
@@ -360,7 +359,7 @@ def main():
     # Cross-check if asked
     if args.cross_check_plan is not None:
         cross_check_with_plan(
-            args.cross_check_plan, indices_0based, args.design
+            args.cross_check_plan, indices_0based
         )
 
     # Write output

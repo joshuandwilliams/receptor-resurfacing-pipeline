@@ -1582,13 +1582,13 @@ def main():
                       f"{len(effector_atom_filter)} residues "
                       f"(v8 Level 1 contamination fix on)")
             else:
-                print(f"Effector filter: loaded but empty — "
-                      f"contamination check runs on all effector atoms "
-                      f"(legacy behaviour)")
+                print("Effector filter: loaded but empty — "
+                      "contamination check runs on all effector atoms "
+                      "(legacy behaviour)")
         except Exception as e:
             print(f"WARNING: could not load effector filter "
                   f"from {args.effector_atom_filter_json}: {e}")
-            print(f"  Contamination check will run on all effector atoms.")
+            print("  Contamination check will run on all effector atoms.")
             effector_atom_filter = None
 
     # Resolve native_pdb to a usable Path (or None if blank/missing).

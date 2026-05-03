@@ -26,7 +26,6 @@ from __future__ import annotations
 
 import argparse
 import csv
-import math
 import sys
 from pathlib import Path
 from typing import List, Optional, Set, Tuple

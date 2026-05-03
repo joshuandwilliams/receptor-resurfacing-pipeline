@@ -20,7 +20,6 @@ import argparse
 import csv
 import os
 import shutil
-import sys
 
 
 def parse_args():

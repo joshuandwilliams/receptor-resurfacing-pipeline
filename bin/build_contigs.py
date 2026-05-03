@@ -20,7 +20,6 @@ import argparse
 import json
 import os
 import shutil
-import sys
 
 
 THREE_TO_ONE = {

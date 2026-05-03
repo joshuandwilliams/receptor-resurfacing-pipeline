@@ -60,8 +60,6 @@ from __future__ import annotations
 
 import argparse
 import csv
-import sys
-from collections import defaultdict
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -1159,7 +1157,7 @@ def main() -> int:
             if ok:
                 print(f"  → {out}")
             else:
-                print(f"  (skipped — no data)")
+                print("  (skipped — no data)")
         except Exception as e:  # noqa: BLE001
             print(f"  FAILED: {type(e).__name__}: {e}")
 

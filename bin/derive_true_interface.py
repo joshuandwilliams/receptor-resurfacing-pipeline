@@ -220,14 +220,14 @@ def cross_check_design_region(design_region_path, interface_indices_0based):
     if outside:
         print(f"  WARNING: true interface has residues OUTSIDE the "
               f"design region: {outside}", file=sys.stderr)
-        print(f"           Expected a subset relationship for "
-              f"receptor-resurfacing designs.  Either the contact "
-              f"cutoff is set such that contacts extend into fixed "
-              f"residues, or the inputs are mismatched.",
+        print("           Expected a subset relationship for "
+              "receptor-resurfacing designs.  Either the contact "
+              "cutoff is set such that contacts extend into fixed "
+              "residues, or the inputs are mismatched.",
               file=sys.stderr)
         return False
-    print(f"               OK: true interface is a subset of the "
-          f"design region.", file=sys.stderr)
+    print("               OK: true interface is a subset of the "
+          "design region.", file=sys.stderr)
     return True
 
 
@@ -237,9 +237,9 @@ def format_output(indices_0based, metrics_path, design_id, n_contact_resnums):
         f"# design: {design_id}",
         f"# source field: receptor_contact_residues "
         f"({n_contact_resnums} residues)",
-        f"# coordinate system: 0-based positional indices on the "
-        f"receptor chain,",
-        f"#                    matching prediction PDB sequence order",
+        "# coordinate system: 0-based positional indices on the "
+        "receptor chain,",
+        "#                    matching prediction PDB sequence order",
     ]
     body = "\n".join(str(i) for i in indices_0based)
     return "\n".join(header_lines) + "\n" + body + "\n"
@@ -291,7 +291,7 @@ def main():
         return 2
 
     if not indices_0based:
-        print(f"ERROR: derivation produced an empty index list",
+        print("ERROR: derivation produced an empty index list",
               file=sys.stderr)
         return 2
 

@@ -75,7 +75,7 @@ import hashlib
 import random
 import sys
 from pathlib import Path
-from typing import List, Tuple
+from typing import List
 
 
 # ── Sequence extraction (re-uses the project convention) ────────────

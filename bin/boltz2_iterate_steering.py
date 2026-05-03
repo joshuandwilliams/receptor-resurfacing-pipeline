@@ -60,7 +60,6 @@ import argparse
 import csv
 import json
 import math
-import os
 import shutil
 import statistics
 import subprocess
@@ -660,7 +659,7 @@ def cmd_iterate_plan(args: argparse.Namespace) -> int:
     }
 
     if not candidate_pool:
-        print(f"  No mutatable candidates remain — pathway exhausted at this depth.")
+        print("  No mutatable candidates remain — pathway exhausted at this depth.")
         plan["skip_steering"] = True
         plan["exhausted"] = True
         (new_workdir / "plan.json").write_text(json.dumps(plan, indent=2))
@@ -812,7 +811,7 @@ def cmd_compute_distances(args: argparse.Namespace) -> int:
     pred_eff_chain = plan["pred_effector_chain"]
 
     if plan.get("exhausted") or plan.get("skip_steering"):
-        print(f"[compute-distances] pathway exhausted, writing empty distances.json")
+        print("[compute-distances] pathway exhausted, writing empty distances.json")
         (workdir / "distances.json").write_text(json.dumps({
             "cycle": cycle,
             "parent_pathway": parent_label,
@@ -1019,7 +1018,7 @@ def cmd_iterate_collect(args: argparse.Namespace) -> int:
     max_cycles = int(args.max_cycles)
 
     if plan.get("exhausted") or plan.get("skip_steering") or distances.get("exhausted"):
-        print(f"[iterate-collect] pathway exhausted, nothing to do")
+        print("[iterate-collect] pathway exhausted, nothing to do")
         (workdir / "passing.json").write_text(json.dumps({
             "cycle": cycle,
             "parent_pathway": parent_label,
@@ -1172,7 +1171,7 @@ def cmd_iterate_collect_prefilter(args: argparse.Namespace) -> int:
     parent_label = plan["parent_pathway"]
 
     if plan.get("exhausted") or plan.get("skip_steering") or distances.get("exhausted"):
-        print(f"[iterate-collect-prefilter] pathway exhausted, short-circuiting")
+        print("[iterate-collect-prefilter] pathway exhausted, short-circuiting")
         (workdir / "prefilter.json").write_text(json.dumps({
             "cycle": cycle,
             "parent_pathway": parent_label,
@@ -1237,7 +1236,7 @@ def cmd_build_contaminated(args: argparse.Namespace) -> int:
 
     # Short-circuit: exhausted pathway → nothing to do
     if prefilter.get("exhausted"):
-        print(f"[build-contaminated] pathway exhausted, nothing to do")
+        print("[build-contaminated] pathway exhausted, nothing to do")
         (workdir / "contaminated.json").write_text(json.dumps({
             "cycle": prefilter.get("cycle"),
             "parent_pathway": prefilter.get("parent_pathway"),
@@ -1567,7 +1566,7 @@ def cmd_iterate_collect_finalize(args: argparse.Namespace) -> int:
     max_cycles = int(args.max_cycles)
 
     if prefilter.get("exhausted"):
-        print(f"[iterate-collect-finalize] pathway exhausted, nothing to do")
+        print("[iterate-collect-finalize] pathway exhausted, nothing to do")
         (workdir / "passing.json").write_text(json.dumps({
             "cycle": cycle,
             "parent_pathway": parent_label,
@@ -2520,8 +2519,8 @@ def cmd_plan_reversions(args: argparse.Namespace) -> int:
         # Permissive: build-contaminated may have skipped if there
         # were no intact candidates.  Write an empty reversion_plan.json
         # so downstream stages no-op cleanly.
-        print(f"[plan-reversions] no contaminated.json — writing empty "
-              f"reversion_plan.json (no reversions to stage)")
+        print("[plan-reversions] no contaminated.json — writing empty "
+              "reversion_plan.json (no reversions to stage)")
         plan_for_chains = json.loads(plan_path.read_text())
         (workdir / "reversion_plan.json").write_text(json.dumps({
             "workdir": str(workdir),
@@ -2538,8 +2537,8 @@ def cmd_plan_reversions(args: argparse.Namespace) -> int:
     contaminated_list = contaminated_doc.get("contaminated", [])
 
     if not contaminated_list:
-        print(f"[plan-reversions] no contaminated designs — "
-              f"writing empty reversion_plan.json")
+        print("[plan-reversions] no contaminated designs — "
+              "writing empty reversion_plan.json")
         (workdir / "reversion_plan.json").write_text(json.dumps({
             "workdir": str(workdir),
             "n_contaminated": 0,
@@ -2690,8 +2689,8 @@ def cmd_harvest_reversions(args: argparse.Namespace) -> int:
         # iterate-collect-finalize can still run without a reversion
         # phase.  No verdicts will be applied; every intact design
         # flows through as-is.
-        print(f"[harvest-reversions] no reversion_plan.json — writing "
-              f"empty reversion_results.json")
+        print("[harvest-reversions] no reversion_plan.json — writing "
+              "empty reversion_results.json")
         (workdir / "reversion_results.json").write_text("{}\n")
         return 0
 
@@ -2758,9 +2757,9 @@ def cmd_harvest_reversions(args: argparse.Namespace) -> int:
         print(f"[harvest-reversions] contamination gating set: "
               f"{len(gating_1b)} positions (design region ∪ true interface)")
     else:
-        print(f"[harvest-reversions] WARN: no design_region_idx or "
-              f"true_interface_idx in plan.json — falling back to "
-              f"legacy ungated contamination check")
+        print("[harvest-reversions] WARN: no design_region_idx or "
+              "true_interface_idx in plan.json — falling back to "
+              "legacy ungated contamination check")
 
     verdicts: Dict[str, Dict] = {}
     for label, rev in results.items():
@@ -4068,9 +4067,9 @@ def cmd_aggregate(args: argparse.Namespace) -> int:
                 # workdirs that were aggregated before the patch.
                 initial_pdb = wd / "initial_prediction.pdb"
                 if (cycle_0_dir / "plan.json").exists() and initial_pdb.exists():
-                    print(f"  cycle_0: no steered_results.csv — "
-                          f"reconstructing initial row from plan.json + "
-                          f"initial_prediction.pdb")
+                    print("  cycle_0: no steered_results.csv — "
+                          "reconstructing initial row from plan.json + "
+                          "initial_prediction.pdb")
                     plan_data = cycle0_plan
                     initial_ra = plan_data.get(
                         "initial_receptor_aligned_effector_rmsd", "")
@@ -4137,8 +4136,8 @@ def cmd_aggregate(args: argparse.Namespace) -> int:
                     }
                     rows.append(reconstructed)
                 else:
-                    print(f"  cycle_0: no steered_results.csv AND no "
-                          f"initial_prediction.pdb — skipping")
+                    print("  cycle_0: no steered_results.csv AND no "
+                          "initial_prediction.pdb — skipping")
                 continue
             with open(csv_path) as f:
                 for r in csv.DictReader(f):
@@ -4574,8 +4573,8 @@ def cmd_aggregate_per_sequence(args: argparse.Namespace) -> int:
             except (ValueError, OSError) as e:
                 print(f"  WARN: could not parse {candidate}: {e}")
     if not gating_1b:
-        print(f"  WARN: no plan.json gating set found — aggregated verdict "
-              f"contamination check will use legacy (ungated) behaviour")
+        print("  WARN: no plan.json gating set found — aggregated verdict "
+              "contamination check will use legacy (ungated) behaviour")
 
     # ── Copy per-seed input to raw_per_seed_results.csv ───────────────
     # Provides a stable filename downstream that means "every seed's
@@ -4912,7 +4911,7 @@ def cmd_aggregate_per_sequence(args: argparse.Namespace) -> int:
     verdicts = Counter(
         r.get("aggregated_verdict", "") for r in aggregated_rows
     )
-    print(f"  Aggregated verdict tally:")
+    print("  Aggregated verdict tally:")
     for v, c in sorted(verdicts.items()):
         print(f"    {v:<22s} {c:>4d}")
 
@@ -5005,8 +5004,8 @@ def cmd_compute_final_metrics(args: argparse.Namespace) -> int:
     # it so the comparison table has something to rank.
     _skip_steering_cycle0 = bool(cycle_0_plan.get("skip_steering"))
     if _skip_steering_cycle0:
-        print(f"  cycle_0 plan has skip_steering=true — will include "
-              f"the initial row in metrics regardless of ra_eff filter")
+        print("  cycle_0 plan has skip_steering=true — will include "
+              "the initial row in metrics regardless of ra_eff filter")
 
     def _passes(row: Dict) -> bool:
         # P0.2 + P0-audit: --populate-all truly means "populate every
@@ -5060,8 +5059,8 @@ def cmd_compute_final_metrics(args: argparse.Namespace) -> int:
     passing_rows = [r for r in base_rows if _passes(r)]
     print(f"Read {len(base_rows)} rows from {all_results_csv.name}")
     if args.populate_all:
-        print(f"  Filter: --populate-all set — all rows except "
-              f"reversion_dropped==1")
+        print("  Filter: --populate-all set — all rows except "
+              "reversion_dropped==1")
     else:
         print(f"  Filter: {metric_col} < {threshold} Å"
               + (" AND steered_receptor_intact == 1" if args.require_intact else "")

@@ -88,7 +88,6 @@ blank, and cross-rank columns blank.
 
 import argparse
 import csv
-import os
 import re
 import sys
 from pathlib import Path

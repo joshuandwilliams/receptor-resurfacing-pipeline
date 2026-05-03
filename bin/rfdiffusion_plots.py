@@ -28,7 +28,7 @@ try:
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
-    from matplotlib.colors import ListedColormap, BoundaryNorm
+    from matplotlib.colors import ListedColormap
     from matplotlib.ticker import MaxNLocator, FormatStrFormatter
     import matplotlib.patches as mpatches
     HAS_MPL = True

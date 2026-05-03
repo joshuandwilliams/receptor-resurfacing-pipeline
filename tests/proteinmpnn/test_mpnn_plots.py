@@ -53,7 +53,6 @@ from __future__ import annotations
 
 import argparse
 import csv
-import json
 from collections import defaultdict
 from pathlib import Path
 
@@ -62,7 +61,6 @@ import numpy as np
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
 from matplotlib.gridspec import GridSpec
 from matplotlib.ticker import MaxNLocator
 
@@ -613,7 +611,7 @@ def main():
             if ok:
                 print(f"  → {out}")
             else:
-                print(f"  (skipped — no data)")
+                print("  (skipped — no data)")
         except Exception as e:
             print(f"  FAILED: {type(e).__name__}: {e}")
 

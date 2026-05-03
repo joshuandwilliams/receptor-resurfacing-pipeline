@@ -49,7 +49,6 @@ import numpy as np
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
 
 
 # ── Styling (matches production rosetta_filter_plots.py) ───────────────────
@@ -212,7 +211,7 @@ def main():
         if ok:
             print(f"  → {out}")
         else:
-            print(f"  (no Sc data)")
+            print("  (no Sc data)")
     except Exception as e:
         print(f"  FAILED: {type(e).__name__}: {e}")
 

@@ -80,9 +80,7 @@ from __future__ import annotations
 
 import argparse
 import csv
-import json
 import os
-import sys
 from collections import defaultdict
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -258,7 +256,6 @@ def _pick_best_agg_row(agg_rows: List[Dict],
                         prefer_cycle: Optional[str] = None,
                         prefer_pathway: Optional[str] = None,
                         prefer_sequence_group: Optional[str] = None,
-                        cross_tier: Optional[str] = None,
                         ) -> Optional[Dict]:
     """A sequence's aggregated_results.csv may have multiple rows
     (multiple cycles, pathways, sequence_groups, plus singleton).
@@ -396,7 +393,6 @@ def load_unified_cohort(
                 prefer_cycle=cross.get("representative_cycle"),
                 prefer_pathway=cross.get("representative_pathway"),
                 prefer_sequence_group=cross.get("representative_sequence_group"),
-                cross_tier=(cross.get("cross_tier") or "").strip(),
             )
         else:
             best_agg = _pick_best_agg_row(agg_rows)
@@ -1257,7 +1253,6 @@ def plot_ra_eff_vs_jaccard(rows: List[Dict], out_path: str) -> bool:
     plt.savefig(out_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
     return True
-    return True
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -1900,7 +1895,7 @@ def main() -> int:
             if ok:
                 print(f"  → {out}")
             else:
-                print(f"  (skipped — no data)")
+                print("  (skipped — no data)")
         except Exception as e:  # noqa: BLE001
             print(f"  FAILED: {type(e).__name__}: {e}")
 

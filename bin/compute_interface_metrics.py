@@ -97,17 +97,15 @@ import argparse
 import csv
 import json
 import math
-import os
 import sys
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
 # Reuse the existing ipSAE machinery rather than reimplementing it.
 # compute_metrics.py is shipped alongside this script in bin/.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from compute_metrics import compute_ipsae  # noqa: E402
 
 
 # DockQ-only column set.  All other interface metrics (15Å iPSAE,

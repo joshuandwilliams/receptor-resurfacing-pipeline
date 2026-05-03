@@ -66,7 +66,6 @@ Usage
 from __future__ import annotations
 
 import argparse
-import re
 import sys
 from pathlib import Path
 from typing import List, Tuple
@@ -257,8 +256,8 @@ def _write_design_region(
         f.write(f"# contigs: {contigs_str}\n")
         f.write(f"# receptor chain: {receptor_chain}\n")
         f.write(f"# design region size: {len(positions_1b)} residues\n")
-        f.write(f"# coordinate system: 1-based positional indices on the receptor\n")
-        f.write(f"#                    chain, matching input PDB sequence order\n")
+        f.write("# coordinate system: 1-based positional indices on the receptor\n")
+        f.write("#                    chain, matching input PDB sequence order\n")
         if positions_1b:
             f.write(",".join(str(p) for p in positions_1b) + "\n")
         else:
@@ -284,9 +283,9 @@ def _write_true_interface(
         f.write(f"# receptor chain: {receptor_chain}\n")
         f.write(f"# effector chain: {effector_chain}\n")
         f.write(f"# n contacts: {len(positions_0b)}\n")
-        f.write(f"# coordinate system: 0-based positional indices on the "
-                f"receptor chain,\n")
-        f.write(f"#                    matching input PDB sequence order\n")
+        f.write("# coordinate system: 0-based positional indices on the "
+                "receptor chain,\n")
+        f.write("#                    matching input PDB sequence order\n")
         for p in positions_0b:
             f.write(f"{p}\n")
 

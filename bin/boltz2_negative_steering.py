@@ -261,10 +261,10 @@ def compute_binding_rmsds(pred_pdb, design_pdb,
     rec_pred_idx, rec_des_idx = _seqalign_pair_indices(pred_rec_seq, des_rec_seq)
     eff_pred_idx, eff_des_idx = _seqalign_pair_indices(pred_eff_seq, des_eff_seq)
     if not rec_pred_idx:
-        print(f"  ERROR: Receptor sequence alignment produced zero pairs")
+        print("  ERROR: Receptor sequence alignment produced zero pairs")
         return result
     if not eff_pred_idx:
-        print(f"  ERROR: Effector sequence alignment produced zero pairs")
+        print("  ERROR: Effector sequence alignment produced zero pairs")
         return result
 
     pred_rec = pred_rec_coords[rec_pred_idx]
@@ -763,11 +763,11 @@ def write_boltz_yaml(
         # definition (under "  - protein:"), not at the YAML root.
         # Indent matches the chain's id/sequence/msa fields.
         yaml_lines.extend([
-            f"      templates:",
+            "      templates:",
             f"        - cif: {effector_template_cif.resolve()}",
             f"          chain_id: {eff_chain}",
             f"          template_id: {eff_chain}",
-            f"          force: true",
+            "          force: true",
             f"          threshold: {template_threshold}",
         ])
 
@@ -1570,7 +1570,7 @@ def _write_initial_multiseed_csv(
 
         rows.append({
             "rank": seed_offset,
-            "design": (f"initial" if seed_offset == 0
+            "design": ("initial" if seed_offset == 0
                        else f"initial_s{seed_offset}"),
             "sequence_group": 0,
             "seed_index": seed_offset,
@@ -1820,7 +1820,7 @@ def cmd_plan(args: argparse.Namespace) -> int:
     workdir: Path = args.workdir
     workdir.mkdir(parents=True, exist_ok=True)
 
-    print(f"[plan] Negative steering for Boltz", flush=True)
+    print("[plan] Negative steering for Boltz", flush=True)
     print(f"  ground truth: {args.ground_truth}")
     print(f"  truth receptor chain: {args.receptor_chain}")
     print(f"  truth effector chain: {args.effector_chain}")
@@ -1874,7 +1874,7 @@ def cmd_plan(args: argparse.Namespace) -> int:
     eff_seq = _load_seq_override(args.effector_fasta, eff_seq_truth, "Effector")
 
     if len(rec_seq) < 20 or len(eff_seq) < 20:
-        print(f"  WARNING: short sequence(s) — double-check chain IDs.")
+        print("  WARNING: short sequence(s) — double-check chain IDs.")
 
     # Extract the effector chain from the ground-truth complex and
     # write it as a single-chain mmCIF.  This file is used as a
@@ -1899,7 +1899,7 @@ def cmd_plan(args: argparse.Namespace) -> int:
             return 1
     else:
         eff_template_path = None
-        print(f"  Effector template DISABLED (--no-effector-template)")
+        print("  Effector template DISABLED (--no-effector-template)")
 
     # Write initial wild-type YAML using the canonical A/B prediction
     # chains (NOT the user's truth chain IDs).
@@ -1913,7 +1913,7 @@ def cmd_plan(args: argparse.Namespace) -> int:
     print(f"  Wrote wild-type YAML: {yaml_path}")
 
     # Run initial Boltz prediction
-    print(f"  Running initial Boltz...")
+    print("  Running initial Boltz...")
     try:
         pred_pdb = run_boltz(
             yaml_path, init_dir,
@@ -2130,7 +2130,7 @@ def cmd_plan(args: argparse.Namespace) -> int:
     # --skip-steering early return — used by sequence-walk diagnostics
     # that just want the cold-start prediction and the three RMSDs.
     if args.skip_steering:
-        print(f"  --skip-steering set — not generating steered designs.")
+        print("  --skip-steering set — not generating steered designs.")
         plan["skip_steering"] = True
         (workdir / "plan.json").write_text(json.dumps(plan, indent=2))
         _write_initial_only_csv(
@@ -2184,7 +2184,7 @@ def cmd_plan(args: argparse.Namespace) -> int:
     # BEFORE early-exit paths)".
 
     # ── Identify the WRONG (predicted) binding site ─────────────────
-    print(f"  Identifying WRONG (predicted) interface residues...")
+    print("  Identifying WRONG (predicted) interface residues...")
     try:
         wrong_contacts = find_contact_residues_heavy(
             pred_pdb,
@@ -2407,7 +2407,7 @@ def cmd_plan(args: argparse.Namespace) -> int:
     if (not candidate_pool) and predicted_wrong_idx:
         print()
         print("  =====================================================")
-        print(f"  WARNING: naive candidate pool is empty.")
+        print("  WARNING: naive candidate pool is empty.")
         print(f"  Wrong interface overlap with true interface: "
               f"{interfaces_overlap:.0%}")
         if protected_set != true_set:
@@ -2416,15 +2416,15 @@ def cmd_plan(args: argparse.Namespace) -> int:
             )
             print(f"  Wrong-interface residues in protected set: "
                   f"{n_wrong_in_protected}/{len(predicted_wrong_idx)}")
-        print(f"  Every direct candidate was protected.  Falling back")
-        print(f"  to second-shell residues (Cα within 6 Å of the")
-        print(f"  predicted effector, excluding the wrong interface")
-        print(f"  and the protected set).")
+        print("  Every direct candidate was protected.  Falling back")
+        print("  to second-shell residues (Cα within 6 Å of the")
+        print("  predicted effector, excluding the wrong interface")
+        print("  and the protected set).")
         if max_mutations_reduced_from is not None:
             print(f"  max_mutations reduced: "
                   f"{max_mutations_reduced_from} -> {max_mutations_reduced_to}")
-        print(f"  Requires >= 3 candidates to proceed; otherwise we")
-        print(f"  skip_steering and score the cold-start prediction as-is.")
+        print("  Requires >= 3 candidates to proceed; otherwise we")
+        print("  skip_steering and score the cold-start prediction as-is.")
         print("  =====================================================")
         candidate_pool = _second_shell_fallback(
             pred_rec_residues=pred_rec_residues,
@@ -2447,8 +2447,8 @@ def cmd_plan(args: argparse.Namespace) -> int:
             second_shell_used = True
             print(f"  Second-shell pool: {len(candidate_pool)} residues")
         else:
-            print(f"  Second-shell fallback produced < 3 candidates. "
-                  f"Skipping steering.")
+            print("  Second-shell fallback produced < 3 candidates. "
+                  "Skipping steering.")
 
     print(f"  Candidate pool: top {len(candidate_pool)} "
           f"(--candidate-pool-size {args.candidate_pool_size})"
@@ -2532,8 +2532,8 @@ def cmd_plan(args: argparse.Namespace) -> int:
               f"{len(eff_iface_residues_list)} residues (Cα cutoff 8.0 Å)")
     except Exception as e:
         print(f"  WARNING: could not compute effector interface residue mask: {e}")
-        print(f"  Contamination checks will fall back to unfiltered "
-              f"contacts (legacy behaviour).")
+        print("  Contamination checks will fall back to unfiltered "
+              "contacts (legacy behaviour).")
         plan["effector_interface_residues"] = []
         plan["effector_interface_atoms"] = []
         plan["effector_interface_atom_cutoff_angstroms"] = None
@@ -2585,8 +2585,8 @@ def cmd_plan(args: argparse.Namespace) -> int:
             print(f"  No interface residues found within {args.contact_cutoff} Å.")
         else:
             skip_reason = "no mutatable residues after filtering"
-            print(f"  No mutatable residues left after exclusion + surface "
-                  f"filter + second-shell fallback.  Aborting.")
+            print("  No mutatable residues left after exclusion + surface "
+                  "filter + second-shell fallback.  Aborting.")
         plan["skip_steering"] = True
         plan["skip_reason"] = skip_reason
         (workdir / "plan.json").write_text(json.dumps(plan, indent=2))
