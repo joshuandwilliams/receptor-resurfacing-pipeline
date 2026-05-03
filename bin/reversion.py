@@ -553,6 +553,282 @@ def write_reversion_plan(
 # In-container harvest
 # ───────────────────────────────────────────────────────────────────────
 
+def _resolve_cycle0_plan_path(workdir: Path) -> Optional[Path]:
+    """Locate cycle_0/plan.json from a reversion workdir, or None."""
+    if (workdir / "plan.json").exists():
+        try:
+            _wd_plan = json.loads((workdir / "plan.json").read_text())
+            if int(_wd_plan.get("cycle", 0)) == 0:
+                return workdir / "plan.json"
+        except Exception:
+            pass
+    for p in [workdir.parent, workdir.parent.parent]:
+        candidate = p / "cycle_0" / "plan.json"
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def _load_cycle0_plan_context(
+    cycle0_plan_path: Optional[Path],
+    default_contact_cutoff: float,
+) -> Dict:
+    """Read cycle_0 plan.json and return per-seed-jaccard context fields."""
+    ctx = {
+        "true_idx": [],
+        "wrong_idx": [],
+        "rec_seq": "",
+        "pred_rec": "A",
+        "pred_eff": "B",
+        "contact_cutoff": float(default_contact_cutoff),
+    }
+    if cycle0_plan_path is None:
+        return ctx
+    try:
+        _plan_dict = json.loads(cycle0_plan_path.read_text())
+        ctx["true_idx"] = list(_plan_dict.get("true_interface_idx") or [])
+        ctx["wrong_idx"] = list(
+            _plan_dict.get("initial_wrong_interface_idx") or []
+        )
+        ctx["rec_seq"] = (
+            _plan_dict.get("wild_type_receptor_seq") or ""
+        )
+        ctx["pred_rec"] = (
+            _plan_dict.get("pred_receptor_chain") or "A"
+        )
+        ctx["pred_eff"] = (
+            _plan_dict.get("pred_effector_chain") or "B"
+        )
+        try:
+            ctx["contact_cutoff"] = float(
+                _plan_dict.get("contact_cutoff") or default_contact_cutoff
+            )
+        except (TypeError, ValueError):
+            pass
+    except Exception:
+        pass
+    return ctx
+
+
+def _locate_reverted_prediction_pdb(rev_dir: Path) -> Optional[Path]:
+    """Locate the reverted prediction PDB inside a reversion subdir."""
+    candidates = [
+        p for p in rev_dir.rglob("*.pdb")
+        if "msa" not in p.parts and p.name != "reference.pdb"
+    ]
+    candidates.sort(key=lambda p: (
+        p.name != "prediction.pdb",
+        "model_0" not in p.name and "rank_0" not in p.name,
+        str(p),
+    ))
+    if not candidates:
+        return None
+    return candidates[0]
+
+
+def _count_pdb_chain_ca_lengths(
+    reverted_pdb: Path, pred_rec: str, pred_eff: str
+) -> Tuple[int, int]:
+    """Return (rec_len, eff_len) CA counts; falls back to two largest chains."""
+    from collections import Counter
+    ca_counts: Counter = Counter()
+    with open(reverted_pdb) as f:
+        for line in f:
+            if line.startswith("ATOM") and line[12:16].strip() == "CA":
+                ca_counts[line[21:22].strip() or " "] += 1
+    rec_len = ca_counts.get(pred_rec, 0)
+    eff_len = ca_counts.get(pred_eff, 0)
+    if rec_len == 0 or eff_len == 0:
+        ordered = ca_counts.most_common()
+        if len(ordered) >= 2:
+            rec_len = rec_len or ordered[0][1]
+            eff_len = eff_len or ordered[1][1]
+    return rec_len, eff_len
+
+
+def _build_remaining_mutations_str(
+    rev_dir: Path, reverted_positions: Set[int]
+) -> str:
+    """Comma-joined remaining-mutation positions for the reverted design."""
+    cumulative = [
+        (m["pos1"], m["wt"], m["mut"])
+        for m in json.loads(
+            (rev_dir / "reversion_metadata.json").read_text()
+        ).get("cumulative_mutations", [])
+    ]
+    remaining_muts = [
+        pos1 for pos1, _wt, _mut in cumulative
+        if pos1 not in reverted_positions
+    ]
+    return ",".join(str(p) for p in sorted(set(remaining_muts)))
+
+
+def _run_compute_metrics_for_reverted(cmd, per_row_csv: Path):
+    """Run compute_metrics.py for a reverted prediction; return cm row dict or error string."""
+    try:
+        proc = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=600
+        )
+    except subprocess.TimeoutExpired:
+        return "compute_metrics.py timed out"
+    if proc.returncode != 0:
+        return (f"compute_metrics.py failed rc={proc.returncode}: "
+                f"{(proc.stderr or '').strip()[:300]}")
+    if not per_row_csv.exists():
+        return "compute_metrics.py produced no CSV"
+    try:
+        with open(per_row_csv) as f:
+            cm_rows = list(csv.DictReader(f))
+    except Exception as e:
+        return f"could not read {per_row_csv}: {e}"
+    if not cm_rows:
+        return "compute_metrics.py CSV was empty"
+    return cm_rows[0]
+
+
+def _compute_reverted_seed_jaccards(
+    reverted_pdb: Path,
+    cycle0_true_idx: List[int],
+    cycle0_wrong_idx: List[int],
+    cycle0_rec_seq: str,
+    cycle0_pred_rec: str,
+    cycle0_pred_eff: str,
+    cycle0_contact_cutoff: float,
+    label: str,
+    seed_index: int,
+    find_contact_residues_heavy,
+    jaccard,
+) -> Tuple[object, object, object, object, object]:
+    """Per-seed structural Jaccard against cycle_0 true/wrong interface indices."""
+    rev_true_jaccard: object = ""
+    rev_wrong_jaccard: object = ""
+    rev_n_shared_true: object = ""
+    rev_n_shared_wrong: object = ""
+    rev_n_design_iface: object = ""
+    if cycle0_true_idx and reverted_pdb.exists():
+        try:
+            # IMPORTANT: do NOT pass expected_rec_seq=cycle0_rec_seq
+            # here.  cycle0's wild_type_receptor_seq is the
+            # pre-steering MPNN sequence; the reverted prediction
+            # carries surviving steering mutations and therefore
+            # WILL differ from it at every position the reversion
+            # pass left in place.  Passing the wild-type as the
+            # expected sequence makes the guard inside
+            # find_contact_residues_heavy raise ValueError on every
+            # pose_holds row (verified empirically against
+            # design_7_seq_3 sg=0: 5 surviving mutations →
+            # ValueError → silently swallowed → blank jaccards).
+            #
+            # The guard exists to catch index-misalignment between
+            # the per-seed contact set and cycle0_true_idx.  AA-level
+            # match isn't the right invariant for that here; LENGTH
+            # match is.  We enforce length below explicitly so the
+            # safety property is retained without breaking on
+            # expected mutations.
+            seed_contacts = find_contact_residues_heavy(
+                reverted_pdb,
+                cycle0_pred_rec, cycle0_pred_eff,
+                cycle0_contact_cutoff,
+                expected_rec_seq=None,
+            )
+            # Length-only safety net: index N in seed_contact_idx
+            # must refer to the same position as index N in
+            # cycle0_true_idx.  If chain length differs (wrong PDB
+            # picked up, chain layout changed) the indices aren't
+            # comparable and the jaccard would be garbage.
+            if cycle0_rec_seq:
+                actual_len = sum(
+                    1 for _ in _read_ca_chain(
+                        reverted_pdb, cycle0_pred_rec
+                    )
+                )
+                if actual_len != len(cycle0_rec_seq):
+                    raise ValueError(
+                        f"Receptor chain length mismatch in "
+                        f"{reverted_pdb}: actual={actual_len} "
+                        f"expected={len(cycle0_rec_seq)} — "
+                        f"index alignment with cycle0_true_idx "
+                        f"would be invalid"
+                    )
+            seed_contact_idx = sorted(i for i, _d in seed_contacts)
+            rev_n_design_iface = len(seed_contact_idx)
+            rev_n_shared_true = len(
+                set(seed_contact_idx) & set(cycle0_true_idx)
+            )
+            rev_true_jaccard = jaccard(seed_contact_idx, cycle0_true_idx)
+            if cycle0_wrong_idx:
+                rev_n_shared_wrong = len(
+                    set(seed_contact_idx) & set(cycle0_wrong_idx)
+                )
+                rev_wrong_jaccard = jaccard(
+                    seed_contact_idx, cycle0_wrong_idx
+                )
+        except Exception as e:
+            # Soft failure: leave all jaccard fields blank, but
+            # log to stderr so the next failure doesn't disappear
+            # silently the way the original ValueError did.
+            sys.stderr.write(
+                f"  WARN reverted-jaccard {label} s{seed_index}: "
+                f"{type(e).__name__}: {e}\n"
+            )
+    return (rev_true_jaccard, rev_wrong_jaccard, rev_n_shared_true,
+            rev_n_shared_wrong, rev_n_design_iface)
+
+
+def _pair_per_seed_records_to_steered_labels(
+    per_seed_records: Dict[Tuple[str, int], Dict],
+    manifest: Dict,
+) -> Dict[str, Dict]:
+    """Pair per-(canonical_label, seed) reverted records to each steered label."""
+    results: Dict[str, Dict] = {}
+    for entry in manifest.get("entries", []):
+        rev_seed_idx = int(entry.get("seed_index", 0) or 0)
+        canonical = entry["label"]
+        # Prefer the new all_label_seeds field; fall back to all_labels
+        # for back-compat with manifests written before this fix.
+        all_label_seeds = entry.get("all_label_seeds")
+        if all_label_seeds is None:
+            all_label_seeds = [
+                {"label": L, "seed_index": rev_seed_idx}
+                for L in entry.get("all_labels", [canonical])
+            ]
+        for member in all_label_seeds:
+            steered_label = member["label"]
+            steered_seed_idx = int(member.get("seed_index", 0) or 0)
+            # Pair only when the reverted seed_index matches this
+            # steered seed_index.
+            if steered_seed_idx != rev_seed_idx:
+                continue
+            rec = per_seed_records.get((canonical, rev_seed_idx))
+            if rec is None:
+                rec = {
+                    "error": (
+                        f"no reverted record for canonical={canonical} "
+                        f"at seed_index={rev_seed_idx} (harvest failed "
+                        f"for that seed)"
+                    ),
+                }
+            results[steered_label] = dict(rec)
+    return results
+
+
+def _persist_reversion_results_to_disk(
+    workdir: Path,
+    results: Dict[str, Dict],
+    per_seed_records: Dict[Tuple[str, int], Dict],
+) -> None:
+    """Write reversion_results.json and reversion_results_per_seed.json."""
+    results_path = workdir / "reversion_results.json"
+    results_path.write_text(json.dumps(results, indent=2, default=str))
+    per_seed_path = workdir / "reversion_results_per_seed.json"
+    per_seed_jsonable: Dict[str, Dict[str, Dict]] = {}
+    for (lbl, sidx), rec in per_seed_records.items():
+        per_seed_jsonable.setdefault(lbl, {})[str(sidx)] = rec
+    per_seed_path.write_text(
+        json.dumps(per_seed_jsonable, indent=2, default=str)
+    )
+
+
 def harvest_reversion_results(
     workdir: Path,
     ground_truth_pdb: Path,
@@ -631,21 +907,7 @@ def harvest_reversion_results(
     # For the atom filter we specifically want cycle_0/plan.json because
     # the ground truth + true_interface that define the interface atoms
     # are only set there.
-    cycle0_plan_path: Optional[Path] = None
-    if (workdir / "plan.json").exists():
-        try:
-            _wd_plan = json.loads((workdir / "plan.json").read_text())
-            if int(_wd_plan.get("cycle", 0)) == 0:
-                cycle0_plan_path = workdir / "plan.json"
-        except Exception:
-            pass
-    if cycle0_plan_path is None:
-        # Walk up the tree looking for cycle_0/plan.json.
-        for p in [workdir.parent, workdir.parent.parent]:
-            candidate = p / "cycle_0" / "plan.json"
-            if candidate.exists():
-                cycle0_plan_path = candidate
-                break
+    cycle0_plan_path = _resolve_cycle0_plan_path(workdir)
     # If still not found, proceed without filter — contact detection
     # falls back to legacy unfiltered behaviour on reverted predictions.
 
@@ -659,37 +921,13 @@ def harvest_reversion_results(
     # reverted_wrong_jaccard_median etc.  When the plan can't be loaded
     # (legacy runs, parsing error) the per-seed jaccard fields stay
     # blank and the aggregator emits "" for them.
-    cycle0_true_idx: List[int] = []
-    cycle0_wrong_idx: List[int] = []
-    cycle0_rec_seq: str = ""
-    cycle0_pred_rec: str = "A"
-    cycle0_pred_eff: str = "B"
-    cycle0_contact_cutoff: float = float(contact_cutoff)
-    if cycle0_plan_path is not None:
-        try:
-            _plan_dict = json.loads(cycle0_plan_path.read_text())
-            cycle0_true_idx = list(_plan_dict.get("true_interface_idx") or [])
-            cycle0_wrong_idx = list(
-                _plan_dict.get("initial_wrong_interface_idx") or []
-            )
-            cycle0_rec_seq = (
-                _plan_dict.get("wild_type_receptor_seq") or ""
-            )
-            cycle0_pred_rec = (
-                _plan_dict.get("pred_receptor_chain") or "A"
-            )
-            cycle0_pred_eff = (
-                _plan_dict.get("pred_effector_chain") or "B"
-            )
-            try:
-                cycle0_contact_cutoff = float(
-                    _plan_dict.get("contact_cutoff") or contact_cutoff
-                )
-            except (TypeError, ValueError):
-                pass
-        except Exception:
-            # Plan unreadable — leave defaults, jaccard stays blank.
-            pass
+    _cycle0_ctx = _load_cycle0_plan_context(cycle0_plan_path, contact_cutoff)
+    cycle0_true_idx: List[int] = _cycle0_ctx["true_idx"]
+    cycle0_wrong_idx: List[int] = _cycle0_ctx["wrong_idx"]
+    cycle0_rec_seq: str = _cycle0_ctx["rec_seq"]
+    cycle0_pred_rec: str = _cycle0_ctx["pred_rec"]
+    cycle0_pred_eff: str = _cycle0_ctx["pred_eff"]
+    cycle0_contact_cutoff: float = _cycle0_ctx["contact_cutoff"]
 
     # P0 audit (multi-seed): build per-seed records first, then pair
     # them with steered labels by matching seed_index.  Legacy code
@@ -717,23 +955,12 @@ def harvest_reversion_results(
         # or a similar nested path; to stay independent of Boltz's
         # exact layout we glob for any .pdb inside rev_dir that isn't
         # a reference.
-        reverted_pdb_candidates = [
-            p for p in rev_dir.rglob("*.pdb")
-            if "msa" not in p.parts and p.name != "reference.pdb"
-        ]
-        # Prefer `prediction.pdb` if we ever end up copying it out,
-        # otherwise model_0 / rank_0, otherwise the first hit.
-        reverted_pdb_candidates.sort(key=lambda p: (
-            p.name != "prediction.pdb",
-            "model_0" not in p.name and "rank_0" not in p.name,
-            str(p),
-        ))
-        if not reverted_pdb_candidates:
+        reverted_pdb = _locate_reverted_prediction_pdb(rev_dir)
+        if reverted_pdb is None:
             per_seed_records[(label, seed_index)] = {
                 "error": f"no reverted prediction PDB found under {rev_dir}"
             }
             continue
-        reverted_pdb = reverted_pdb_candidates[0]
 
         pred_rec = manifest.get("pred_receptor_chain", "A")
         pred_eff = manifest.get("pred_effector_chain", "B")
@@ -780,35 +1007,17 @@ def harvest_reversion_results(
         per_row_csv = rev_dir / "metrics.csv"
 
         # Count CAs for chain-lengths arg
-        from collections import Counter
-        ca_counts: Counter = Counter()
-        with open(reverted_pdb) as f:
-            for line in f:
-                if line.startswith("ATOM") and line[12:16].strip() == "CA":
-                    ca_counts[line[21:22].strip() or " "] += 1
-        rec_len = ca_counts.get(pred_rec, 0)
-        eff_len = ca_counts.get(pred_eff, 0)
-        if rec_len == 0 or eff_len == 0:
-            ordered = ca_counts.most_common()
-            if len(ordered) >= 2:
-                rec_len = rec_len or ordered[0][1]
-                eff_len = eff_len or ordered[1][1]
+        rec_len, eff_len = _count_pdb_chain_ca_lengths(
+            reverted_pdb, pred_rec, pred_eff
+        )
 
         # mutations_chimerax for the REVERTED design = the original
         # steered mutations MINUS the reverted positions, because
         # those positions now carry wild-type again.
         reverted_positions = set(entry.get("positions_to_revert") or [])
-        cumulative = [
-            (m["pos1"], m["wt"], m["mut"])
-            for m in json.loads(
-                (rev_dir / "reversion_metadata.json").read_text()
-            ).get("cumulative_mutations", [])
-        ]
-        remaining_muts = [
-            pos1 for pos1, _wt, _mut in cumulative
-            if pos1 not in reverted_positions
-        ]
-        remaining_muts_str = ",".join(str(p) for p in sorted(set(remaining_muts)))
+        remaining_muts_str = _build_remaining_mutations_str(
+            rev_dir, reverted_positions
+        )
 
         cmd = [
             sys.executable, str(compute_metrics_script),
@@ -839,33 +1048,11 @@ def harvest_reversion_results(
         if remaining_muts_str:
             cmd.extend(["--mutated-positions", remaining_muts_str])
 
-        try:
-            proc = subprocess.run(
-                cmd, capture_output=True, text=True, timeout=600
-            )
-        except subprocess.TimeoutExpired:
-            per_seed_records[(label, seed_index)] = {"error": "compute_metrics.py timed out"}
+        cm_or_err = _run_compute_metrics_for_reverted(cmd, per_row_csv)
+        if isinstance(cm_or_err, str):
+            per_seed_records[(label, seed_index)] = {"error": cm_or_err}
             continue
-        if proc.returncode != 0:
-            per_seed_records[(label, seed_index)] = {
-                "error": f"compute_metrics.py failed rc={proc.returncode}: "
-                         f"{(proc.stderr or '').strip()[:300]}"
-            }
-            continue
-        if not per_row_csv.exists():
-            per_seed_records[(label, seed_index)] = {"error": "compute_metrics.py produced no CSV"}
-            continue
-
-        try:
-            with open(per_row_csv) as f:
-                cm_rows = list(csv.DictReader(f))
-        except Exception as e:
-            per_seed_records[(label, seed_index)] = {"error": f"could not read {per_row_csv}: {e}"}
-            continue
-        if not cm_rows:
-            per_seed_records[(label, seed_index)] = {"error": "compute_metrics.py CSV was empty"}
-            continue
-        cm = cm_rows[0]
+        cm = cm_or_err
 
         def _fl(k: str) -> Optional[float]:
             v = cm.get(k, "")
@@ -917,77 +1104,16 @@ def harvest_reversion_results(
         # initial_wrong_interface_idx.  When the cycle_0 plan couldn't
         # be loaded (defaults: empty lists), all jaccard fields stay
         # blank — DictWriter writes "" rather than dropping the row.
-        rev_true_jaccard: object = ""
-        rev_wrong_jaccard: object = ""
-        rev_n_shared_true: object = ""
-        rev_n_shared_wrong: object = ""
-        rev_n_design_iface: object = ""
-        if cycle0_true_idx and reverted_pdb.exists():
-            try:
-                # IMPORTANT: do NOT pass expected_rec_seq=cycle0_rec_seq
-                # here.  cycle0's wild_type_receptor_seq is the
-                # pre-steering MPNN sequence; the reverted prediction
-                # carries surviving steering mutations and therefore
-                # WILL differ from it at every position the reversion
-                # pass left in place.  Passing the wild-type as the
-                # expected sequence makes the guard inside
-                # find_contact_residues_heavy raise ValueError on every
-                # pose_holds row (verified empirically against
-                # design_7_seq_3 sg=0: 5 surviving mutations →
-                # ValueError → silently swallowed → blank jaccards).
-                #
-                # The guard exists to catch index-misalignment between
-                # the per-seed contact set and cycle0_true_idx.  AA-level
-                # match isn't the right invariant for that here; LENGTH
-                # match is.  We enforce length below explicitly so the
-                # safety property is retained without breaking on
-                # expected mutations.
-                seed_contacts = find_contact_residues_heavy(
-                    reverted_pdb,
-                    cycle0_pred_rec, cycle0_pred_eff,
-                    cycle0_contact_cutoff,
-                    expected_rec_seq=None,
-                )
-                # Length-only safety net: index N in seed_contact_idx
-                # must refer to the same position as index N in
-                # cycle0_true_idx.  If chain length differs (wrong PDB
-                # picked up, chain layout changed) the indices aren't
-                # comparable and the jaccard would be garbage.
-                if cycle0_rec_seq:
-                    actual_len = sum(
-                        1 for _ in _read_ca_chain(
-                            reverted_pdb, cycle0_pred_rec
-                        )
-                    )
-                    if actual_len != len(cycle0_rec_seq):
-                        raise ValueError(
-                            f"Receptor chain length mismatch in "
-                            f"{reverted_pdb}: actual={actual_len} "
-                            f"expected={len(cycle0_rec_seq)} — "
-                            f"index alignment with cycle0_true_idx "
-                            f"would be invalid"
-                        )
-                seed_contact_idx = sorted(i for i, _d in seed_contacts)
-                rev_n_design_iface = len(seed_contact_idx)
-                rev_n_shared_true = len(
-                    set(seed_contact_idx) & set(cycle0_true_idx)
-                )
-                rev_true_jaccard = jaccard(seed_contact_idx, cycle0_true_idx)
-                if cycle0_wrong_idx:
-                    rev_n_shared_wrong = len(
-                        set(seed_contact_idx) & set(cycle0_wrong_idx)
-                    )
-                    rev_wrong_jaccard = jaccard(
-                        seed_contact_idx, cycle0_wrong_idx
-                    )
-            except Exception as e:
-                # Soft failure: leave all jaccard fields blank, but
-                # log to stderr so the next failure doesn't disappear
-                # silently the way the original ValueError did.
-                sys.stderr.write(
-                    f"  WARN reverted-jaccard {label} s{seed_index}: "
-                    f"{type(e).__name__}: {e}\n"
-                )
+        (rev_true_jaccard, rev_wrong_jaccard, rev_n_shared_true,
+         rev_n_shared_wrong, rev_n_design_iface) = (
+            _compute_reverted_seed_jaccards(
+                reverted_pdb,
+                cycle0_true_idx, cycle0_wrong_idx, cycle0_rec_seq,
+                cycle0_pred_rec, cycle0_pred_eff, cycle0_contact_cutoff,
+                label, seed_index,
+                find_contact_residues_heavy, jaccard,
+            )
+        )
 
         per_seed_records[(label, seed_index)] = {
             "reverted_prediction_pdb": str(reverted_pdb),
@@ -1059,52 +1185,15 @@ def harvest_reversion_results(
     # record (would only happen if the harvest failed for that
     # particular reverted seed) get a stub error record so the
     # downstream reader doesn't see a blank.
-    seen_pairs = set()
-    for entry in manifest.get("entries", []):
-        rev_seed_idx = int(entry.get("seed_index", 0) or 0)
-        canonical = entry["label"]
-        # Prefer the new all_label_seeds field; fall back to all_labels
-        # for back-compat with manifests written before this fix.
-        all_label_seeds = entry.get("all_label_seeds")
-        if all_label_seeds is None:
-            all_label_seeds = [
-                {"label": L, "seed_index": rev_seed_idx}
-                for L in entry.get("all_labels", [canonical])
-            ]
-        for member in all_label_seeds:
-            steered_label = member["label"]
-            steered_seed_idx = int(member.get("seed_index", 0) or 0)
-            # Pair only when the reverted seed_index matches this
-            # steered seed_index.
-            if steered_seed_idx != rev_seed_idx:
-                continue
-            rec = per_seed_records.get((canonical, rev_seed_idx))
-            if rec is None:
-                rec = {
-                    "error": (
-                        f"no reverted record for canonical={canonical} "
-                        f"at seed_index={rev_seed_idx} (harvest failed "
-                        f"for that seed)"
-                    ),
-                }
-            results[steered_label] = dict(rec)
-            seen_pairs.add((steered_label, steered_seed_idx))
+    results = _pair_per_seed_records_to_steered_labels(
+        per_seed_records, manifest
+    )
 
     # Persist to disk alongside the manifest for traceability.
     # Two files: the legacy {label: result} for back-compat with the
     # finalize readers, and a richer {label: {seed_index: result}}
     # for any post-hoc analysis that needs the per-seed structure.
-    results_path = workdir / "reversion_results.json"
-    results_path.write_text(json.dumps(results, indent=2, default=str))
-    per_seed_path = workdir / "reversion_results_per_seed.json"
-    # Re-key per_seed_records by string for JSON compatibility:
-    # {canonical_label: {str(seed_index): result_dict}}
-    per_seed_jsonable: Dict[str, Dict[str, Dict]] = {}
-    for (lbl, sidx), rec in per_seed_records.items():
-        per_seed_jsonable.setdefault(lbl, {})[str(sidx)] = rec
-    per_seed_path.write_text(
-        json.dumps(per_seed_jsonable, indent=2, default=str)
-    )
+    _persist_reversion_results_to_disk(workdir, results, per_seed_records)
     return results
 
 

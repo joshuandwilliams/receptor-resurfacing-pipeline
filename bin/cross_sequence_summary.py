@@ -441,6 +441,189 @@ def _pick_representative_from_aggregated(
     return rep
 
 
+class _AggregateInputError(ValueError):
+    """Hard input error raised by _read_passing_summary_inputs."""
+
+
+def _read_passing_summary_inputs(
+    sequences: List[Tuple[str, Path]],
+    strict: bool,
+) -> Tuple[Dict[str, List[Dict]], Dict[str, Path], List[str]]:
+    """Read every passing_summary.csv; return rows / paths / canonical fieldnames."""
+    per_seq_rows: Dict[str, List[Dict]] = {}
+    source_paths: Dict[str, Path] = {}
+    passing_summary_fieldnames: List[str] = []
+    seen_fieldnames = False
+
+    for seq_name, path in sequences:
+        if seq_name in per_seq_rows:
+            raise _AggregateInputError(
+                f"duplicate sequence name {seq_name!r} (second seen at {path})"
+            )
+        if not path.exists():
+            msg = f"passing_summary.csv not found for {seq_name}: {path}"
+            if strict:
+                raise _AggregateInputError(msg)
+            print(f"WARNING: {msg}", file=sys.stderr)
+            per_seq_rows[seq_name] = []
+            source_paths[seq_name] = path
+            continue
+        try:
+            with open(path, newline="") as f:
+                reader = csv.DictReader(f)
+                rows = list(reader)
+                fieldnames = reader.fieldnames or []
+        except Exception as e:
+            msg = f"failed to read {path} for {seq_name}: {e}"
+            if strict:
+                raise _AggregateInputError(msg)
+            print(f"WARNING: {msg}", file=sys.stderr)
+            per_seq_rows[seq_name] = []
+            source_paths[seq_name] = path
+            continue
+        per_seq_rows[seq_name] = rows
+        source_paths[seq_name] = path
+        # Adopt the first non-empty fieldnames we see as the canonical
+        # list for representative_* columns.  Mismatches across files
+        # would indicate a pipeline version drift; warn but don't
+        # abort.
+        if fieldnames and not seen_fieldnames:
+            passing_summary_fieldnames = list(fieldnames)
+            seen_fieldnames = True
+        elif (fieldnames and seen_fieldnames
+              and fieldnames != passing_summary_fieldnames):
+            print(f"WARNING: fieldnames in {path} differ from the first "
+                  f"file's fieldnames.  Will emit superset of both.",
+                  file=sys.stderr)
+            for col in fieldnames:
+                if col not in passing_summary_fieldnames:
+                    passing_summary_fieldnames.append(col)
+    return per_seq_rows, source_paths, passing_summary_fieldnames
+
+
+def _pick_or_fallback_representative(
+    rows: List[Dict],
+    source_path: Path,
+) -> Tuple[Optional[Dict], bool]:
+    """Pick representative; on empty-rows fall back to aggregated_results."""
+    rep = _pick_representative(rows)
+    if rep is not None:
+        return rep, False
+    rep = _pick_representative_from_aggregated(source_path)
+    return rep, rep is not None
+
+
+def _resolve_run_one_runtime_sec(
+    rep: Optional[Dict], source_path: Path
+) -> str:
+    """Cumulative wall-clock for a sequence: prefer rep column, fall back to sidecar."""
+    run_one_runtime_sec = ""
+    if rep is not None:
+        rep_runtime = rep.get("run_one_runtime_sec", "") or ""
+        if rep_runtime:
+            run_one_runtime_sec = rep_runtime
+    if not run_one_runtime_sec:
+        runtime_file = source_path.parent / "run_one_runtime_sec.txt"
+        if runtime_file.exists():
+            try:
+                raw = runtime_file.read_text().strip()
+                float(raw)   # validate
+                run_one_runtime_sec = raw
+            except (OSError, ValueError):
+                pass
+    return run_one_runtime_sec
+
+
+def _read_row_type_sidecar(source_path: Path) -> str:
+    """Read row_type.txt sidecar; default 'steered' when absent or unreadable."""
+    row_type = "steered"
+    row_type_file = source_path.parent / "row_type.txt"
+    if row_type_file.exists():
+        try:
+            rt = row_type_file.read_text().strip()
+            if rt:
+                row_type = rt
+        except OSError:
+            pass
+    return row_type
+
+
+def _assign_cross_ranks(records: List[Dict]) -> None:
+    """Compute and stamp cross_rank_by_composite / cross_rank_by_ra_eff in place."""
+    scored_ra = []       # list of (ra_eff_value, rec) for ra-eff rank
+    scored_composite = []  # list of (composite_value, rec) for composite rank
+    for rec in records:
+        if rec.get("row_type", "steered") != "steered":
+            continue
+        rep_cols = {
+            "ra_eff_vs_truth_median":
+                rec.get("representative_ra_eff_vs_truth_median", ""),
+            "true_jaccard_median":
+                rec.get("representative_true_jaccard_median", ""),
+        }
+        # Only score sequences that have a placed tier AND both
+        # components present.  This keeps the "none"-tier stubs out
+        # of the ranking.
+        if rec["cross_tier"] in ("A", "B", "C"):
+            comp = _composite_score(rep_cols)
+            if comp is not None:
+                rec["cross_composite_score"] = f"{comp:.6f}"
+                scored_composite.append((comp, rec))
+            ra = _try_float(rep_cols["ra_eff_vs_truth_median"])
+            if ra is not None:
+                scored_ra.append((ra, rec))
+
+    # Assign cross-composite ranks: descending score (higher is better)
+    # and tier first (A before B before C).  That is, a tier B record
+    # with a slightly higher raw composite still ranks below any
+    # tier A record — policy from notes 11.
+    def _composite_rank_key(item):
+        comp, rec = item
+        tier_order = _TIER_ORDER[rec["cross_tier"]]
+        # Negate composite so higher composites come first within a
+        # tier.  id() breaks ties deterministically in the same
+        # stable way Python's sort would.
+        return (tier_order, -comp, id(rec))
+    scored_composite.sort(key=_composite_rank_key)
+    for rank_idx, (_, rec) in enumerate(scored_composite, start=1):
+        rec["cross_rank_by_composite"] = rank_idx
+
+    # Assign cross-ra-eff ranks: tier first, then ra_eff ascending
+    # (lower is better).
+    def _ra_rank_key(item):
+        ra, rec = item
+        tier_order = _TIER_ORDER[rec["cross_tier"]]
+        return (tier_order, ra, id(rec))
+    scored_ra.sort(key=_ra_rank_key)
+    for rank_idx, (_, rec) in enumerate(scored_ra, start=1):
+        rec["cross_rank_by_ra_eff"] = rank_idx
+
+
+def _emit_aggregate_summary(records: List[Dict], output_path: Path) -> None:
+    """Print the cross-sequence summary stats to stderr."""
+    n_total = len(records)
+    n_ranked = sum(1 for r in records
+                   if r.get("cross_rank_by_composite") != "")
+    by_tier = {"A": 0, "B": 0, "C": 0, "none": 0}
+    for r in records:
+        by_tier[r["cross_tier"]] += 1
+    by_row_type: Dict[str, int] = {}
+    for r in records:
+        rt = r.get("row_type", "steered")
+        by_row_type[rt] = by_row_type.get(rt, 0) + 1
+    print(f"Wrote {output_path}", file=sys.stderr)
+    print(f"  {n_total} sequences, {n_ranked} placed in tiers A/B/C",
+          file=sys.stderr)
+    print(f"  tier breakdown (steered only): A={by_tier['A']} B={by_tier['B']} "
+          f"C={by_tier['C']} none={by_tier['none']}",
+          file=sys.stderr)
+    if any(rt != "steered" for rt in by_row_type):
+        rt_summary = ", ".join(
+            f"{rt}={n}" for rt, n in sorted(by_row_type.items())
+        )
+        print(f"  row_type breakdown: {rt_summary}", file=sys.stderr)
+
+
 def aggregate(
     sequences: List[Tuple[str, Path]],
     output_path: Path,
@@ -465,69 +648,17 @@ def aggregate(
 
     # First pass: read every file.  Gather per-sequence row lists,
     # tier counts, and (eventually) the representative row.
-    per_seq_rows: Dict[str, List[Dict]] = {}
-    source_paths: Dict[str, Path] = {}
-    passing_summary_fieldnames: List[str] = []
-    seen_fieldnames = False
-
-    for seq_name, path in sequences:
-        if seq_name in per_seq_rows:
-            print(f"ERROR: duplicate sequence name {seq_name!r} "
-                  f"(second seen at {path})", file=sys.stderr)
-            return 2
-        if not path.exists():
-            msg = f"passing_summary.csv not found for {seq_name}: {path}"
-            if strict:
-                print(f"ERROR: {msg}", file=sys.stderr)
-                return 2
-            print(f"WARNING: {msg}", file=sys.stderr)
-            per_seq_rows[seq_name] = []
-            source_paths[seq_name] = path
-            continue
-        try:
-            with open(path, newline="") as f:
-                reader = csv.DictReader(f)
-                rows = list(reader)
-                fieldnames = reader.fieldnames or []
-        except Exception as e:
-            msg = f"failed to read {path} for {seq_name}: {e}"
-            if strict:
-                print(f"ERROR: {msg}", file=sys.stderr)
-                return 2
-            print(f"WARNING: {msg}", file=sys.stderr)
-            per_seq_rows[seq_name] = []
-            source_paths[seq_name] = path
-            continue
-        per_seq_rows[seq_name] = rows
-        source_paths[seq_name] = path
-        # Adopt the first non-empty fieldnames we see as the canonical
-        # list for representative_* columns.  Mismatches across files
-        # would indicate a pipeline version drift; warn but don't
-        # abort.
-        if fieldnames and not seen_fieldnames:
-            passing_summary_fieldnames = list(fieldnames)
-            seen_fieldnames = True
-        elif (fieldnames and seen_fieldnames
-              and fieldnames != passing_summary_fieldnames):
-            print(f"WARNING: fieldnames in {path} differ from the first "
-                  f"file's fieldnames.  Will emit superset of both.",
-                  file=sys.stderr)
-            for col in fieldnames:
-                if col not in passing_summary_fieldnames:
-                    passing_summary_fieldnames.append(col)
-
-    # Fallback: no inputs had any rows.  Infer the canonical
-    # passing_summary field list from extract_passing.py's OUTPUT_FIELDS
-    # if nothing could be read.  Here we just keep representative_*
-    # blank and only emit the metadata columns.
-    if not passing_summary_fieldnames:
-        passing_summary_fieldnames = []
+    try:
+        per_seq_rows, source_paths, passing_summary_fieldnames = (
+            _read_passing_summary_inputs(sequences, strict)
+        )
+    except _AggregateInputError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return 2
 
     # Build per-sequence records.
     records = []
     for seq_name, rows in per_seq_rows.items():
-        rep = _pick_representative(rows)
-        rep_is_fallback = False
         # Tier-none fallback.  When passing_summary.csv has no rows
         # (typically because every prediction's steered_ra_eff
         # exceeded the 5 Å eligibility gate at boltz2_iterate_steering.
@@ -536,21 +667,20 @@ def aggregate(
         # docstring for rationale.  This stamps real metric values
         # onto tier-none rows so they show up in the cohort summary
         # plot instead of all grey-hatched cells.
-        if rep is None:
-            rep = _pick_representative_from_aggregated(
-                source_paths[seq_name],
-            )
-            if rep is not None:
-                rep_is_fallback = True
-                # Extract_passing.extract_row's output may contain
-                # columns the existing passing_summary fieldname union
-                # doesn't.  Union them in so the CSV writer doesn't
-                # silently drop the values.
-                for col in rep.keys():
-                    if col.startswith("_"):
-                        continue
-                    if col not in passing_summary_fieldnames:
-                        passing_summary_fieldnames.append(col)
+        rep, rep_is_fallback = _pick_or_fallback_representative(
+            rows, source_paths[seq_name]
+        )
+        if rep_is_fallback and rep is not None:
+            # Extract_passing.extract_row's output may contain
+            # columns the existing passing_summary fieldname union
+            # doesn't.  Union them in so the CSV writer doesn't
+            # silently drop the values.
+            for col in rep.keys():
+                if col.startswith("_"):
+                    continue
+                if col not in passing_summary_fieldnames:
+                    passing_summary_fieldnames.append(col)
+
         # Tier counts inside the sequence — useful context:
         tier_counts = {"A": 0, "B": 0, "C": 0, "none": 0}
         for r in rows:
@@ -569,20 +699,9 @@ def aggregate(
         #      per-sequence passing_summary.csv).
         #   2. run_one_runtime_sec.txt in the same directory as
         #      passing_summary.csv (covers tier-none sequences).
-        run_one_runtime_sec = ""
-        if rep is not None:
-            rep_runtime = rep.get("run_one_runtime_sec", "") or ""
-            if rep_runtime:
-                run_one_runtime_sec = rep_runtime
-        if not run_one_runtime_sec:
-            runtime_file = source_paths[seq_name].parent / "run_one_runtime_sec.txt"
-            if runtime_file.exists():
-                try:
-                    raw = runtime_file.read_text().strip()
-                    float(raw)   # validate
-                    run_one_runtime_sec = raw
-                except (OSError, ValueError):
-                    pass
+        run_one_runtime_sec = _resolve_run_one_runtime_sec(
+            rep, source_paths[seq_name]
+        )
 
         # Task 6 (P0-6) row_type.  Default 'steered' when no sidecar
         # is present — preserves backward compatibility with
@@ -591,15 +710,7 @@ def aggregate(
         # passing_summary.csv so this loop can read them off without
         # any column-level changes to extract_passing.py or
         # negative_steering_run_one.sh.
-        row_type = "steered"
-        row_type_file = source_paths[seq_name].parent / "row_type.txt"
-        if row_type_file.exists():
-            try:
-                rt = row_type_file.read_text().strip()
-                if rt:
-                    row_type = rt
-            except OSError:
-                pass
+        row_type = _read_row_type_sidecar(source_paths[seq_name])
 
         rec = {
             "mpnn_sequence": seq_name,
@@ -661,53 +772,7 @@ def aggregate(
     # designs.  They still appear in the output with all cross_rank_*
     # columns blank.  The onComplete miscalibration check reads them
     # back from the final CSV.
-    scored_ra = []       # list of (ra_eff_value, rec) for ra-eff rank
-    scored_composite = []  # list of (composite_value, rec) for composite rank
-    for rec in records:
-        if rec.get("row_type", "steered") != "steered":
-            continue
-        rep_cols = {
-            "ra_eff_vs_truth_median":
-                rec.get("representative_ra_eff_vs_truth_median", ""),
-            "true_jaccard_median":
-                rec.get("representative_true_jaccard_median", ""),
-        }
-        # Only score sequences that have a placed tier AND both
-        # components present.  This keeps the "none"-tier stubs out
-        # of the ranking.
-        if rec["cross_tier"] in ("A", "B", "C"):
-            comp = _composite_score(rep_cols)
-            if comp is not None:
-                rec["cross_composite_score"] = f"{comp:.6f}"
-                scored_composite.append((comp, rec))
-            ra = _try_float(rep_cols["ra_eff_vs_truth_median"])
-            if ra is not None:
-                scored_ra.append((ra, rec))
-
-    # Assign cross-composite ranks: descending score (higher is better)
-    # and tier first (A before B before C).  That is, a tier B record
-    # with a slightly higher raw composite still ranks below any
-    # tier A record — policy from notes 11.
-    def _composite_rank_key(item):
-        comp, rec = item
-        tier_order = _TIER_ORDER[rec["cross_tier"]]
-        # Negate composite so higher composites come first within a
-        # tier.  id() breaks ties deterministically in the same
-        # stable way Python's sort would.
-        return (tier_order, -comp, id(rec))
-    scored_composite.sort(key=_composite_rank_key)
-    for rank_idx, (_, rec) in enumerate(scored_composite, start=1):
-        rec["cross_rank_by_composite"] = rank_idx
-
-    # Assign cross-ra-eff ranks: tier first, then ra_eff ascending
-    # (lower is better).
-    def _ra_rank_key(item):
-        ra, rec = item
-        tier_order = _TIER_ORDER[rec["cross_tier"]]
-        return (tier_order, ra, id(rec))
-    scored_ra.sort(key=_ra_rank_key)
-    for rank_idx, (_, rec) in enumerate(scored_ra, start=1):
-        rec["cross_rank_by_ra_eff"] = rank_idx
+    _assign_cross_ranks(records)
 
     # Final ordering for output: by cross_rank_by_composite ascending,
     # then by cross_tier, then by mpnn_sequence name for determinism.
@@ -752,27 +817,7 @@ def aggregate(
             writer.writerow(rec)
 
     # ─── Summary to stderr ─────────────────────────────────────────
-    n_total = len(records)
-    n_ranked = sum(1 for r in records
-                   if r.get("cross_rank_by_composite") != "")
-    by_tier = {"A": 0, "B": 0, "C": 0, "none": 0}
-    for r in records:
-        by_tier[r["cross_tier"]] += 1
-    by_row_type: Dict[str, int] = {}
-    for r in records:
-        rt = r.get("row_type", "steered")
-        by_row_type[rt] = by_row_type.get(rt, 0) + 1
-    print(f"Wrote {output_path}", file=sys.stderr)
-    print(f"  {n_total} sequences, {n_ranked} placed in tiers A/B/C",
-          file=sys.stderr)
-    print(f"  tier breakdown (steered only): A={by_tier['A']} B={by_tier['B']} "
-          f"C={by_tier['C']} none={by_tier['none']}",
-          file=sys.stderr)
-    if any(rt != "steered" for rt in by_row_type):
-        rt_summary = ", ".join(
-            f"{rt}={n}" for rt, n in sorted(by_row_type.items())
-        )
-        print(f"  row_type breakdown: {rt_summary}", file=sys.stderr)
+    _emit_aggregate_summary(records, output_path)
     return 0
 
 
