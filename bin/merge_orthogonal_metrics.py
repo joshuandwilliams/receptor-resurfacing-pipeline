@@ -14,7 +14,8 @@ Inputs (all CSV):
 
 Filter thresholds:
   --filter-af3-ra-max     AF3-no-MSA best ra_eff (< threshold passes).
-                          MANDATORY — failing rows get passes_orthogonal_filters=0.
+                          INFORMATIONAL — flag emitted but does NOT gate
+                          passes_orthogonal_filters (demoted 2026-04-28).
   --filter-sc-min         Rosetta Sc (>= passes).  Flag only, not a hard drop.
   --filter-bsa-min        FreeSASA BSA (Å², >= passes).  Flag only.
   --filter-plddt-min      Interface pLDDT (>= passes).  Flag only.
@@ -29,7 +30,9 @@ Output: survivors_with_orthogonal_metrics.csv with columns:
   sc, rosetta_ddg, rosetta_failures,
   orthogonal_flags, passes_orthogonal_filters
 
-passes_orthogonal_filters = 1 iff AF3 passes AND orthogonal_flags is empty.
+passes_orthogonal_filters = 1 iff every NON-AF3 flag is absent.
+AF3 flags (af3_nomsa_missing, af3_nomsa_ra_eff_too_high) are
+informational only.
 """
 
 from __future__ import annotations
@@ -82,19 +85,25 @@ def _apply_filters(
     bsa_min: float,
     plddt_min: float,
 ) -> None:
-    """Populate orthogonal_flags and passes_orthogonal_filters in-place."""
-    flags: List[str] = []
-    af3_pass = True
+    """Populate orthogonal_flags and passes_orthogonal_filters in-place.
 
-    # AF3 — MANDATORY.  Only "pass" if we actually have a value AND
-    # it's below the threshold.
+    AF3 is INFORMATIONAL — its flag is emitted (so plots can report
+    cross-model disagreement) but it does NOT gate
+    passes_orthogonal_filters.  Negative steering optimises against
+    Boltz; AF3 is a useful sanity check but disagreement is not by
+    itself a kill criterion.
+    """
+    flags: List[str] = []
+
+    # AF3 — INFORMATIONAL flag only (was previously gating; demoted
+    # 2026-04-28 so AF3 disagreement is a warning rather than a hard
+    # drop).  The flag is still emitted so the plot's filter cascade
+    # can show how many survivors AF3 disputes.
     af3_ra = _as_float(row.get("af3_nomsa_best_ra_eff", ""))
     if af3_ra is None:
         flags.append("af3_nomsa_missing")
-        af3_pass = False
     elif af3_ra >= af3_ra_max:
         flags.append(f"af3_nomsa_ra_eff_too_high:{af3_ra:.2f}")
-        af3_pass = False
 
     # Sc — flag only.
     sc_val = _as_float(row.get("sc", ""))
@@ -127,10 +136,12 @@ def _apply_filters(
         flags.append(f"interface_plddt_too_low:{plddt_val:.3f}")
 
     row["orthogonal_flags"] = ",".join(flags)
-    # Pass requires: AF3 hard-filter passed AND no other flags.
-    # Missing non-AF3 metrics DO count as flags, so this requires full
-    # information — strict interpretation of "every column populated".
-    passes = 1 if (af3_pass and not flags) else 0
+    # Pass requires: every NON-AF3 flag absent.  AF3 flags
+    # (af3_nomsa_missing, af3_nomsa_ra_eff_too_high) are informational
+    # only and do not gate passing.  Missing non-AF3 metrics still
+    # count as flags — strict "every column populated" interpretation.
+    gating_flags = [f for f in flags if not f.startswith("af3_nomsa")]
+    passes = 1 if not gating_flags else 0
     row["passes_orthogonal_filters"] = str(passes)
 
 
