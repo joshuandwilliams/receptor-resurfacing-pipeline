@@ -3,9 +3,14 @@
 Walks a 4a-style negsteer output tree and writes a plain-text file
 listing one absolute per-sequence workdir path per array task.  Sampling
 balances designs that passed the pipeline's own gating (tier A/B/C in
-cross_sequence_summary terms) with designs that failed it, stratified
-across the three dominant failure modes (low complex_plddt, high ipae,
-high ra_eff vs truth).
+cross_sequence_summary terms) with designs that failed it.
+
+Failing designs are picked by greedy set cover across failure modes:
+each design has a SET of modes it fails on (a typical failing design
+fails on multiple), and we iteratively pick the design that covers the
+most still-under-quota modes until every mode has at least
+--n-per-mode covered or the failing pool is exhausted.  This avoids
+the under-coverage produced by single-dominant-mode stratification.
 
 Inputs assumed under --negsteer-dir:
 
@@ -23,15 +28,13 @@ multi-sequence_group workdir, prefer rank_by_composite_score == 1
 (matches the cross-sequence summary's representative pick); fall back
 to the first row.
 
-Failure-mode thresholds (from the user specification):
+Failure-mode thresholds:
 
-    pLDDT failure:  steered_complex_plddt_median   <  0.7    (lower = worse)
-    ipAE failure:   steered_ipae_median            > 15      (higher = worse)
-    ra_eff failure: steered_ra_eff_vs_truth_median >  5      (higher = worse)
-
-For a design failing on more than one metric, the dominant mode is the
-one whose value is furthest past threshold (margin in the "worse"
-direction, normalised by the threshold so the modes are commensurable).
+    pLDDT failure:        steered_complex_plddt_median   <  0.7
+    ipAE failure:         steered_ipae_median            > 15
+    pae_pass_frac fail:   steered_pae_pass_frac_median   <  0.1
+    iPTM failure:         steered_iptm_median            <  0.3
+    ra_eff failure:       steered_ra_eff_vs_truth_median >  5
 """
 
 from __future__ import annotations
@@ -45,15 +48,23 @@ import random
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 LOG = logging.getLogger("build_msa_manifest")
 
 
 # ── Failure-mode thresholds ─────────────────────────────────────────────
-PLDDT_THRESHOLD = 0.7    # complex_plddt < 0.7 is failing
-IPAE_THRESHOLD = 15.0    # ipae > 15 is failing
-RA_EFF_THRESHOLD = 5.0   # ra_eff_vs_truth > 5 is failing
+PLDDT_THRESHOLD = 0.7           # complex_plddt < 0.7 is failing
+IPAE_THRESHOLD = 15.0           # ipae > 15 is failing
+PAE_PASS_FRAC_THRESHOLD = 0.1   # pae_pass_frac < 0.1 is failing
+IPTM_THRESHOLD = 0.3            # iptm < 0.3 is failing
+RA_EFF_THRESHOLD = 5.0          # ra_eff_vs_truth > 5 is failing
+
+# Canonical mode order — drives column layout in logs and the manifest
+# header.  The names match the metric stems used elsewhere in the repo.
+FAILURE_MODES: Tuple[str, ...] = (
+    "plddt", "ipae", "pae_pass_frac", "iptm", "ra_eff",
+)
 
 
 def parse_args(argv=None) -> argparse.Namespace:
@@ -74,10 +85,12 @@ def parse_args(argv=None) -> argparse.Namespace:
     p.add_argument("--n-passing", type=int, default=None,
                    help="Number of passing designs (tier != none) to "
                         "include.  Default: all.")
-    p.add_argument("--n-failing", type=int, default=20,
-                   help="Number of failing designs (tier none) to include, "
-                        "stratified across the three dominant failure "
-                        "modes (default: 20).")
+    p.add_argument("--n-per-mode", type=int, default=5,
+                   help="Per-failure-mode coverage target for the failing "
+                        "sample.  Greedy set-cover keeps picking failing "
+                        "designs until every failure mode has at least "
+                        "this many examples (or the failing pool is "
+                        "exhausted).  Default: 5.")
     p.add_argument("--seed", type=int, default=42,
                    help="Random seed for sampling (default: 42).")
     p.add_argument("-v", "--verbose", action="store_true",
@@ -142,51 +155,99 @@ def representative_row(workdir: Path) -> Optional[Dict[str, str]]:
 
 
 def metrics_from_row(row: Dict[str, str]) -> Dict[str, Optional[float]]:
-    """Pull the three failure-mode-relevant medians from an
+    """Pull the failure-mode-relevant medians from an
     aggregated_results.csv row.
     """
     return {
         "complex_plddt": _try_float(row.get("steered_complex_plddt_median")),
         "ipae":          _try_float(row.get("steered_ipae_median")),
+        "pae_pass_frac": _try_float(row.get("steered_pae_pass_frac_median")),
+        "iptm":          _try_float(row.get("steered_iptm_median")),
         "ra_eff":        _try_float(row.get("steered_ra_eff_vs_truth_median")),
     }
 
 
-def dominant_failure_mode(
-    metrics: Dict[str, Optional[float]],
-) -> Tuple[Optional[str], Dict[str, Optional[float]]]:
-    """Return (mode, normalised_margins).
+def failure_modes_for(metrics: Dict[str, Optional[float]]) -> Set[str]:
+    """Return the SET of failure-mode labels this design is failing on.
 
-    Margin = how far the metric is past its threshold in the "worse"
-    direction, divided by the threshold.  Negative or None margins mean
-    the metric is not failing.  The dominant mode is the one with the
-    largest positive normalised margin; if no metric is past threshold,
-    the mode is None (meaning: by these three metrics this design is
-    not actually failing — surface it for review).
+    A metric that did not parse (None) does NOT count as failing — it
+    contributes nothing to coverage and is silently absent from the set.
     """
-    margins: Dict[str, Optional[float]] = {}
-
+    modes: Set[str] = set()
     plddt = metrics.get("complex_plddt")
-    margins["plddt"] = (
-        (PLDDT_THRESHOLD - plddt) / PLDDT_THRESHOLD if plddt is not None else None
-    )
-
+    if plddt is not None and plddt < PLDDT_THRESHOLD:
+        modes.add("plddt")
     ipae = metrics.get("ipae")
-    margins["ipae"] = (
-        (ipae - IPAE_THRESHOLD) / IPAE_THRESHOLD if ipae is not None else None
-    )
-
+    if ipae is not None and ipae > IPAE_THRESHOLD:
+        modes.add("ipae")
+    pae_pass_frac = metrics.get("pae_pass_frac")
+    if pae_pass_frac is not None and pae_pass_frac < PAE_PASS_FRAC_THRESHOLD:
+        modes.add("pae_pass_frac")
+    iptm = metrics.get("iptm")
+    if iptm is not None and iptm < IPTM_THRESHOLD:
+        modes.add("iptm")
     ra_eff = metrics.get("ra_eff")
-    margins["ra_eff"] = (
-        (ra_eff - RA_EFF_THRESHOLD) / RA_EFF_THRESHOLD
-        if ra_eff is not None else None
-    )
+    if ra_eff is not None and ra_eff > RA_EFF_THRESHOLD:
+        modes.add("ra_eff")
+    return modes
 
-    positive = {k: v for k, v in margins.items() if v is not None and v > 0}
-    if not positive:
-        return None, margins
-    mode = max(positive, key=positive.__getitem__)
-    return mode, margins
+
+def greedy_set_cover(
+    candidates: List[Tuple[Path, Set[str]]],
+    n_per_mode: int,
+    rng: random.Random,
+) -> List[Path]:
+    """Greedy set-cover sampling: at each step pick the design whose
+    failure-mode set covers the largest number of modes that are still
+    under quota.  Modes already at >= n_per_mode are dropped from the
+    "needed" set when scoring candidates, so a design that fails on a
+    saturated mode but also on an under-quota one still gets chosen for
+    the under-quota mode it adds.
+
+    Ties are broken at random using rng (so the output is reproducible
+    with --seed).  Stops when every mode is covered to n_per_mode OR the
+    candidate pool is exhausted.
+
+    Designs that fail on zero modes (their representative row had every
+    metric finite and on the right side of every threshold — surfaces
+    only when the upstream tier classification disagrees with our
+    threshold panel) are skipped: they cannot contribute to coverage.
+    """
+    coverage: Dict[str, int] = {m: 0 for m in FAILURE_MODES}
+    chosen: List[Path] = []
+    pool: List[Tuple[Path, Set[str]]] = [
+        (wd, modes) for wd, modes in candidates if modes
+    ]
+
+    while pool:
+        needed = {m for m, c in coverage.items() if c < n_per_mode}
+        if not needed:
+            break
+
+        best_score = -1
+        best_bucket: List[Tuple[Path, Set[str]]] = []
+        for wd, modes in pool:
+            score = len(modes & needed)
+            if score == 0:
+                continue
+            if score > best_score:
+                best_score = score
+                best_bucket = [(wd, modes)]
+            elif score == best_score:
+                best_bucket.append((wd, modes))
+
+        if best_score <= 0:
+            # No remaining candidate covers any still-needed mode →
+            # the under-quota modes have no examples in the pool.
+            break
+
+        pick_wd, pick_modes = rng.choice(best_bucket)
+        chosen.append(pick_wd)
+        for m in pick_modes:
+            coverage[m] += 1
+        pool = [(wd, modes) for wd, modes in pool if wd != pick_wd]
+
+    return chosen
 
 
 # ───────────────────────────────────────────────────────────────────────
@@ -211,12 +272,8 @@ def main(argv=None) -> int:
              len(workdirs), runs_dir)
 
     passing: List[Path] = []
-    failing_by_mode: Dict[str, List[Path]] = {
-        "plddt": [],
-        "ipae": [],
-        "ra_eff": [],
-    }
-    failing_unclassified: List[Path] = []
+    failing_with_modes: List[Tuple[Path, Set[str]]] = []
+    failing_no_modes: List[Path] = []
     skipped: List[Tuple[Path, str]] = []
 
     for wd in workdirs:
@@ -237,20 +294,26 @@ def main(argv=None) -> int:
         if rep is None:
             skipped.append((wd, "no representative row"))
             continue
-        metrics = metrics_from_row(rep)
-        mode, _margins = dominant_failure_mode(metrics)
-        if mode is None:
-            failing_unclassified.append(wd)
+        modes = failure_modes_for(metrics_from_row(rep))
+        if modes:
+            failing_with_modes.append((wd, modes))
         else:
-            failing_by_mode[mode].append(wd)
+            failing_no_modes.append(wd)
 
-    LOG.info("Passing (tier != none):     %d", len(passing))
-    for mode, lst in failing_by_mode.items():
-        LOG.info("Failing dominant=%s:%s%d",
-                 mode, " " * (8 - len(mode)), len(lst))
-    LOG.info("Failing (no metric past threshold): %d",
-             len(failing_unclassified))
-    LOG.info("Skipped:                    %d", len(skipped))
+    pool_per_mode: Dict[str, int] = {m: 0 for m in FAILURE_MODES}
+    for _wd, modes in failing_with_modes:
+        for m in modes:
+            pool_per_mode[m] += 1
+
+    LOG.info("Passing (tier != none):                    %d", len(passing))
+    LOG.info("Failing with at least one mode flagged:    %d",
+             len(failing_with_modes))
+    LOG.info("Failing pool coverage per mode:")
+    for m in FAILURE_MODES:
+        LOG.info("  %-14s %d", m, pool_per_mode[m])
+    LOG.info("Failing with no metric past threshold:     %d",
+             len(failing_no_modes))
+    LOG.info("Skipped:                                   %d", len(skipped))
 
     rng = random.Random(args.seed)
 
@@ -263,84 +326,58 @@ def main(argv=None) -> int:
         else rng.sample(passing, n_passing_target)
     )
 
-    # Stratify failing across the three modes evenly, with overflow
-    # spread by remainder.  If a mode is short of its quota, the
-    # leftover budget cascades to the next mode in deterministic order
-    # so the manifest is reproducible.
-    target_total_failing = max(0, args.n_failing)
-    mode_order = ["plddt", "ipae", "ra_eff"]
-    base_quota = target_total_failing // len(mode_order)
-    remainder = target_total_failing % len(mode_order)
-    quotas = {m: base_quota + (1 if i < remainder else 0)
-              for i, m in enumerate(mode_order)}
-
-    chosen_failing: List[Path] = []
-    leftover_budget = 0
-    pool_remaining: Dict[str, List[Path]] = {}
-    for mode in mode_order:
-        pool = list(failing_by_mode[mode])
-        rng.shuffle(pool)
-        quota = quotas[mode]
-        take = min(quota, len(pool))
-        chosen_failing.extend(pool[:take])
-        leftover_budget += quota - take
-        pool_remaining[mode] = pool[take:]
-
-    # Spend leftover budget across whatever pools still have entries,
-    # in mode_order, then on failing_unclassified as a last resort.
-    if leftover_budget > 0:
-        spillover = []
-        for mode in mode_order:
-            spillover.extend(pool_remaining[mode])
-        rng.shuffle(failing_unclassified)
-        spillover.extend(failing_unclassified)
-        for wd in spillover:
-            if leftover_budget == 0:
-                break
-            if wd in chosen_failing:
-                continue
-            chosen_failing.append(wd)
-            leftover_budget -= 1
+    # Shuffle the failing candidate list before set-cover so any
+    # deterministic ordering the filesystem produced does not bias
+    # tie-breaks before rng.choice() ever runs.
+    failing_shuffled = list(failing_with_modes)
+    rng.shuffle(failing_shuffled)
+    chosen_failing = greedy_set_cover(
+        failing_shuffled, args.n_per_mode, rng,
+    )
 
     chosen_passing.sort(key=lambda p: p.name)
     chosen_failing.sort(key=lambda p: p.name)
 
-    final_breakdown: Dict[str, int] = {m: 0 for m in mode_order}
-    final_breakdown["unclassified"] = 0
+    # Coverage achieved by the chosen failing set — count how many
+    # selected designs fail on each mode.  A single design can
+    # contribute to multiple modes, so the column sum can exceed
+    # len(chosen_failing).
+    chosen_modes = {wd: modes for wd, modes in failing_with_modes}
+    final_coverage: Dict[str, int] = {m: 0 for m in FAILURE_MODES}
     for wd in chosen_failing:
-        rep = representative_row(wd)
-        mode = (
-            dominant_failure_mode(metrics_from_row(rep))[0]
-            if rep is not None else None
-        )
-        final_breakdown[mode if mode in final_breakdown else "unclassified"] += 1
+        for m in chosen_modes.get(wd, set()):
+            final_coverage[m] += 1
 
     args.outfile.parent.mkdir(parents=True, exist_ok=True)
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    threshold_summary = (
+        f"plddt<{PLDDT_THRESHOLD} "
+        f"ipae>{IPAE_THRESHOLD} "
+        f"pae_pass_frac<{PAE_PASS_FRAC_THRESHOLD} "
+        f"iptm<{IPTM_THRESHOLD} "
+        f"ra_eff>{RA_EFF_THRESHOLD}"
+    )
+    pool_coverage_summary = " ".join(
+        f"{m}={pool_per_mode[m]}" for m in FAILURE_MODES
+    )
+    selected_coverage_summary = " ".join(
+        f"{m}={final_coverage[m]}" for m in FAILURE_MODES
+    )
     with args.outfile.open("w") as f:
-        f.write(f"# Boltz-2-with-MSA diagnostic manifest\n")
-        f.write(f"# Generated:           {now}\n")
-        f.write(f"# negsteer-dir:        {args.negsteer_dir.resolve()}\n")
-        f.write(f"# Total designs:       {len(chosen_passing)} passing"
+        f.write("# Boltz-2-with-MSA diagnostic manifest\n")
+        f.write(f"# Generated:               {now}\n")
+        f.write(f"# negsteer-dir:            {args.negsteer_dir.resolve()}\n")
+        f.write(f"# Total designs selected:  {len(chosen_passing)} passing"
                 f" + {len(chosen_failing)} failing"
                 f" = {len(chosen_passing) + len(chosen_failing)}\n")
-        f.write(f"# Passing pool size:   {len(passing)}"
-                f" (took {len(chosen_passing)})\n")
-        f.write(f"# Failing pool sizes:  "
-                f"plddt={len(failing_by_mode['plddt'])} "
-                f"ipae={len(failing_by_mode['ipae'])} "
-                f"ra_eff={len(failing_by_mode['ra_eff'])} "
-                f"unclassified={len(failing_unclassified)}\n")
-        f.write(f"# Failing breakdown:   "
-                f"plddt={final_breakdown['plddt']} "
-                f"ipae={final_breakdown['ipae']} "
-                f"ra_eff={final_breakdown['ra_eff']} "
-                f"unclassified={final_breakdown['unclassified']}\n")
-        f.write(f"# Sampling seed:       {args.seed}\n")
-        f.write(f"# Failure thresholds:  "
-                f"plddt<{PLDDT_THRESHOLD} ipae>{IPAE_THRESHOLD} "
-                f"ra_eff>{RA_EFF_THRESHOLD}\n")
-        f.write(f"#\n")
+        f.write(f"# Passing pool:            {len(passing)} "
+                f"(took {len(chosen_passing)})\n")
+        f.write(f"# Failing pool coverage:   {pool_coverage_summary}\n")
+        f.write(f"# Selected failing cover:  {selected_coverage_summary}\n")
+        f.write(f"# Per-mode target:         --n-per-mode {args.n_per_mode}\n")
+        f.write(f"# Sampling seed:           {args.seed}\n")
+        f.write(f"# Failure thresholds:      {threshold_summary}\n")
+        f.write("#\n")
         f.write(f"# --- passing designs ({len(chosen_passing)}) ---\n")
         for wd in chosen_passing:
             f.write(f"{wd.resolve()}\n")
@@ -350,13 +387,12 @@ def main(argv=None) -> int:
 
     LOG.info(
         "Wrote manifest with %d entries to %s "
-        "(passing=%d, failing=%d; failing breakdown plddt=%d ipae=%d "
-        "ra_eff=%d unclassified=%d)",
+        "(passing=%d, failing=%d; selected failing coverage %s; "
+        "per-mode target=%d)",
         len(chosen_passing) + len(chosen_failing),
         args.outfile,
         len(chosen_passing), len(chosen_failing),
-        final_breakdown["plddt"], final_breakdown["ipae"],
-        final_breakdown["ra_eff"], final_breakdown["unclassified"],
+        selected_coverage_summary, args.n_per_mode,
     )
     return 0
 
