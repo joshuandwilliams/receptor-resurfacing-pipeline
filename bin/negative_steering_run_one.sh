@@ -234,7 +234,16 @@ sing_gpu python "$PY_NS" plan \
     "${PLAN_EXTRA[@]}"
 PLAN_RC=$?
 if [[ $PLAN_RC -ne 0 ]]; then
-    fail "plan stage exited $PLAN_RC"
+    # skip_steering is a valid soft exit: plan.json and steered_results.csv
+    # are already written with the cold-start row. Let execution fall through
+    # to the existing skip_steering handling below. Any other non-zero exit
+    # is still a hard failure.
+    if [[ -f "$CYCLE0_ABS/plan.json" ]] && \
+       python3 -c "import json,sys; p=json.load(open('$CYCLE0_ABS/plan.json')); sys.exit(0 if p.get('skip_steering') else 1)"; then
+        echo "  plan stage exited $PLAN_RC with skip_steering=true — continuing."
+    else
+        fail "plan stage exited $PLAN_RC"
+    fi
 fi
 if [[ ! -f "$CYCLE0_ABS/plan.json" ]]; then
     fail "plan stage did not produce $CYCLE0_ABS/plan.json"
