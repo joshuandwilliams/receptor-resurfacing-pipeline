@@ -1,0 +1,65 @@
+# pikp1_avrpia — ChimeraX commands to assemble the design-input complex
+#
+# Strategy: rung 1 (native receptor + native effector in same crystal).
+# 6Q76 (Pikp-HMA / AVR-Pia, 1.90 Å, Varden 2019) already provides the binding pose;
+# we only swap chain A (the deposit's truncated Pikp-HMA, residues 186–260) for the
+# AF3 monomer (full 186–263 = pipeline 1–78). Chain B (AVR-Pia) is kept as deposited.
+#
+# Output complex (`pikp1_avrpia_complex.pdb`) will have:
+#   chain A: AF3 Pikp-HMA, residues 1–78  (pipeline 1 = Pikp-1 186)
+#   chain B: AVR-Pia, residues 18–85      (preserves 6Q76 chain B precursor numbering)
+#
+# Chain B numbering: precursor (= literature) is preserved, so R43 in Varden 2019
+# is chain B residue 43 in the PDB, F24 is residue 24, etc. No mapping table needed.
+#
+# Primary contig (lit-sweep §6.2): A1-13/22-36/A43-78 B
+#   flex / design region = chain A residues 14-42 (= Pikp-1 199-227, second half of α1 + β2)
+
+# 1) Open structures ---------------------------------------------------------
+open /Users/jowillia/Documents/GitHub/receptor-pipeline-experiments/experiments/inputs/structures/AF3/Pikp-1_HMA.pdb
+open /Users/jowillia/Documents/GitHub/receptor-pipeline-experiments/experiments/inputs/structures/6Q76.pdb
+
+# 2) Superpose AF3 Pikp-HMA onto 6Q76 chain A --------------------------------
+# matchmaker handles the 1-78 vs 186-260 numbering offset automatically (NW alignment).
+# Expect Cα RMSD < 1.0 Å over the conserved HMA core; check the log.
+matchmaker #1/A to #2/A
+
+# 3) Drop alignment-only chain and non-protein -------------------------------
+delete #2/A
+delete solvent
+delete ~protein
+
+# 4) Combine into one model --------------------------------------------------
+# Chain A is the AF3 Pikp-HMA (1-78); chain B is 6Q76's AVR-Pia in its native
+# precursor numbering (18-85). No effector renumbering — keeps literature
+# residue numbers usable directly.
+combine #1 #2 modelId 3 name pikp1_avrpia_complex close true
+
+# 5) Sanity-check the binding pose -------------------------------------------
+# Pikp Asp-217 (= chain A pos 32) ↔ AVR-Pia Arg-43 (= chain B residue 43, precursor)
+# is the conserved salt bridge. Expect side-chain heavy atoms within ~3 Å.
+contacts #3/A:32 restrict #3/B:43
+
+# Show all interface contacts within 5 Å:
+contacts /A restrict /B
+
+# 6) Colour the design region red --------------------------------------------
+# Two strategies are available; the active block is strategy 4b (literature-
+# derived from Varden 2019 6Q76 contacts — well-supported here because 6Q76
+# is a Pikp-HMA/AVR-Pia native complex with five named contact residues).
+# Strategy 4a (geometric interface contacts from the assembled complex) is
+# below, commented out — kept as an alternative future run option (see
+# pikp1_avrpia_4a_contig.notes).
+
+# Strategy 4b (active) — lit-sweep §6.2 primary, single contiguous flex block
+color #3 gray
+color #3/B yellow
+color #3/A:14-42 red
+
+# Strategy 4a (commented out) — design regions per pikp1_avrpia_4a_contig.notes
+# color #3 gray
+# color #3/B yellow
+# color #3/A:18-27,31-36,41,78 red
+
+# 7) Save --------------------------------------------------------------------
+save /Users/jowillia/Documents/GitHub/receptor-pipeline-experiments/experiments/campaigns/pikp1_avrpia/inputs/pikp1_avrpia_complex.pdb #3

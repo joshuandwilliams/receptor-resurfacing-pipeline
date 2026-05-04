@@ -1,0 +1,89 @@
+# pikp1_pby2 — ChimeraX commands to assemble the design-input complex
+#
+# Strategy: cross-system rung 2. No Pikp-HMA / PBY2 complex exists; PBY2 is
+# natively recognised by barley Rmo2-HMA (a TKP integrated domain, not an NLR HMA).
+# 9TFO (Rmo2-HMA / PBY2, 2.2 Å, Yu et al. 2025 bioRxiv, HPUB) provides PBY2
+# coordinates and the binding pose; we superpose AF3 Pikp-HMA onto Rmo2-HMA via
+# the conserved βαββαβ core and adopt PBY2 in place.
+#
+# 9TFO chain assignments (verified in the lit-sweep):
+#   chains A,B = Rmo2-HMA (residues 2-76, 1-based domain numbering); A and B are
+#                 an asymmetric-unit dimer.
+#   chains C,D = PBY2 (chain C residues 24-84; chain D residues 22-84). Both use
+#                 PBY2 precursor numbering (E42 verified).
+#
+# Asymmetric-unit pairing: chain A pairs with chain C; chain B pairs with chain D
+# (verified visually after matchmaker — only one PBY2 copy ends up in the right
+# pose relative to the AF3-aligned chain A). We therefore keep chain C and
+# discard the un-paired chain D copy, even though chain D has 2 more N-terminal
+# residues — placement matters more than completeness.
+#
+# Output complex will have:
+#   chain A: AF3 Pikp-HMA, residues 1–78
+#   chain B: PBY2, residues 24–84 (preserves 9TFO chain C precursor numbering;
+#            chain C is relabelled C→B so the contig syntax matches)
+#
+# Chain B numbering: precursor (= literature) is preserved, so E42 in Yu 2025
+# is chain B residue 42 in the PDB. Likewise S48, etc.
+#
+# Caveat: Pikp-HMA does not natively bind PBY2, so this assembled complex is a
+# starting-geometry model, not a validated binding pose. The contig flex range
+# is wide enough to let RFDiffusion shift the pose.
+#
+# Primary contig (lit-sweep §6.2): A1-41/10-18/A52-78 B
+#   flex / design region = chain A residues 42-51 (β2-β3 + β3 + β3-α2 loop)
+
+# 1) Open structures ---------------------------------------------------------
+open /Users/jowillia/Documents/GitHub/receptor-pipeline-experiments/experiments/inputs/structures/AF3/Pikp-1_HMA.pdb
+open /Users/jowillia/Documents/GitHub/receptor-pipeline-experiments/experiments/inputs/structures/9TFO_refmac_final.pdb
+
+# 2) Superpose AF3 Pikp-HMA onto 9TFO chain A (Rmo2-HMA) ---------------------
+# Cross-system superposition over the conserved βαββαβ HMA core. Pikp-HMA and
+# Rmo2-HMA share the fold but diverge in sequence; default matchmaker handles
+# this OK, but if alignment is poor try: alg sw ssFraction 0.7
+matchmaker #1/A to #2/A
+
+# 3) Drop alignment chains, the un-paired PBY2 copy, and non-protein ---------
+# Keep only 9TFO chain C (the PBY2 copy paired with chain A in the asymmetric
+# unit — the only one in the right pose after matchmaker).
+delete #2/A
+delete #2/B
+delete #2/D
+delete solvent
+delete ~protein
+
+# 4) Relabel chain C → B so the contig syntax (`... B`) matches --------------
+# ChimeraX `changechains` takes atom-spec FIRST, then the new chain ID.
+changechains #2/C B
+
+# 5) Combine into one model --------------------------------------------------
+# Chain A is the AF3 Pikp-HMA (1-78); chain B is 9TFO's PBY2 in its native
+# precursor numbering (22-84). No effector renumbering.
+combine #1 #2 modelId 3 name pikp1_pby2_complex close true
+
+# 6) Sanity-check the binding pose -------------------------------------------
+# After superposition, chain A residues at the β3 face (~42-51) should be
+# proximal to chain B β2 region. PBY2 E42 is the binding-critical glutamate
+# and is at chain B residue 42 (precursor numbering).
+contacts /A:42-51 restrict /B
+contacts /A restrict /B:42
+
+# 7) Colour the design region red --------------------------------------------
+# Two strategies are available; the active block is strategy 4a (geometric
+# interface contacts derived from the assembled complex by contigs_4a.py).
+# Strategy 4b (literature-derived) is below, commented out — kept for
+# reference but found to be misaligned with the actual cross-system pose
+# (see pikp1_pby2_4a_contig.notes vs pikp1_pby2_literature_sweep.md §6).
+
+# Strategy 4a (active) — design regions per pikp1_pby2_4a_contig.notes
+color #3 gray
+color #3/B yellow
+color #3/A:15,19-26,32-41 red
+
+# Strategy 4b (commented out) — literature-derived from Yu 2025 lit-sweep §6.2
+# color #3 gray
+# color #3/B yellow
+# color #3/A:42-51 red
+
+# 8) Save --------------------------------------------------------------------
+save /Users/jowillia/Documents/GitHub/receptor-pipeline-experiments/experiments/campaigns/pikp1_pby2/inputs/pikp1_pby2_complex.pdb #3

@@ -1,0 +1,65 @@
+# pikp1_avrpikf — ChimeraX commands to assemble the design-input complex
+#
+# Strategy: cross-system rung 2. No Pikp-HMA / AVR-PikF complex exists;
+# 7B1I (OsHIPP19-HMA / AVR-PikF, 1.90 Å, Maidment 2021 JBC) provides the only
+# AVR-PikF crystal coordinates and shares the canonical AVR-Pik face geometry.
+# Pikp-HMA is sourced from the AF3 monomer (full 186–263 = pipeline 1–78);
+# AVR-PikF is taken from 7B1I chain C.
+#
+# NOTE: this will overwrite the existing pikp1_avrpikf_complex.pdb. The
+# existing file has chain C residues 32-113; the script as written produces
+# chain C residues 33-113 (matches the 7B1I deposit one residue more strictly).
+# The contig string `A1-32/12-20/A50-68/8-14 C` and the contigs_4a.py-generated
+# `A1-2/2-4/A6-31/6-12/A40-42/5-10/A50-67/8-16 C` do not reference chain-C
+# residue numbers internally, so the change is benign for RFDiffusion. If you
+# regenerate `pikp1_avrpikf_4a_contig.txt` against the new complex the residue
+# counts in `pikp1_avrpikf_4a_contig.notes` will tick by one.
+#
+# Output complex will have:
+#   chain A: AF3 Pikp-HMA,  residues 1–78
+#   chain C: AVR-PikF,      residues 33–113 (preserves 7B1I precursor numbering)
+#
+# Chain C numbering: precursor (= literature) is preserved, so K78 in Maidment
+# 2021 / Longya 2019 is chain C residue 78 in the PDB. Likewise N46, E53, etc.
+#
+# Primary contig (lit-sweep §6.2): A1-32/12-20/A50-68/8-14 C
+#   flex / design regions = chain A 33-49 (Interface 2) and 69-78 (Interface 3)
+
+# 1) Open structures ---------------------------------------------------------
+open /Users/jowillia/Documents/GitHub/receptor-pipeline-experiments/experiments/inputs/structures/AF3/Pikp-1_HMA.pdb
+open /Users/jowillia/Documents/GitHub/receptor-pipeline-experiments/experiments/inputs/structures/7B1I.pdb
+
+# 2) Superpose AF3 Pikp-HMA onto 7B1I chain B (OsHIPP19-HMA) -----------------
+# OsHIPP19-HMA shares the βαββαβ HMA fold with Pikp-HMA; matchmaker default
+# (sequence + light SS weighting) gives a clean superposition over the conserved
+# core. Expect Cα RMSD ~1.0–1.5 Å. If poor, retry with: alg sw ssFraction 0.7
+matchmaker #1/A to #2/B
+
+# 3) Drop alignment-only chain and non-protein -------------------------------
+delete #2/B
+delete solvent
+delete ~protein
+
+# 4) Combine into one model --------------------------------------------------
+# Chain A is the AF3 Pikp-HMA (1-78); chain C is 7B1I's AVR-PikF in its native
+# precursor numbering (33-113). No effector renumbering.
+combine #1 #2 modelId 3 name pikp1_avrpikf_complex close true
+
+# 5) Sanity-check the binding pose -------------------------------------------
+# Pikp Lys-262 (= chain A pos 77) ↔ AVR-PikF K78 (= chain C residue 78, precursor).
+# In wild-type AVR-Pik this position is Met78 and packs into the Lys262 pocket;
+# in AVR-PikF it's Lys78 and clashes electrostatically — that's the lesion this
+# campaign exists to fix.
+contacts #3/A:77 restrict #3/C:78
+
+# Show all interface contacts within 5 Å:
+contacts /A restrict /C
+
+# 6) Colour the design regions red -------------------------------------------
+color #3 gray
+color #3/C yellow
+color #3/A:33-49 red
+color #3/A:69-78 red
+
+# 7) Save --------------------------------------------------------------------
+save /Users/jowillia/Documents/GitHub/receptor-pipeline-experiments/experiments/campaigns/pikp1_avrpikf/inputs/pikp1_avrpikf_complex.pdb #3

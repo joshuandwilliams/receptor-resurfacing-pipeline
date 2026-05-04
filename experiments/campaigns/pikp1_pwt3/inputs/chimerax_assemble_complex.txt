@@ -1,0 +1,89 @@
+# pikp1_pwt3 — ChimeraX commands to assemble the design-input complex
+#
+# Strategy: rung 5 + rung 6 + ChimeraX double alignment onto a canonical
+# Pik-HMA / AVR-Pik template. CONDITIONAL on the AF3 PWT3 monomer producing a
+# MAX-like β-sandwich fold (Scenario A in lit-sweep §3.2). If AF3 returns
+# something non-MAX, this script is invalid — fall to AF3-multimer (Scenario B).
+#
+# Inputs assumed present:
+#   1. AF3/Pikp-1_HMA.pdb      — Pikp-HMA monomer prediction (chain A, 1-78)
+#   2. AF3/Pwt3.pdb            — PWT3 monomer prediction (chain A, 1-123),
+#                                copied from the AF3 best-model output of the
+#                                slurm job in AF3/pwt3/. Sequence is mature
+#                                chain residues 19-141 of UniProt A0A223ZP76
+#                                (B-type PWT3, virulent on Rwt3-wheat).
+#   3. 6G10.pdb                — Pikp-HMA / AVR-PikD reference complex,
+#                                used as the canonical AVR-Pik face anchor.
+#                                6G10 chains: A,B = Pikp-HMA (188-258);
+#                                              C  = AVR-PikD (31-113).
+#
+# Output complex will have:
+#   chain A: AF3 Pikp-HMA, residues 1–78
+#   chain B: AF3 PWT3,     residues 1–123 (relabelled A→B; numbers unchanged)
+#
+# Chain B numbering note:
+#   The AF3 input was the mature chain (residues 19-141 of A0A223ZP76 fed in
+#   as positions 1-123), so chain B residue N = mature position N = precursor
+#   position N+18 of A0A223ZP76. Examples: precursor residue 39 -> chain B:21;
+#   precursor residue 100 -> chain B:82. This offset is unavoidable here
+#   because AF3 always numbers its output from 1; the only way to keep
+#   precursor numbering would be to submit the full 141-aa precursor (signal
+#   peptide and all) to AF3, which is generally not done.
+#
+# Primary contig (lit-sweep §6.2 — CONDITIONAL on Scenario A):
+#   A1-32/12-20/A50-68/8-14 B
+#   flex / design regions = chain A 33-49 (Interface 2) and 69-78 (Interface 3)
+#
+# WARNING ON ALIGNMENT: PWT3 has no detectable sequence similarity to AVR-PikD.
+# The Pwt3 → 6G10/C alignment in step 2 is a structural-only superposition;
+# we use a high ssFraction so matchmaker effectively does fold-only matching.
+# Inspect the alignment RMSD reported in the log: if > 3 Å over fewer than 40
+# Cα atoms, treat the fold-similarity claim as failed and revert to Scenario B.
+
+# 1) Open all three structures -----------------------------------------------
+open /Users/jowillia/Documents/GitHub/receptor-pipeline-experiments/experiments/inputs/structures/AF3/Pikp-1_HMA.pdb
+open /Users/jowillia/Documents/GitHub/receptor-pipeline-experiments/experiments/inputs/structures/AF3/Pwt3.pdb
+open /Users/jowillia/Documents/GitHub/receptor-pipeline-experiments/experiments/inputs/structures/6G10.pdb
+
+# 2) Superpose AF3 PWT3 onto 6G10 chain C (AVR-PikD) -------------------------
+# Pure-fold alignment; sequence identity is essentially noise here.
+matchmaker #2/A to #3/C alg sw ssFraction 1.0
+
+# Read the log: confirm RMSD < 3 Å over ≥ 40 Cα atoms. If not, STOP — the
+# Scenario-A assumption fails and you need an AF3-multimer (Scenario B) instead.
+
+# 3) Superpose AF3 Pikp-HMA onto 6G10 chain A (Pikp-HMA reference) -----------
+# Same protein, different numbering (AF3: 1-78 vs 6G10: 188-258).
+matchmaker #1/A to #3/A
+
+# 4) Drop the 6G10 alignment template entirely + non-protein from #1, #2 -----
+close #3
+delete solvent
+delete ~protein
+
+# 5) Relabel PWT3 chain A → B so the contig syntax (`... B`) matches ---------
+# (Pikp-HMA chain A in model #1 is unaffected — atom-spec is scoped to #2.)
+# AF3 already numbers chain A from 1, so no renumbering is needed.
+# ChimeraX `changechains` takes atom-spec FIRST, then the new chain ID.
+changechains #2/A B
+
+# 6) Combine into one model --------------------------------------------------
+# Chain A is the AF3 Pikp-HMA (1-78); chain B is the AF3 PWT3 monomer in its
+# native AF3 numbering (1-123 = mature chain residues 19-141 of A0A223ZP76).
+combine #1 #2 modelId 4 name pikp1_pwt3_complex close true
+
+# 7) Sanity-check the binding pose -------------------------------------------
+# After both superpositions, chain A residues at the AVR-Pik face (33-49 + 69-78)
+# should be near chain B. The actual contacts are unknown — visual inspection
+# in ChimeraX is the validation step.
+contacts /A:33-49 restrict /B
+contacts /A:69-78 restrict /B
+
+# 8) Colour the design regions red -------------------------------------------
+color #4 gray
+color #4/B yellow
+color #4/A:33-49 red
+color #4/A:69-78 red
+
+# 9) Save --------------------------------------------------------------------
+save /Users/jowillia/Documents/GitHub/receptor-pipeline-experiments/experiments/campaigns/pikp1_pwt3/inputs/pikp1_pwt3_complex.pdb #4

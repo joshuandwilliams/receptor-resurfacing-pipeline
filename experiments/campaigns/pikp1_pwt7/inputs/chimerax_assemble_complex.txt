@@ -1,0 +1,96 @@
+# pikp1_pwt7 — ChimeraX commands to assemble the design-input complex
+#
+# Strategy: cross-system rung 2. No Pikp-HMA / PWT7 complex exists; PWT7 is
+# natively recognised by wheat Rwt7-HMA (TKP integrated domain).
+# 9TFP (Rwt7-HMA / PWT7, 1.6 Å, Yu et al. 2025 bioRxiv, HPUB) provides PWT7
+# coordinates and the binding pose; we superpose AF3 Pikp-HMA onto Rwt7-HMA
+# via the conserved βαββαβ core and adopt PWT7 in place.
+#
+# 9TFP chain assignments (verified in the lit-sweep):
+#   chains A,C = PWT7 (residues 19-98, PWT7 precursor numbering; N39 + D40 verified)
+#   chains B,D = Rwt7-HMA (residues 1-74, 1-based domain numbering; M1 verified)
+#
+# Asymmetric-unit pairing: 9TFP also has two complexes per AU. The PWT7 chain
+# (A or C) actually paired with 9TFP chain B (the Rwt7-HMA we superpose AF3
+# onto) is a crystal-packing detail. **VERIFY VISUALLY** after step 2: hide
+# the alignment chain B then toggle between #2/A and #2/C to see which one
+# sits in the binding pose against the AF3-aligned Pikp-HMA. Adjust the
+# delete commands in step 3 accordingly. The script defaults to keeping
+# chain A; if chain C is the correct one, swap "delete #2/C" for "delete #2/A"
+# below and rename C→B in step 4.
+#
+# Output complex will have:
+#   chain A: AF3 Pikp-HMA, residues 1–78
+#   chain B: PWT7, residues 19–98 (preserves 9TFP chain A or C precursor numbering;
+#            relabelled A→B (or C→B) so the contig syntax matches)
+#
+# Chain B numbering: precursor (= literature) is preserved, so N39 / D40 in
+# Yu 2025 are chain B residues 39 / 40 in the PDB.
+#
+# Caveat: PWT7 binds Rwt7-HMA at the N-terminal β1/M1 face — a binding mode
+# unlike any sibling pikp1_* campaign and one that has NOT been validated for
+# Pikp-HMA. The flex region (chain A 1-30) is the same N-terminal face the
+# avrpia/avrpikf/pby2 campaigns explicitly anchor; designing across it is
+# this campaign's whole point.
+#
+# Primary contig (lit-sweep §6.2): 15-28/A31-78 B
+#   flex / design region = chain A residues 1-30 (pre-β1 + β1 + α1 N-terminus)
+
+# 1) Open structures ---------------------------------------------------------
+open /Users/jowillia/Documents/GitHub/receptor-pipeline-experiments/experiments/inputs/structures/AF3/Pikp-1_HMA.pdb
+open /Users/jowillia/Documents/GitHub/receptor-pipeline-experiments/experiments/inputs/structures/9TFP_refmac_final.pdb
+
+# 2) Superpose AF3 Pikp-HMA onto 9TFP chain B (Rwt7-HMA) ---------------------
+# Cross-system superposition over the conserved βαββαβ HMA core. Pikp-HMA and
+# Rwt7-HMA share the fold but diverge in sequence; default matchmaker handles
+# this OK. If alignment is poor try: alg sw ssFraction 0.7
+# Pay particular attention to β1 alignment — that's the campaign-relevant region.
+matchmaker #1/A to #2/B
+
+# 3) Drop the Rwt7-HMA chains (B used for alignment, D the dimer copy),
+#    the duplicate PWT7 (chain C), and non-protein --------------------------
+# Keep only 9TFP chain A (one PWT7 copy).
+delete #2/B
+delete #2/C
+delete #2/D
+delete solvent
+delete ~protein
+
+# 4) Relabel chain A → B so the contig syntax (`... B`) matches --------------
+# (Pikp-HMA chain A in model #1 is unaffected — atom-spec is scoped to #2.)
+# ChimeraX `changechains` takes atom-spec FIRST, then the new chain ID.
+# If you kept chain C instead of chain A above, change `#2/A` to `#2/C` here.
+changechains #2/A B
+
+# 5) Combine into one model --------------------------------------------------
+# Chain A is the AF3 Pikp-HMA (1-78); chain B is 9TFP's PWT7 in its native
+# precursor numbering (19-98). No effector renumbering.
+combine #1 #2 modelId 3 name pikp1_pwt7_complex close true
+
+# 6) Sanity-check the binding pose -------------------------------------------
+# After superposition, chain A N-terminal residues (~1-15) should approach
+# PWT7 N39 + D40 (chain B residues 39, 40 in precursor numbering). The exact
+# contacts on the Pikp-HMA side are inferred from fold alignment, not
+# crystallographic — visual inspection is the validation.
+contacts /A:1-15 restrict /B
+contacts /A restrict /B:39-40
+
+# 7) Colour the design region red --------------------------------------------
+# Two strategies are available; the active block is strategy 4a (geometric
+# interface contacts derived from the assembled complex by contigs_4a.py).
+# Strategy 4b (literature-derived) is below, commented out — kept for
+# reference but found to be misaligned with the actual cross-system pose
+# (see pikp1_pwt7_4a_contig.notes vs pikp1_pwt7_literature_sweep.md §6).
+
+# Strategy 4a (active) — design regions per pikp1_pwt7_4a_contig.notes
+color #3 gray
+color #3/B yellow
+color #3/A:2-4,27,31-32,47-61,69-72,77 red
+
+# Strategy 4b (commented out) — literature-derived from Yu 2025 lit-sweep §6.2
+# color #3 gray
+# color #3/B yellow
+# color #3/A:1-30 red
+
+# 8) Save --------------------------------------------------------------------
+save /Users/jowillia/Documents/GitHub/receptor-pipeline-experiments/experiments/campaigns/pikp1_pwt7/inputs/pikp1_pwt7_complex.pdb #3
