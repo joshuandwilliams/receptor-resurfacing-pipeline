@@ -1,0 +1,66 @@
+Literature sweep completed 2026-05-04.
+
+Effector identification (resolved):
+- PBY2 is a MAX-fold avirulence effector from Pyricularia oryzae (barley blast
+  pathotype, isolate Br48). Signal peptide residues 1-20; mature chain 21-85
+  (65 residues). GenBank accession range: LC905591-LC905597 (Asuke et al. 2025).
+- Recognised by Rmo2 (barley TKP, gene ABC1037) via its N-terminal integrated
+  HMA domain (1-77 of the Rmo2 protein). KD = 53.5 nM by ITC (Yu et al. 2025).
+- Binding-critical effector residue: E42 (precursor numbering); E42R abolishes
+  binding to Rmo2-HMA and resistance in barley in planta.
+
+Source PDB and numbering convention:
+- Chain A: AF3 monomer prediction of native Pikp-1 HMA (UniProt E9KPB5,
+  residues 186-263), renumbered 1-78 (pipeline = literature - 185). Shared
+  with all pikp1_* campaigns.
+- Chain B: PBY2 coordinates from PDB 9TFO chain B (Rmo2-HMA/PBY2, 2.2 A,
+  Yu et al. 2025; currently HPUB on-hold). Numbering likely precursor (1-85);
+  verify in ChimeraX that residue 42 = Glu (E42).
+- Complex assembly: cross-system alignment. Superpose AF3 Pikp-1 HMA (chain A)
+  onto 9TFO chain A (Rmo2-HMA, 1-77), then adopt PBY2 chain B coordinates from
+  9TFO. 6G10 and 6Q76 are NOT used — PBY2 binds a third, distinct face of the
+  HMA fold.
+- Fallback: if 9TFO is inaccessible, run AF3-multimer of Pikp-1 HMA + PBY2
+  (rung 7). PBY2 sequence available from GenBank LC905591-LC905597.
+
+Binding face determination (CAMPAIGN-SPECIFIC; distinct from all sibling campaigns):
+- PBY2 binds the BETA-3 FACE of Rmo2-HMA (β3 strand antiparallel with β2 of
+  PBY2; predominantly main-chain), with limited side-chain contacts from Rmo2-HMA
+  α1 (D15, K18) to PBY2 β2 (E42, S48).
+- This is spatially distinct from the canonical AVR-Pik face (β4/β3 pairing used
+  in 6G10/5A6W etc.) and from the AVR-Pia face (β2/αA pairing used in 6Q76/5ZNG).
+- On Pikp-1 HMA in pipeline numbering, the equivalent of β3 of Rmo2-HMA is
+  approximately pipeline positions 43-49 (β3 strand of Pikp-1 HMA).
+- Primary redesign target: pipeline ~42-51 (β3 + flanking loops).
+- This region was ANCHORED in pikp1_avrpikf and pikp1_avrpia — the PBY2 campaign
+  requires a distinct contig.
+
+Primary contig:
+  A1-41/10-18/A52-78 B
+
+Primary papers cited:
+- Yu et al. 2025 bioRxiv (9TFO/9TFP/9TFQ/9TFS/9TFT; Rmo2-HMA/PBY2 structure;
+  binding interface; E42R mutagenesis; KD; TKP engineering)
+- Asuke et al. 2025 bioRxiv (Rmo2 cloning; PBY2 cloning; PBY2 = MAX effector;
+  GenBank sequence; Rmo2/PBY2 biology; PBY2 distribution in pathotypes)
+- Maqbool 2015 eLife (Pikp-1 HMA scaffold; AVR-Pik canonical face)
+- De la Concepcion 2018 Nat Plants (Interface 1/2/3 definition; Pikp-HMA fold)
+- Guo 2018 PNAS (distinct binding surfaces; AVR1-CO39/RGA5 β2/β2 face)
+- Varden 2019 JBC (AVR-Pia/Pikp-HMA α1/β2 face; showing β3 face is distinct)
+- Reveguk 2025 Nat Genet (TKP integrated domains review)
+- Nga et al. 2012 Phytopathology (RMO2 locus identification)
+
+Source provenance:
+- Read from experiments/inputs/context/:
+  - yu_2025_bioarxiv.pdf (Yu et al. 2025 bioRxiv — structural data, binding face,
+    PDB codes, E42R mutagenesis, KD)
+  - asuke_2025_bioarxiv.pdf (Asuke et al. 2025 bioRxiv — Rmo2 cloning, PBY2
+    cloning, MAX fold confirmation, GenBank accessions, pathotype distribution)
+  - guo_2018_pnas.pdf (for comparison of binding faces)
+  - delaconcepcion_2019_natplants.pdf (Pikp-1 HMA scaffold; reused)
+- Fetched online (RCSB PDB only): 9TFO, 9TFP metadata (HPUB status confirmed).
+- Receptor-scaffold papers (Maqbool 2015, Varden 2019, etc.): reused from
+  sibling pikp1_avrpikf and pikp1_avrpia sweeps.
+
+No campaign-blockers: PBY2 coordinates (9TFO chain B), structural binding-face
+data, mutagenesis data, and PBY2 sequence (GenBank) are all available.

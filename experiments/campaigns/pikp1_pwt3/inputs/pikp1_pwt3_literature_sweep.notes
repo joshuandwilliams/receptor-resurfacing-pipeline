@@ -1,0 +1,58 @@
+Literature sweep completed 2026-05-04.
+
+Effector identification:
+- PWT3 is an avirulence effector from Pyricularia oryzae (barley and Lolium blast
+  pathotypes, isolate Br58 = Ao-type functional form). Signal peptide 1-18; mature
+  chain 19-141 = 123 residues (UniProt A0A223ZP76; B-type from Br48).
+- PWT3 is NOT a MAX-fold effector by sequence: Inoue et al. 2017 Science state it
+  "lacked similarity to known proteins or protein domains." Le Naour-Vernet 2023
+  PLoS Pathog classifies it as "non-MAX effector." This contradicts the prior
+  knowledge for the campaign.
+- The natural resistance gene Rwt3 is a CC-NLR without HMA integrated domain
+  (Arora et al. 2023 Nat Plants). PWT3 is not naturally recognised via HMA.
+- GenBank: LC202650-LC202657 (Ao/Atm/B types from various isolates; Inoue 2017).
+- No deposited PDB structure for PWT3.
+
+Source PDB and numbering convention:
+- Chain A: AF3 monomer prediction of Pikp-1 HMA (UniProt E9KPB5, residues 186-263),
+  renumbered 1-78 (pipeline = literature - 185). Shared with all pikp1_* campaigns.
+- Chain B: AF3 monomer prediction of PWT3 Ao-type mature chain (DDBJ LC202650 or
+  equivalent; ~123 residues after signal peptide cleavage at ~residue 18-20).
+  Rung 6 of the fallback ladder. REQUIRES FOLD VALIDATION before complex assembly.
+- Complex template: 6G10 (Pikp-HMA/AVR-PikD, De la Concepcion 2018) — CONDITIONAL
+  on AF3 PWT3 monomer confirming a MAX-like β-sandwich fold (pLDDT >70, RMSD to
+  2MYW < 3 Å over ≥40 residues).
+- Fallback (Scenario B): AF3-multimer of Pikp-1 HMA + PWT3 Ao-type mature chain
+  (rung 7). Must be run regardless as cross-check.
+
+Primary contig (CONDITIONAL on MAX-fold assumption):
+  A1-32/12-20/A50-68/8-14 B
+  (Flex regions: Interface 2 pipeline ~33-49, Interface 3 pipeline ~69-78.)
+  This contig MUST be revised if AF3 shows non-MAX fold or different binding face.
+
+Campaign-blocker status:
+- SOFT BLOCKER: AF3 monomer prediction of PWT3 must be run and validated before
+  complex assembly can be finalised. The MAX-fold assumption may not hold.
+- If non-MAX (Scenario B): AF3-multimer required; §4 and §6 of the report must be
+  redone from the multimer contact map.
+
+Primary papers cited:
+- Inoue et al. 2017 Science (PWT3 cloning; "no functional domains"; sequence)
+- Inoue et al. 2021 New Phytologist (PWT4 biology; confirms PWT3 = no domains)
+- Arora et al. 2023 Nature Plants (Rwt3 = CC-NLR, no HMA)
+- Le Naour-Vernet et al. 2023 PLoS Pathog (PWT3 = non-MAX effector)
+- Maqbool 2015 eLife (Pikp-1 HMA scaffold; 5A6W)
+- De la Concepcion 2018 Nat Plants (6G10; Interface 1/2/3 definition)
+- Kanzaki 2012 Plant Journal (AVR-Pik alleles)
+- Longya 2019 MPMI (AVR-PikF; Interface 3)
+
+Source provenance:
+- Read from experiments/inputs/context/:
+  - inoue_2017_science.pdf (PWT3 cloning, sequence data, "no functional domains")
+  - inoue_2021_newphytol.pdf (confirms PWT3 has no domains; PWT4 biology)
+  - delaconcepcion_2019_natplants.pdf (Pikp-1 HMA scaffold; reused)
+  - kanzaki_2012_plantj.pdf (AVR-Pik alleles; reused)
+  - longya_2019_mpmi.pdf (AVR-PikF; reused)
+- Fetched online: Arora 2023 Nat Plants (PMC10027608); Le Naour-Vernet 2023 PLoS
+  Pathog; UniProt A0A223ZP76.
+- Receptor-scaffold papers: reused from sibling pikp1_avrpikf and pikp1_avrpia sweeps.

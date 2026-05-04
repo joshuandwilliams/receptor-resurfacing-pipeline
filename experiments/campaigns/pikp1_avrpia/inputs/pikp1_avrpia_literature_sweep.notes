@@ -1,0 +1,71 @@
+Literature sweep completed 2026-05-04.
+
+Source PDB and numbering convention:
+- Chain A of pikp1_avrpia_complex.pdb is an AlphaFold3 monomer prediction of
+  native Pikp-1 HMA (UniProt E9KPB5, residues 186–263), renumbered 1–78
+  such that pipeline position 1 = Pikp-1 residue 186 and position 78 =
+  Pikp-1 residue 263. Translation: pipeline = literature − 185.
+- Chain B is AVR-Pia coordinates lifted from PDB 6Q76 chain B (Varden 2019
+  JBC; Pikp-1 HMA / AVR-Pia complex, 1.90 Å). Chain B is deposited as
+  residues 1–68 (66 modelled); the relationship to AVR-Pia precursor
+  numbering (1–85, signal peptide 1–19) must be confirmed by ChimeraX
+  inspection before complex assembly. Working assumption is precursor
+  numbering (so chain B Arg-43 = precursor Arg-43 = the conserved
+  salt-bridge partner of Pikp-1 Asp-217).
+- The 6Q76 chain A numbering (1–75) coincides exactly with pipeline
+  numbering (both start at Pikp-1 186). Complex assembly aligns the AF3
+  chain A onto 6Q76 chain A directly — no extra cross-complex alignment
+  template needed. 6G10 is not used.
+- Structural-input fallback ladder rung: rung 5 for chain A (shared AF3
+  monomer, same as all pikp1_* campaigns). Rung 1 for chain B (native
+  target-effector complex deposited in the PDB).
+
+Binding face determination:
+- AVR-Pia binds the α1/β2 face of Pikp-HMA (the HMA dimerization face),
+  NOT the canonical AVR-Pik face (Interfaces 1/2/3). Confirmed by 6Q76
+  (Varden 2019) and independently by 5ZNG (Guo 2018) for the structurally
+  equivalent RGA5/AVR1-CO39 interface. This face is opposite to the
+  AVR-PikD binding surface.
+- Primary redesign region: pipeline positions ~14–42 (α1 second half + β2).
+  Contact residues: Ser-204(19), Ser-212(27), Asp-217(32), Val-219(34),
+  Arg-226(41). Asp-217 (pipeline 32) is the most conserved contact across
+  all AVR-Pia binding HMA domains; it is absent in Pikm-HMA (replaced by
+  His), explaining why Pikm does not bind AVR-Pia.
+
+Primary papers cited:
+- Varden 2019 JBC (6Q76 structure; Pikp-HMA/AVR-Pia interface)
+- Guo 2018 PNAS (5ZNG/5ZNE; distinct binding surfaces; RGA5/AVR1-CO39)
+- Maidment 2025 bioRxiv (9RSV; OsHPP09-HMA/AVR-Pia; H(I)PP targets)
+- Cesari 2013 Plant Cell (RGA4/RGA5 paired-NLR; direct effector binding)
+- Ortiz 2017 Plant Cell (5JHJ; AVR-Pia/RGA5-RATX1 binding surface; F24S)
+- de Guillen 2015 PLoS Pathog (2MYW/2MYV; MAX fold; AVR-Pia/AVR1-CO39 NMR)
+- Maqbool 2015 eLife (5A6P/5A6W; first Pik-HMA/AVR-Pik structure)
+- De la Concepcion 2018 Nat Plants (6G10/6FU9; HMA interfaces 1/2/3)
+- De la Concepcion 2019 eLife (6R8K/6R8M; NK-KE engineering)
+- Maidment 2021 JBC (7B1I; OsHIPP19-HMA/AVR-PikF)
+- Maidment 2021 PLoS Pathog (7A8W/7A8X; Pikh polymorphism)
+- Maidment 2023 eLife (7QPX/7QZD; SNK-EKE engineering)
+- Białas 2021 eLife (7BNT; ancestral Pik-HMA)
+- Bentham 2023 Plant Cell (8B2R; engineered RGA5-HMA)
+- Zdrzałek 2024 PNAS (8R7A/8R7D; Pwl2/OsHIPP43)
+- Cesari 2014 EMBO J (RGA4/RGA5 paired-NLR mechanism)
+- Ose 2015 J Biomol NMR (2N37; AVR-Pia NMR)
+
+Source provenance:
+- Read from experiments/inputs/context/:
+  - guo_2018_pnas.pdf (Guo et al. 2018 PNAS)
+  - maidment_2025_bioarxiv.pdf (Maidment et al. 2025 bioRxiv)
+  - delaconcepcion_2019_natplants.pdf (De la Concepcion et al. 2018 Nat Plants;
+    file naming reflects download year not publication year)
+- Fetched online (PMC, PLoS, eLife, RCSB, UniProt) in Part 1:
+  - Varden 2019 JBC (PMC6721932; full text)
+  - Cesari 2013 Plant Cell (PMC3663280; full text)
+  - Ortiz 2017 Plant Cell (PMC5304345; full text)
+  - de Guillen 2015 PLoS Pathog (full text)
+  - PDB entries: 6Q76, 9RSV, 5ZNG, 5ZNE, 5JHJ, 2MYW, 2MYV, 2N37
+  - UniProt: E9KPB5 (Pikp-1), A0A6P8B9Y5 (AVR-Pia)
+  - Receptor-scaffold papers (Maqbool 2015, De la Concepcion 2018/2019,
+    Maidment 2021 JBC/PLoS Pathog, Maidment 2023, Białas 2021, Bentham 2023,
+    Zdrzałek 2024): reused from sibling pikp1_avrpikf campaign sweep.
+
+No campaign-blockers identified.

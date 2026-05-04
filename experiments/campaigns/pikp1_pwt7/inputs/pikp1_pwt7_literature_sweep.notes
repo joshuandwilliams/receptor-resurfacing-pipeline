@@ -1,0 +1,65 @@
+Literature sweep completed 2026-05-04.
+
+Effector identification:
+- PWT7 is an avirulence effector from Pyricularia oryzae (Avena/Lolium blast
+  pathotypes; isolate Br58). Cloned by Asuke et al. 2023 MPMI (gene F38).
+  98 aa precursor; signal peptide 1-20; mature chain 21-98 = 78 residues.
+  Full precursor sequence: MQFGYLFALA TAFGIATPVM ARRCVVEMVG RDGTFEFVND
+  KEYCVPPEPM LQFGQKTDLR PKKPGYKFFV NVDAGCTTAV HVKGKMPKGY FFRTRWEN
+  Three cysteines (C24, C44, C76 precursor). No public UniProt accession.
+  DDBJ project accessions PRJDB14584/PRJDB14749 (Asuke 2023).
+- MAX fold confirmed by structural context (crystallized with Rwt7-HMA at 1.6 Å
+  and 0.99 Å; Yu 2025). Not explicitly classified as MAX in Asuke 2023 by sequence.
+- Alleles: PWT7Ele (1 aa diff), PWT7LomE (1 aa diff from Ele), PWT7Lom (4 aa diff),
+  PWT7Set (4 aa diff) — all functional except TP2 which is suppressed.
+
+Source PDB and numbering convention:
+- Chain A: AF3 monomer of Pikp-1 HMA (UniProt E9KPB5, residues 186-263),
+  renumbered 1-78 (pipeline = literature - 185). Shared with all pikp1_* campaigns.
+- Chain B: 9TFP chain B (PWT7; Rwt7-HMA/PWT7 crystal structure, 1.6 Å;
+  Yu et al. 2025; HPUB — Banfield lab data). Request access from M.J. Banfield.
+  Working assumption: precursor numbering. Verify N39 = binding-critical Asn.
+  Alternative higher-res source: 9TFT chain B (0.99 Å; same depositors).
+- Complex template: 9TFP (cross-system alignment; superpose AF3 Pikp-1 HMA onto
+  Rwt7-HMA from 9TFP). 6G10 is NOT used.
+
+Binding face determination (CONFIRMED — campaign-specific):
+- PWT7 binds Rwt7-HMA at the N-terminal β1/M1 face: M1 of Rwt7-HMA forms
+  extensive interactions with PWT7; interface spans "two faces" of Rwt7-HMA;
+  central contacts are N39 and D40 of PWT7 (precursor numbering = N19/D20 mature
+  = β2 of PWT7 MAX fold).
+- M1 of Rwt7-HMA = pipeline position 1 of Pikp-1 HMA (= Lys-186).
+- This is the OPPOSITE END of the HMA from the canonical AVR-Pik binding face
+  (β4/C-tail = pipeline ~67-78).
+- Distinct from all other sibling campaigns: avrpikf uses β4 (pipeline 67-78),
+  avrpia uses α1/β2 (pipeline 19-42), pby2 uses β3 (pipeline 43-49).
+- The β1/N-terminal region (pipeline 1-30) was ANCHORED in all sibling campaigns
+  but is the PRIMARY REDESIGN TARGET in this campaign.
+- Binding-critical: N39R in PWT7 abolishes binding (Yu 2025). KD = 2.92 nM.
+
+Primary contig:
+  15-28/A31-78 B
+  (Flex: pipeline 1-30, native 30 residues; Anchor: pipeline 31-78)
+
+Campaign-blockers: None. 9TFP (Banfield lab data) is the structural basis; user
+has access. No further literature gap.
+
+Primary papers cited:
+- Asuke et al. 2023 MPMI (PWT7 cloning, sequence, gene structure, alleles)
+- Yu et al. 2025 bioRxiv (9TFP structure; Rwt7-HMA/PWT7 binding face; N39R;
+  KD = 2.92 nM; "two faces" binding mode)
+- Asuke et al. 2025 bioRxiv (PWT7 biology; Rwt7 TKP; distribution MoE/MoL)
+- Maqbool 2015 eLife (Pikp-1 HMA scaffold)
+- De la Concepcion 2018 Nat Plants (HMA Interface 1/2/3 definition)
+- Guo 2018 PNAS (distinct HMA binding faces; comparison with AVR-Pia)
+- Varden 2019 JBC (AVR-Pia face; for contrast)
+
+Source provenance:
+- Read from experiments/inputs/context/:
+  - asuke_2023_mpmi.pdf (PWT7 cloning, sequence, alleles, distribution)
+  - yu_2025_bioarxiv.pdf (9TFP structure, binding face, N39R, KD)
+  - asuke_2025_bioarxiv.pdf (Rwt7 TKP; PWT7 biology/distribution)
+  - guo_2018_pnas.pdf (distinct HMA binding faces; comparison)
+  - delaconcepcion_2019_natplants.pdf (Pikp-1 HMA scaffold; reused)
+- Fetched online: 9TFP/9TFT/9TFQ metadata (RCSB; HPUB status confirmed).
+- Receptor-scaffold papers: reused from sibling pikp1_avrpikf/avrpia sweeps.

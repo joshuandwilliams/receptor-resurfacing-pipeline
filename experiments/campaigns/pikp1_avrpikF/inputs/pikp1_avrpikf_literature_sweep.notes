@@ -1,0 +1,45 @@
+Literature sweep completed 2026-05-04.
+
+Source PDB and numbering convention:
+- Chain A of pikp1_avrpikf_complex.pdb is an AlphaFold3 monomer prediction
+  of native Pikp-1 HMA (UniProt E9KPB5, residues 186–263), renumbered
+  1–78 such that contig position 1 = Pikp-1 residue 186 and position 78
+  = Pikp-1 residue 263. Translation: pipeline = literature − 185.
+- Chain C is AVR-PikF coordinates lifted from PDB 7B1I (Maidment 2021
+  JBC; OsHIPP19-HMA / AVR-PikF complex), retaining 7B1I residue
+  numbering (which is AVR-Pik precursor 1–113 numbering; resolved range
+  31–81). No offset between chain C and AVR-Pik literature numbering.
+- AVR-PikF has no dedicated UniProt accession; canonical AVR-Pik is
+  UniProt C4B8C0.
+
+Structural-input fallback ladder rung used: rung 5 (AF3 monomer
+prediction of native receptor). Justification in §3 of the report.
+
+Primary papers cited:
+- Maqbool 2015 eLife
+- De la Concepcion 2018 Nature Plants
+- De la Concepcion 2019 eLife
+- Varden 2019 JBC
+- Maidment 2021 JBC
+- Maidment 2021 PLoS Pathogens
+- Białas 2021 eLife
+- Maidment 2023 eLife
+- Bentham 2023 Plant Cell
+- Zdrzałek 2024 PNAS
+- Kanzaki 2012 Plant Journal
+- Longya 2019 MPMI
+- Yoshida 2009 Plant Cell
+
+Source provenance:
+- Read from experiments/inputs/context/:
+  - delaconcepcion_2019_natplants.pdf (file name; contents are the De la
+    Concepcion 2018 Nature Plants paper — the user named the file with
+    the manuscript download year rather than the publication year; the
+    paper itself is unambiguous)
+  - longya_2019_mpmi.pdf
+  - kanzaki_2012_plantj.pdf
+- Fetched online from open-access mirrors during Part 1 (PMC, eLife,
+  PLoS, RCSB, UniProt): all other primary papers and structural metadata.
+
+No campaign-blockers identified. No gap-listed papers were missing from
+the context folder.
