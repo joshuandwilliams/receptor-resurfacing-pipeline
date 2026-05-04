@@ -92,6 +92,11 @@ experiments/campaigns/*/.nextflow*
 experiments/campaigns/*/*.out
 experiments/campaigns/*/*.err
 
+# ----- Experiments — AF3 monomer prediction outputs -----
+# AF3 jobs run on HPC and the prediction trees are large (~MBs per run).
+# Inputs (slurm script, JSON, fasta) ARE tracked; outputs are not.
+experiments/inputs/structures/AF3/*/alphafold3_*_output/
+
 # ----- Large data that shouldn't be tracked -----
 # Be cautious — your tests/ directory has small PDB files
 # that ARE tracked. Add specific patterns here if needed.
