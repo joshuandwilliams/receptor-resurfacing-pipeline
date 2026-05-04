@@ -1,0 +1,65 @@
+# Literature-sweep config for a binder design campaign.
+#
+# Only receptor.name and effector.name are required. All other fields are
+# optional context that helps Opus produce a better report — but only if
+# the content is genuinely correct. Wrong or speculative content in optional
+# fields gets treated as ground truth by Opus and propagates as fabrication
+# into the report. If unsure about an optional field, leave it commented out.
+#
+# Render with:
+#   python3 experiments/scripts/render_prompt.py \
+#       <this_file>.yml \
+#       experiments/scripts/literature_sweep_prompt.md.template \
+#       -o <output>.md
+
+# ── REQUIRED ──────────────────────────────────────────────────────────────────
+
+receptor:
+  # Display name as you'd refer to it in conversation. Used throughout the
+  # rendered prompt. Examples: "Pikp-1 HMA", "RGA5 HMA", "Pikm-1 HMA".
+  name: "Pikp-1 HMA"
+
+  # OPTIONAL: UniProt accession for the full-length receptor protein. If
+  # provided, Opus will be told to consult UniProt for sequence and domain
+  # information. Example: "E9KPB5".
+  # uniprot_id: "E9KPB5"
+
+  # OPTIONAL: domain boundaries within the full-length protein, as a string
+  # like "186-263". Useful when the receptor has a specific domain you want
+  # to design (e.g. just the HMA, not the full NLR). If omitted, Opus is told
+  # to determine appropriate boundaries from the literature.
+  # domain_boundaries: "186-263"
+
+effector:
+  # Display name. Examples: "AVR-PikF", "AVR-Pia", "AVR-Pii".
+  name: "AVR-PikF"
+
+  # OPTIONAL: alternative names or spellings the effector goes by in the
+  # literature. Helps Opus catch papers that use different naming conventions.
+  # Only include aliases you have verified — wrong aliases will mislead the
+  # search.
+  # aliases:
+  #   - "AvrPik-F"
+  #   - "AVR-Pik F-variant"
+
+# ── OPTIONAL ──────────────────────────────────────────────────────────────────
+
+# OPTIONAL: campaign slug used in output filenames. Convention is
+# <receptor>_<effector> lowercase, matching the campaign directory name.
+# campaign_slug: "pikp1_avrpikf"
+
+# OPTIONAL: free-text bullets capturing what you already know going into the
+# campaign. This pre-primes Opus so the search starts from a good place rather
+# than rediscovering things you could have just told it. Each bullet should be
+# a single fact, observation, or pointer — short, no need to be polished.
+#
+# WARNING: Opus treats these bullets as ground truth. Only include things you
+# can vouch for — known PDB IDs, key papers, allelic-series context, known
+# structural problems with the obvious crystal structure, things you've already
+# tried. Speculative or half-remembered claims will propagate as fabrication
+# into the report.
+#
+# prior_knowledge:
+#   - "Known PDB ID for the target complex: <id>"
+#   - "Key paper: <author> et al. <year>"
+#   - "Already tried: <approach> — outcome was <result>"

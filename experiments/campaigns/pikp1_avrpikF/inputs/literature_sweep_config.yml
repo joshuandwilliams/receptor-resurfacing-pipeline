@@ -1,0 +1,28 @@
+# Literature-sweep config for the pikp1_avrpikf campaign.
+#
+# Render with:
+#   python3 experiments/scripts/render_prompt.py \
+#       experiments/campaigns/pikp1_avrpikf/inputs/literature_sweep_config.yml \
+#       experiments/scripts/literature_sweep_prompt.md.template \
+#       -o experiments/campaigns/pikp1_avrpikf/inputs/literature_sweep_prompt.md
+
+receptor:
+  name: "Pikp-1 HMA"
+  uniprot_id: "E9KPB5"
+  domain_boundaries: "186-263"
+
+effector:
+  name: "AVR-PikF"
+
+campaign_slug: "pikp1_avrpikf"
+
+# Campaign-specific context that the literature search alone will not surface.
+# Each bullet is a verified fact the user has established outside the
+# information sources the prompt directs Opus to consult — typically from
+# direct PDB inspection, prior campaign work, or specialist knowledge of
+# this particular receptor.
+prior_knowledge:
+  - "All deposited Pikp-1 HMA crystal structures are missing C-terminal residues that are critical for binding. The native crystal 6G10 truncates before this region. The engineered structures (SNK-EKE: 7QPX, 7QZD) appear from their construct boundaries to include the full C-terminus, but ATOM records show several C-terminal residues are unresolved (disordered) in the deposited coordinates. None of the deposited structures provides a complete C-terminal interface."
+  - "Therefore the structural-input decision for THIS campaign overrides the default fallback ladder: use rung 5 (AlphaFold3 monomer prediction of native Pikp-1 HMA, residues 186-263) rather than rung 4 (engineered crystal). The user has already verified the AF3 prediction is reliable for this domain — there are multiple high-resolution crystal structures of closely-related sequences to anchor it, and the C-terminal residues that are disordered in the crystals can be modelled by AF3 with reasonable confidence."
+  - "The AF3 prediction is renumbered from 1 (position 1 = Pikp-1 residue 186; position 78 = residue 263). The contig must be written in this 1-78 numbering."
+  - "The contig should redesign both Interface 2 (β2/β3 region) AND Interface 3 (C-terminal region). Do NOT treat the engineered SNK-EKE residues at Interface 3 as a fixed anchor — the campaign explicitly aims to find alternatives to that engineered solution rather than build on top of it. The C-terminal region must be inside a flexible block."
