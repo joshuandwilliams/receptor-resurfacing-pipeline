@@ -5,36 +5,39 @@ listing one absolute per-sequence workdir path per array task.  Sampling
 balances designs that passed the pipeline's own gating (tier A/B/C in
 cross_sequence_summary terms) with designs that failed it.
 
+Tier classification source — cross_sequence_summary.csv only
+------------------------------------------------------------
+An earlier version of this script walked each per-sequence workdir and
+called the workdir "passing" iff its passing_summary.csv had >= 1 data
+row.  That criterion turned out to be wrong: the pikp1_avrpikf v1_4a
+results tree contained per-sequence passing_summary.csv files whose
+canonical_pdb columns referenced *another* run's Nextflow work
+directory hashes (e.g. runs/v2_4b/work/<hash>/...) — stale rows the
+publishDir cache copied from the wrong upstream task.  Conversely, the
+ACTUAL v1_4a tier-A passing sequences had EMPTY (header-only)
+passing_summary.csv files on disk because their published files were
+overwritten by the same caching bug.
+
+cross_sequence_summary.csv read its inputs from the in-flight
+NEGSTEER_CROSS_SEQUENCE staging directory rather than the published
+runs/ tree, so it has the authoritative tier classification — this is
+the only source we trust here.  We filter to row_type == "steered"
+(controls excluded), and read cross_tier directly.
+
 Failing designs are picked by greedy set cover across failure modes:
 each design has a SET of modes it fails on (a typical failing design
 fails on multiple), and we iteratively pick the design that covers the
 most still-under-quota modes until every mode has at least
---n-per-mode covered or the failing pool is exhausted.  This avoids
-the under-coverage produced by single-dominant-mode stratification.
+--n-per-mode covered or the failing pool is exhausted.
 
-Inputs assumed under --negsteer-dir:
+Failure-mode thresholds (read from the representative_*_median columns
+of cross_sequence_summary.csv):
 
-    runs/<seq_name>/
-      aggregated_results.csv
-      passing_summary.csv
-
-passing_summary.csv contains zero or more rows per workdir; an empty
-passing_summary (header-only) means the sequence cleared no tier in the
-pipeline (cross-sequence summary calls this "tier none") — i.e. failing.
-
-aggregated_results.csv carries the per-sequence_group medians the
-pipeline uses for ranking.  When picking a representative row for a
-multi-sequence_group workdir, prefer rank_by_composite_score == 1
-(matches the cross-sequence summary's representative pick); fall back
-to the first row.
-
-Failure-mode thresholds:
-
-    pLDDT failure:        steered_complex_plddt_median   <  0.7
-    ipAE failure:         steered_ipae_median            > 15
-    pae_pass_frac fail:   steered_pae_pass_frac_median   <  0.1
-    iPTM failure:         steered_iptm_median            <  0.3
-    ra_eff failure:       steered_ra_eff_vs_truth_median >  5
+    pLDDT failure:        representative_complex_plddt_median   <  0.7
+    ipAE failure:         representative_ipae_median            > 15
+    pae_pass_frac fail:   representative_pae_pass_frac_median   <  0.1
+    iPTM failure:         representative_iptm_median            <  0.3
+    ra_eff failure:       representative_ra_eff_vs_truth_median >  5
 """
 
 from __future__ import annotations
@@ -99,7 +102,7 @@ def parse_args(argv=None) -> argparse.Namespace:
 
 
 # ───────────────────────────────────────────────────────────────────────
-# Per-workdir loaders
+# cross_sequence_summary loaders
 # ───────────────────────────────────────────────────────────────────────
 def _try_float(v) -> Optional[float]:
     if v is None or v == "":
@@ -113,57 +116,16 @@ def _try_float(v) -> Optional[float]:
     return f
 
 
-def _try_int(v) -> Optional[int]:
-    f = _try_float(v)
-    return None if f is None else int(f)
-
-
-def is_passing(workdir: Path) -> bool:
-    """A workdir is passing if its passing_summary.csv has at least one
-    data row.  Empty (header-only) means tier-none.
-    """
-    ps = workdir / "passing_summary.csv"
-    if not ps.is_file():
-        return False
-    with ps.open() as f:
-        rdr = csv.DictReader(f)
-        for _ in rdr:
-            return True
-    return False
-
-
-def representative_row(workdir: Path) -> Optional[Dict[str, str]]:
-    """Pick the representative aggregated_results.csv row for a workdir.
-
-    Prefers rank_by_composite_score == 1 (the cross-sequence summary
-    representative pick); falls back to the first row.  Returns None if
-    aggregated_results.csv is missing or empty.
-    """
-    agg = workdir / "aggregated_results.csv"
-    if not agg.is_file():
-        return None
-    rows: List[Dict[str, str]] = []
-    with agg.open() as f:
-        rdr = csv.DictReader(f)
-        rows = list(rdr)
-    if not rows:
-        return None
-    for r in rows:
-        if _try_int(r.get("rank_by_composite_score")) == 1:
-            return r
-    return rows[0]
-
-
-def metrics_from_row(row: Dict[str, str]) -> Dict[str, Optional[float]]:
-    """Pull the failure-mode-relevant medians from an
-    aggregated_results.csv row.
+def metrics_from_xs_row(row: Dict[str, str]) -> Dict[str, Optional[float]]:
+    """Pull the failure-mode-relevant medians from a
+    cross_sequence_summary.csv row (representative_*_median columns).
     """
     return {
-        "complex_plddt": _try_float(row.get("steered_complex_plddt_median")),
-        "ipae":          _try_float(row.get("steered_ipae_median")),
-        "pae_pass_frac": _try_float(row.get("steered_pae_pass_frac_median")),
-        "iptm":          _try_float(row.get("steered_iptm_median")),
-        "ra_eff":        _try_float(row.get("steered_ra_eff_vs_truth_median")),
+        "complex_plddt": _try_float(row.get("representative_complex_plddt_median")),
+        "ipae":          _try_float(row.get("representative_ipae_median")),
+        "pae_pass_frac": _try_float(row.get("representative_pae_pass_frac_median")),
+        "iptm":          _try_float(row.get("representative_iptm_median")),
+        "ra_eff":        _try_float(row.get("representative_ra_eff_vs_truth_median")),
     }
 
 
@@ -260,45 +222,82 @@ def main(argv=None) -> int:
         level=logging.DEBUG if args.verbose else logging.INFO,
     )
 
-    runs_dir = args.negsteer_dir.resolve() / "runs"
+    negsteer_dir = args.negsteer_dir.resolve()
+    runs_dir = negsteer_dir / "runs"
+    xs_path = negsteer_dir / "cross_sequence_summary.csv"
+
     if not runs_dir.is_dir():
         raise FileNotFoundError(
             f"Expected runs/ subdirectory under {args.negsteer_dir}: "
             f"{runs_dir} not found."
         )
+    if not xs_path.is_file():
+        raise FileNotFoundError(
+            f"cross_sequence_summary.csv not found at {xs_path}.  This is "
+            "the authoritative tier-classification source for the "
+            "manifest builder; without it we cannot reliably distinguish "
+            "passing from failing designs (the per-workdir "
+            "passing_summary.csv files in the published runs/ tree can be "
+            "stale due to publishDir caching across resumed pipeline "
+            "runs)."
+        )
 
-    workdirs = sorted(p for p in runs_dir.iterdir() if p.is_dir())
-    LOG.info("Found %d candidate per-sequence workdirs under %s",
-             len(workdirs), runs_dir)
+    with xs_path.open() as f:
+        xs_rows = list(csv.DictReader(f))
+    LOG.info("Read %d rows from %s", len(xs_rows), xs_path)
 
     passing: List[Path] = []
     failing_with_modes: List[Tuple[Path, Set[str]]] = []
     failing_no_modes: List[Path] = []
     skipped: List[Tuple[Path, str]] = []
+    seen_names: Set[str] = set()
 
-    for wd in workdirs:
-        # Skip the controls (input_control_polyA, input_control_scrambled)
-        # and any helper subdir that is not a real sequence workdir.
-        if wd.name.startswith("input_control"):
-            skipped.append((wd, "control"))
+    for r in xs_rows:
+        name = (r.get("mpnn_sequence") or "").strip()
+        row_type = (r.get("row_type") or "").strip()
+        cross_tier = (r.get("cross_tier") or "").strip()
+        if not name:
             continue
-        if not (wd / "aggregated_results.csv").is_file():
-            skipped.append((wd, "no aggregated_results.csv"))
+        seen_names.add(name)
+        if row_type != "steered":
+            # Negative controls (control_polyA / control_scrambled).
+            skipped.append((runs_dir / name, f"row_type={row_type}"))
             continue
 
-        if is_passing(wd):
+        wd = runs_dir / name
+        if not wd.is_dir():
+            skipped.append((wd, "workdir missing on disk"))
+            continue
+
+        if cross_tier and cross_tier != "none":
             passing.append(wd)
             continue
 
-        rep = representative_row(wd)
-        if rep is None:
-            skipped.append((wd, "no representative row"))
-            continue
-        modes = failure_modes_for(metrics_from_row(rep))
+        # cross_tier == "none" → failing.  Failure-mode classification
+        # uses the representative_* medians the cross-sequence aggregator
+        # already wrote on this row.
+        modes = failure_modes_for(metrics_from_xs_row(r))
         if modes:
             failing_with_modes.append((wd, modes))
         else:
             failing_no_modes.append(wd)
+
+    # Workdirs on disk that cross_sequence_summary.csv never recorded —
+    # surface them in the log so the user knows about coverage gaps but
+    # do not auto-include them as passing or failing (without an xs row
+    # we can't trust either classification).
+    on_disk_extras = [
+        wd.name for wd in sorted(runs_dir.iterdir())
+        if wd.is_dir()
+        and not wd.name.startswith("input_control")
+        and wd.name not in seen_names
+    ]
+    if on_disk_extras:
+        LOG.warning(
+            "Workdirs on disk but absent from cross_sequence_summary.csv "
+            "(treated as out-of-scope): %s",
+            ", ".join(on_disk_extras),
+        )
 
     pool_per_mode: Dict[str, int] = {m: 0 for m in FAILURE_MODES}
     for _wd, modes in failing_with_modes:
