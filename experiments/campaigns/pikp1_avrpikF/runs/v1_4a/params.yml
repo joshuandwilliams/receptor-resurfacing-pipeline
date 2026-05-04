@@ -46,7 +46,7 @@ effector_active_residues: ""
 # ── RFDiffusion ───────────────────────────────────────────────────────
 contigs: "A1-2/2-4/A6-31/6-12/A40-42/5-11/A50-67/8-16 C"
 num_designs: 64
-rfdiff_iterations: 50
+rfdiff_iterations: 100
 min_hotspot_frac: 0.0
 rfdiff_contact_cutoff: 8.0
 
@@ -75,7 +75,7 @@ negsteer_candidate_pool_size: 10
 negsteer_protected_set_source: "design_region_union"
 
 # Design / seed counts
-negsteer_n_designs: 4
+negsteer_n_designs: 3
 negsteer_num_seeds: 3
 negsteer_n_cycles: 1
 
