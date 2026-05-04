@@ -1,0 +1,49 @@
+# Strategy 4a contig derivation
+
+Invocation: experiments/param_derivation/contigs_4a.py --complex-pdb experiments/campaigns/pikp1_avrpia/inputs/pikp1_avrpia_complex.pdb --binder-chain A --target-chain B --output experiments/campaigns/pikp1_avrpia/inputs/pikp1_avrpia_4a_contig.txt --merge-threshold 2
+Complex PDB: experiments/campaigns/pikp1_avrpia/inputs/pikp1_avrpia_complex.pdb
+Binder chain: A
+Target chain: B
+Cutoff (A): 5.0
+Min multiplier: 0.7
+Max multiplier: 1.5
+Merge threshold: 2
+
+## Binder summary
+Total binder residues: 78 (resnums 1-78)
+Interface-facing residues identified (raw, pre-bridging): 13
+Anchor blocks absorbed during bridging: 3
+Final design regions count: 4
+Final anchor blocks count: 4
+
+## Target summary
+Total target residues: 68
+
+## Anchor blocks (non-interface, kept native)
+  A1-17  (length 17)
+  A28-30  (length 3)
+  A37-40  (length 4)
+  A42-77  (length 36)
+
+## Design regions (interface-facing, handed to RFDiffusion)
+  resnums 18-27  native_length=10  -> 7-15
+  resnums 31-36  native_length=6  -> 4-9
+  resnums 41-41  native_length=1  -> 1-1
+  resnums 78-78  native_length=1  -> 1-1
+
+## Bridging
+Absorbed A20-21 (native length 2) into surrounding design spanning A18-23
+Absorbed A24-25 (native length 2) into surrounding design spanning A18-27
+Absorbed A34-34 (native length 1) into surrounding design spanning A31-36
+
+## Final contig
+A1-17/7-15/A28-30/4-9/A37-40/1-1/A42-77/1-1 B
+
+## Notes on helpers
+Outward-facing test: is_surface_exposed (bin/boltz2_negative_steering.py).
+  Cbeta-vector heuristic: (Calpha->Cbeta).(Calpha->neighbour-centroid) < 0.
+  Glycine (no Cbeta) is excluded.
+Contact test: find_contact_residues_heavy (bin/boltz2_negative_steering.py).
+  Compares all heavy atoms (backbone + side chain) on both sides;
+  the 4a strategy doc specifies side-chain heavy on the binder,
+  but we reuse the helper rather than reimplementing.
