@@ -20,6 +20,12 @@
 #     during fixture curation; safe to recreate locally without syncing
 #   - tests/full_test_run/reference_data_helpers/ -- ad-hoc helpers
 #     pulled from HPC for path-coverage analysis
+#   - AF3 job artefacts under experiments/inputs/structures/AF3/<name>/
+#     (AF3_*.out, AF3_*.err, alphafold3_*_output/) -- AF3 runs on HPC,
+#     and we never want a local-to-HPC push to delete them. The curated
+#     best-model PDBs that live directly under AF3/ (e.g. Pikp-1_HMA.pdb,
+#     Pwt3.pdb) ARE synced -- they're the input artefacts the pipeline
+#     consumes.
 #
 # Includes (despite being run artefacts in some sense):
 #   - tests/full_test_run/example_output_files/  -- curated reference set
@@ -51,6 +57,9 @@ rsync -av --delete $DRY_RUN -e ssh \
     --exclude='.ruff_cache/' \
     --exclude='.mypy_cache/' \
     --exclude='nxf_home/' \
+    --exclude='experiments/inputs/structures/AF3/*/AF3_*.out' \
+    --exclude='experiments/inputs/structures/AF3/*/AF3_*.err' \
+    --exclude='experiments/inputs/structures/AF3/*/alphafold3_*_output/' \
     --exclude='~$*' \
     --exclude='tests/*/work/' \
     --exclude='tests/*/tmp/' \
@@ -59,6 +68,7 @@ rsync -av --delete $DRY_RUN -e ssh \
     --exclude='tests/*/.nextflow*' \
     --exclude='tests/*/*.out' \
     --exclude='tests/*/*.err' \
+    --exclude='tests/full_test_run/example_output_files/' \
     --exclude='tests/full_test_run/results/' \
     --exclude='tests/full_test_run/work/' \
     --exclude='tests/full_test_run/tmp/' \
