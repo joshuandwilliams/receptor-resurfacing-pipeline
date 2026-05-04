@@ -1,0 +1,20 @@
+{
+  "name": "pikp1_hma_native",
+  "modelSeeds": [
+    42,
+    123,
+    456,
+    789,
+    1024
+  ],
+  "dialect": "alphafold3",
+  "version": 1,
+  "sequences": [
+    {
+      "protein": {
+        "id": "A",
+        "sequence": "GLKQKIVIKVAMEGNNCRSKAMALVASTGGVDSVALVGDLRDKIEVVGYGIDPIKLISALRKKVGDAELLQVSQANKD"
+      }
+    }
+  ]
+}
