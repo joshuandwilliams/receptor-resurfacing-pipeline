@@ -1,0 +1,235 @@
+```{python}
+#!/usr/bin/env python3
+"""
+prepare_structures.py — Pikp-1 HMA / AVR-PikF structure preparation
+
+This script:
+  a) Downloads 7B1I and extracts the AVR-PikF structure (chain C → chain B)
+  b) Downloads UniProt E9KPB5 (Pikp-1) and extracts residues 186-263 (the full
+     HMA domain), saving the sequence as a FASTA and as an AF3 JSON input
+  c) Validates the extracted HMA sequence for expected features at key positions
+
+Why not just use 6G11 crystal coordinates?
+  6G11 SEQRES covers 186-263, but ATOM records only resolve 188-260 (70 residues).
+  The critical C-terminal residues 261-263 (including Lys262 at Interface 3) are
+  disordered and have no coordinates. We therefore need an AlphaFold3 monomer
+  prediction of the full 186-263 domain to obtain a complete structure.
+"""
+
+import requests
+import json
+import os
+import sys
+
+
+# ── Configuration ──────────────────────────────────────────────────────────
+
+OUTPUT_DIR = "data"
+
+# Pikp-1 full-length UniProt entry
+UNIPROT_ID = "E9KPB5"
+
+# HMA domain boundaries (De la Concepcion et al. 2018, 2019; Bentham et al. 2023)
+HMA_START = 186  # inclusive, 1-indexed UniProt numbering
+HMA_END = 263    # inclusive
+
+# AVR-PikF source structure
+AVRPIKF_PDB = "7B1I"
+AVRPIKF_CHAIN = "C"
+AVRPIKF_TARGET_CHAIN = "B"
+
+# Expected features in the HMA domain (UniProt Pikp-1 positions → 0-indexed
+# within the 186-263 extract). These are validated after extraction.
+# Format: (position_in_extract_0indexed, expected_aa, description)
+EXPECTED_FEATURES = [
+    # Interface 2 residues (β2-β3)
+    (218 - HMA_START, "S", "Ser218 — Interface 2, H-bond with effector pos 46"),
+    (224 - HMA_START, "D", "Asp224 — Interface 2, salt bridge with effector Arg64"),
+    (230 - HMA_START, "E", "Glu230 — Interface 2, effector contact"),
+    # Interface 3 residues (C-terminus) — the critical region missing from 6G11 ATOM records
+    (258 - HMA_START, "S", "Ser258 — Interface 3, SNK-EKE target position"),
+    (261 - HMA_START, "N", "Asn261 — Interface 3, NK-KE position 1 (native = Asn)"),
+    (262 - HMA_START, "K", "Lys262 — Interface 3, CRITICAL effector pocket insertion"),
+    (263 - HMA_START, "D", "Asp263 — Interface 3, C-terminal residue"),
+]
+
+
+# ── Helper functions ───────────────────────────────────────────────────────
+
+def download_pdb(pdb_id, output_dir):
+    """Download a PDB file from RCSB."""
+    url = f"https://files.rcsb.org/download/{pdb_id}.pdb"
+    output_path = os.path.join(output_dir, f"{pdb_id}.pdb")
+    print(f"  Downloading {pdb_id}...", end=" ")
+    response = requests.get(url)
+    if response.status_code != 200:
+        print(f"FAILED (HTTP {response.status_code})")
+        sys.exit(1)
+    with open(output_path, "w") as f:
+        f.write(response.text)
+    print(f"OK -> {output_path}")
+    return output_path
+
+
+def download_uniprot_fasta(uniprot_id):
+    """Download a FASTA sequence from UniProt. Returns the sequence string."""
+    url = f"https://rest.uniprot.org/uniprotkb/{uniprot_id}.fasta"
+    print(f"  Downloading UniProt {uniprot_id}...", end=" ")
+    response = requests.get(url)
+    if response.status_code != 200:
+        print(f"FAILED (HTTP {response.status_code})")
+        sys.exit(1)
+    lines = response.text.strip().split("\n")
+    header = lines[0]
+    sequence = "".join(lines[1:])
+    print(f"OK ({len(sequence)} aa total)")
+    print(f"  Header: {header}")
+    return sequence, header
+
+
+def extract_chain(input_path, chain_id, target_chain_id, output_path):
+    """Extract a single chain from a PDB, relabel and renumber from 1."""
+    atoms = []
+    with open(input_path, "r") as f:
+        for line in f:
+            if line.startswith("ATOM") and line[21] == chain_id:
+                atoms.append(line)
+    if not atoms:
+        print(f"  ERROR: No ATOM records for chain {chain_id} in {input_path}")
+        sys.exit(1)
+
+    orig_residues = sorted(set(int(line[22:26].strip()) for line in atoms))
+    print(f"  Chain {chain_id}: residues {orig_residues[0]}-{orig_residues[-1]} "
+          f"({len(orig_residues)} residues)")
+
+    res_mapping = {}
+    current_new = 0
+    with open(output_path, "w") as f:
+        for line in atoms:
+            old_res = int(line[22:26].strip())
+            if old_res not in res_mapping:
+                current_new += 1
+                res_mapping[old_res] = current_new
+            new_res = res_mapping[old_res]
+            new_line = line[:21] + target_chain_id + f"{new_res:4d}" + line[26:]
+            f.write(new_line)
+        f.write("END\n")
+
+    print(f"  -> {output_path}: chain {target_chain_id}, "
+          f"renumbered 1-{current_new} ({current_new} residues)")
+    return current_new, res_mapping
+
+
+def validate_hma_sequence(sequence, features):
+    """Check that expected amino acids are present at key positions."""
+    print(f"\n  Validating HMA sequence ({len(sequence)} aa)...")
+    all_ok = True
+    for pos_0idx, expected_aa, description in features:
+        pos_1idx = pos_0idx + 1  # 1-indexed position within the extract
+        if pos_0idx >= len(sequence):
+            print(f"  FAIL pos {pos_1idx}: out of range (sequence length {len(sequence)})")
+            all_ok = False
+            continue
+        actual_aa = sequence[pos_0idx]
+        status = "OK" if actual_aa == expected_aa else "MISMATCH"
+        if status == "MISMATCH":
+            all_ok = False
+        pikp1_pos = HMA_START + pos_0idx
+        print(f"    [{status:8s}] Pikp-1 {pikp1_pos} (extract pos {pos_1idx}): "
+              f"expected {expected_aa}, got {actual_aa} — {description}")
+    return all_ok
+
+
+# ── Main ───────────────────────────────────────────────────────────────────
+
+def main():
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+    print("=" * 70)
+    print("Structure Preparation: Pikp-1 HMA (full-length) + AVR-PikF")
+    print("=" * 70)
+
+    # ── Part A: AVR-PikF from 7B1I ────────────────────────────────────────
+    print("\n[A] Preparing AVR-PikF effector structure")
+    pdb_7b1i = download_pdb(AVRPIKF_PDB, OUTPUT_DIR)
+    avrpikf_path = os.path.join(OUTPUT_DIR, "AVR-PikF.pdb")
+    avrpikf_nres, _ = extract_chain(
+        pdb_7b1i, AVRPIKF_CHAIN, AVRPIKF_TARGET_CHAIN, avrpikf_path
+    )
+
+    # ── Part B: Pikp-1 HMA sequence from UniProt ──────────────────────────
+    print("\n[B] Extracting Pikp-1 HMA sequence from UniProt")
+    full_seq, header = download_uniprot_fasta(UNIPROT_ID)
+
+    # Extract HMA domain (convert to 0-indexed for Python slicing)
+    hma_seq = full_seq[HMA_START - 1 : HMA_END]  # 186-263 inclusive
+    expected_len = HMA_END - HMA_START + 1  # 78
+    print(f"  Extracted residues {HMA_START}-{HMA_END}: {len(hma_seq)} aa "
+          f"(expected {expected_len})")
+    print(f"  Sequence: {hma_seq}")
+
+    if len(hma_seq) != expected_len:
+        print(f"  ERROR: Expected {expected_len} residues, got {len(hma_seq)}")
+        print("  The UniProt entry may have changed. Check manually.")
+        sys.exit(1)
+
+    # Save FASTA
+    fasta_path = os.path.join(OUTPUT_DIR, "Pikp-1_HMA_186-263.fasta")
+    with open(fasta_path, "w") as f:
+        f.write(f">Pikp-1_HMA_{HMA_START}-{HMA_END} | UniProt:{UNIPROT_ID}\n")
+        f.write(hma_seq + "\n")
+    print(f"  Saved FASTA: {fasta_path}")
+
+    # Save AF3 input JSON
+    af3_json = {
+        "name": "pikp1_hma_native",
+        "modelSeeds": [42, 123, 456, 789, 1024],
+        "dialect": "alphafold3",
+        "version": 1,
+        "sequences": [
+            {
+                "protein": {
+                    "id": "A",
+                    "sequence": hma_seq,
+                }
+            }
+        ],
+    }
+    af3_json_path = os.path.join(OUTPUT_DIR, "pikp1_hma_monomer_af3.json")
+    with open(af3_json_path, "w") as f:
+        json.dump(af3_json, f, indent=2)
+    print(f"  Saved AF3 JSON: {af3_json_path}")
+
+    # ── Part C: Validate HMA sequence features ────────────────────────────
+    print("\n[C] Validating expected features in HMA sequence")
+    all_ok = validate_hma_sequence(hma_seq, EXPECTED_FEATURES)
+
+    # ── Summary ───────────────────────────────────────────────────────────
+    print("\n" + "=" * 70)
+    print("Summary")
+    print("=" * 70)
+    print(f"  Effector:  {avrpikf_path}  (chain B, {avrpikf_nres} residues)")
+    print(f"  HMA FASTA: {fasta_path}  ({len(hma_seq)} residues)")
+    print(f"  AF3 JSON:  {af3_json_path}")
+    print(f"  Sequence validation: {'ALL OK' if all_ok else 'ISSUES FOUND — check above'}")
+    print()
+    print("Next steps:")
+    print(f"  1. Copy {af3_json_path} to your SLURM submission directory")
+    print("  2. Run the AF3 monomer SLURM script")
+    print("  3. Extract the best-ranked model from AF3 output")
+    print("  4. Renumber: AF3 output residues 1-78 = Pikp-1 positions 186-263")
+    print()
+
+    # Residue mapping table for pipeline use
+    print("Residue mapping (Pikp-1 original → AF3/pipeline numbering):")
+    print("  Interface 2:  Ser218→33  Asp224→39  Glu230→45")
+    print("  Interface 3:  Ser258→73  Asn261→76  Lys262→77  Asp263→78")
+    print()
+
+    if not all_ok:
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
+```
