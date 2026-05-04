@@ -1,0 +1,25 @@
+# Literature-sweep config for the pikp1_pby2 campaign.
+#
+# Render with:
+#   python3 experiments/scripts/render_prompt.py \
+#       experiments/campaigns/pikp1_pby2/inputs/literature_sweep_config.yml \
+#       experiments/scripts/literature_sweep_prompt.md.template \
+#       -o experiments/campaigns/pikp1_pby2/inputs/literature_sweep_prompt.md
+
+receptor:
+  name: "Pikp-1 HMA"
+  uniprot_id: "E9KPB5"
+  domain_boundaries: "186-263"
+
+effector:
+  name: "PBY2"
+
+campaign_slug: "pikp1_pby2"
+
+# Campaign-specific context that the literature search alone will not surface.
+prior_knowledge:
+  - "All deposited Pikp-1 HMA crystal structures truncate or disorder C-terminal residues critical for binding. Use rung 5 of the structural-input fallback ladder — an AlphaFold3 monomer prediction of native Pikp-1 HMA, residues 186-263 — rather than dropping to an engineered crystal. This receptor-side decision is shared across every Pikp-1-HMA-binder campaign, including this one."
+  - "The AF3 prediction is renumbered from 1 (position 1 = Pikp-1 residue 186; position 78 = residue 263). The contig must be written in this 1-78 numbering."
+  - "The user has only limited information about PBY2; identifying the effector (full name, organism, MAX-fold family membership, any deposited PDB / UniProt records) is part of the discovery work in Part 1. PBY2 is expected to be a MAX-fold effector based on the project context."
+  - "If a Pik-HMA / PBY2 (or a related Pik-HMA / MAX-effector) complex template exists, complex assembly should follow the same ChimeraX-alignment recipe used for other pikp1_* campaigns. If no such template exists, fall back to AF3-multimer for the assembly."
+  - "The Pikp-1 HMA binder is shared across this campaign and the other pikp1_* campaigns; the receptor-side anchor / flex-region analysis from those campaigns is reusable here."

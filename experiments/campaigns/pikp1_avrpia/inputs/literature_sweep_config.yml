@@ -1,0 +1,28 @@
+# Literature-sweep config for the pikp1_avrpia campaign.
+#
+# Render with:
+#   python3 experiments/scripts/render_prompt.py \
+#       experiments/campaigns/pikp1_avrpia/inputs/literature_sweep_config.yml \
+#       experiments/scripts/literature_sweep_prompt.md.template \
+#       -o experiments/campaigns/pikp1_avrpia/inputs/literature_sweep_prompt.md
+
+receptor:
+  name: "Pikp-1 HMA"
+  uniprot_id: "E9KPB5"
+  domain_boundaries: "186-263"
+
+effector:
+  name: "AVR-Pia"
+
+campaign_slug: "pikp1_avrpia"
+
+# Campaign-specific context that the literature search alone will not surface.
+# Each bullet is a verified fact the user has established outside the
+# information sources the prompt directs Opus to consult — typically from
+# direct PDB inspection, prior campaign work, or specialist knowledge of
+# this particular receptor or target.
+prior_knowledge:
+  - "All deposited Pikp-1 HMA crystal structures truncate or disorder C-terminal residues critical for binding. Use rung 5 of the structural-input fallback ladder — an AlphaFold3 monomer prediction of native Pikp-1 HMA, residues 186-263 — rather than dropping to an engineered crystal. This receptor-side decision is shared across every Pikp-1-HMA-binder campaign, including this one."
+  - "The AF3 prediction is renumbered from 1 (position 1 = Pikp-1 residue 186; position 78 = residue 263). The contig must be written in this 1-78 numbering."
+  - "AVR-Pia is recognised natively by the rice NLR pair RGA4/RGA5 (not Pikp), and the canonical AVR-Pia binding site sits on the RGA5 HMA. There is also a published crystal structure of Pikp-HMA bound to AVR-Pia (PDB 6Q76, Varden et al. 2019). The user has indicated they suspect AVR-Pia uses a different face of the Pikp HMA than the canonical AVR-Pik binding face — Part 2's structural-input decision and contig design must verify which face the campaign is targeting and pick the alignment template accordingly. The MAX-fold effector / HMA binding mode means a ChimeraX alignment onto an appropriate published complex template should suffice, but 6G10 is *not* the right template if AVR-Pia uses a different face."
+  - "The Pikp-1 HMA binder is shared across this campaign and the other pikp1_* campaigns; the receptor-side anchor / flex-region analysis from those campaigns is reusable here, but the binding-face determination is campaign-specific."

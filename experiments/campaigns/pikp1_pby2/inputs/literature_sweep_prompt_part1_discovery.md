@@ -1,0 +1,102 @@
+# Literature sweep and structure analysis — Part 1: Discovery
+
+You are conducting the discovery phase of a structured literature, PDB, and UniProt sweep to inform the design of a binder-resurfacing campaign. The eventual report (produced in Part 2) will be used to (a) decide which structures to use as input to a structural alignment, (b) curate which residues should be redesigned vs preserved, and (c) define an RFDiffusion contig string that encodes those decisions.
+
+This part is **discovery only**. You will identify every source you need, attempt to fetch each one, and produce a short gap-list of papers you could not access. **Do not write the report yet** — that is Part 2.
+
+---
+
+## Inputs
+
+**Receptor**: Pikp-1 HMA
+**Receptor UniProt**: E9KPB5
+**Receptor domain boundaries**: 186-263
+
+**Effector**: PBY2
+
+**Prior knowledge to take into account**:
+- All deposited Pikp-1 HMA crystal structures truncate or disorder C-terminal residues critical for binding. Use rung 5 of the structural-input fallback ladder — an AlphaFold3 monomer prediction of native Pikp-1 HMA, residues 186-263 — rather than dropping to an engineered crystal. This receptor-side decision is shared across every Pikp-1-HMA-binder campaign, including this one.
+- The AF3 prediction is renumbered from 1 (position 1 = Pikp-1 residue 186; position 78 = residue 263). The contig must be written in this 1-78 numbering.
+- The user has only limited information about PBY2; identifying the effector (full name, organism, MAX-fold family membership, any deposited PDB / UniProt records) is part of the discovery work in Part 1. PBY2 is expected to be a MAX-fold effector based on the project context.
+- If a Pik-HMA / PBY2 (or a related Pik-HMA / MAX-effector) complex template exists, complex assembly should follow the same ChimeraX-alignment recipe used for other pikp1_* campaigns. If no such template exists, fall back to AF3-multimer for the assembly.
+- The Pikp-1 HMA binder is shared across this campaign and the other pikp1_* campaigns; the receptor-side anchor / flex-region analysis from those campaigns is reusable here.
+
+---
+
+## Sources to consult
+
+Search across all of the following. Cite specific papers, PDB entries, and UniProt records throughout the manifest you produce.
+
+1. **Plant protein structures CSV** at `experiments/inputs/plant_protein_structures.csv`. Read this first as a starting reference for what structures already exist for this receptor and effector. **Treat it as a starting point, not exhaustive** — verify each relevant entry by retrieving the actual PDB record, and search PDB independently for any structures the CSV may have missed.
+
+2. **Scientific literature**. Identify the primary structural and functional papers for both the receptor and the effector. Pay particular attention to:
+   - Structural studies (crystal, cryo-EM, NMR) of the receptor, the effector, or any complex between them.
+   - Mutagenesis studies that map specific residues to binding affinity, specificity, or function.
+   - Allelic-series or variant studies if the receptor or effector is part of a family with multiple known forms.
+   - Engineering studies that have already attempted to redirect binding specificity.
+   - Survey papers and pre-prints that catalogue MAX-fold effectors — needed to identify PBY2 specifically since the user has limited information.
+
+3. **Protein Data Bank**. For every relevant structure, you will eventually need: PDB ID, the complex contents, domain boundaries, the resolved ATOM range, resolution, and the publication.
+
+4. **UniProt**. Canonical sequences for the receptor and effector. Domain annotations, signal peptides, post-translational modifications, feature annotations relevant to binding.
+
+---
+
+## Campaign context to read first
+
+Before scoping the sweep, read:
+
+- `experiments/README.md` — campaign-lifecycle and naming conventions.
+- The campaign's own README at `experiments/campaigns/pikp1_pby2/README.md` if present.
+- Any existing complex PDB at `experiments/campaigns/pikp1_pby2/inputs/` (if not present, note that complex assembly is an outcome of this sweep, not an input). If a complex PDB exists, determine (a) the source PDB it was assembled from, and (b) the residue-numbering convention used.
+- Any existing contig file in the campaign's `inputs/` directory (if present).
+- Outputs of the parallel pikp1_* campaigns' literature sweeps in their `inputs/` directories — the Pikp-1 HMA binder-side analysis is shared.
+- `experiments/inputs/context/` — the shared paper PDF folder. List its contents now. Filename convention is `<firstauthor>_<year>_<shortjournal>.pdf` (e.g. `maqbool_2015_elife.pdf`). You will check this folder for any paper you can't fetch online.
+
+---
+
+## What to do
+
+1. Read all the campaign context above.
+2. Plan the literature/PDB/UniProt sweep. Enumerate every paper, PDB entry, and UniProt record you intend to consult to write the eventual report. **Be thorough.** Include sources you have alternative-source coverage for; the gap-list is the only signal of what the user needs to fetch manually.
+3. For each source, attempt to fetch it. Use web search to find it, web fetch to retrieve it. Prefer open-access mirrors (PMC, eLife, PLoS, bioRxiv) over publisher sites (ScienceDirect, Wiley, Nature subscription content). Do not retry a publisher URL after a 403; if an open-access mirror exists, use it.
+4. For each source you cannot fetch online:
+   - Check `experiments/inputs/context/` for a matching PDF using the filename convention. Match on first-author surname, year, and short journal token. If you find one, read it.
+   - If no match exists in the context folder, add it to the gap-list.
+5. Write a fetch manifest at:
+   `experiments/campaigns/pikp1_pby2/inputs/pikp1_pby2_fetch_manifest.md`
+
+   It should contain:
+
+   - **A header** recording the source-PDB and numbering-convention determinations (or, if the complex hasn't yet been assembled, the *recommended* source PDB and numbering convention) carried forward from this sweep.
+   - **A "Papers I need but cannot access" section.** Each entry:
+     - Citation (author, year, journal).
+     - Best URL you found (canonical, e.g. DOI or PMC link).
+     - One- or two-sentence justification: what the report needs from this paper. Be specific — name the residue, polymorphism, or mechanism, not "background".
+     - Suggested context-folder filename, following the convention `<firstauthor>_<year>_<shortjournal>.pdf`.
+   - **A "Papers I read from context/" section** if any, so the user can see at a glance that the local cache was used. Just citation + filename; no justification needed.
+   - **An "Effector identification" section** specifically for this campaign, since PBY2 needs disambiguating: state what PBY2 is, the source organism, the MAX-fold family it belongs to, the canonical UniProt accession, and the deposited PDB(s) if any. If the identification is uncertain, say so.
+
+6. **Stop.** Do not write the report. End your turn with a brief chat summary:
+   - The effector identification (resolved or unresolved).
+   - Number of sources successfully fetched online.
+   - Number of sources read from the context folder.
+   - Number of sources in the gap-list.
+   - The source-PDB and numbering-convention determinations (or recommendations).
+
+---
+
+## Quality criteria
+
+- The gap-list determines what the user must do between Part 1 and Part 2. A bloated gap-list wastes their time; a sparse one produces a half-blind report. Be honest about which papers genuinely contain campaign-relevant detail you cannot get from open-access sources.
+- Justifications must be specific enough that the user can decide per-paper whether it is worth fetching. "May contain useful information" is not specific enough.
+- If you find a paper open-access on PMC, eLife, PLoS, bioRxiv, or similar, use that and do not gap-list the publisher version.
+- If PBY2 cannot be identified from the open literature, surface this clearly — the user may need to provide a private reference or unpublished sequence.
+
+## What not to do
+
+- Do not write the literature-sweep report. Part 2 writes the report.
+- Do not modify any input complex PDB, its `.notes` file, an existing contig, or any pipeline scripts.
+- Do not run the pipeline, derive new contigs, or submit anything to HPC.
+- Do not commit or push.
+- Do not include in the gap-list papers that you successfully fetched online or that are present in the context folder.

@@ -1,0 +1,26 @@
+# Literature-sweep config for the pikp1_pwt7 campaign.
+#
+# Render with:
+#   python3 experiments/scripts/render_prompt.py \
+#       experiments/campaigns/pikp1_pwt7/inputs/literature_sweep_config.yml \
+#       experiments/scripts/literature_sweep_prompt.md.template \
+#       -o experiments/campaigns/pikp1_pwt7/inputs/literature_sweep_prompt.md
+
+receptor:
+  name: "Pikp-1 HMA"
+  uniprot_id: "E9KPB5"
+  domain_boundaries: "186-263"
+
+effector:
+  name: "PWT7"
+
+campaign_slug: "pikp1_pwt7"
+
+# Campaign-specific context that the literature search alone will not surface.
+prior_knowledge:
+  - "All deposited Pikp-1 HMA crystal structures truncate or disorder C-terminal residues critical for binding. Use rung 5 of the structural-input fallback ladder — an AlphaFold3 monomer prediction of native Pikp-1 HMA, residues 186-263 — rather than dropping to an engineered crystal. This receptor-side decision is shared across every Pikp-1-HMA-binder campaign, including this one."
+  - "The AF3 prediction is renumbered from 1 (position 1 = Pikp-1 residue 186; position 78 = residue 263). The contig must be written in this 1-78 numbering."
+  - "The user has indicated PWT7 binds Pikp-HMA at a different face than the canonical Pik-HMA / AVR-Pik face. Verify this in the literature during Part 1; if confirmed, the structural-input decision and contig design must follow a different geometry from the pikp1_avrpikf campaign — specifically, the alignment template will not be 6G10 (which positions the effector on the canonical AVR-Pik face), and the flex / anchor regions will need to track whichever residues actually contact PWT7."
+  - "PWT7 is expected to be a MAX-fold effector based on the project context. Complex assembly should follow the ChimeraX-alignment recipe used for other pikp1_* campaigns, but with the alignment template chosen to reflect the actual PWT7 binding face."
+  - "Identifying the effector (full name, organism, family membership, any deposited PDB / UniProt records) is part of the discovery work in Part 1; the user has limited information."
+  - "The Pikp-1 HMA binder is shared across this campaign and the other pikp1_* campaigns; the receptor-side anchor / flex-region analysis from those campaigns is reusable here, but the binding-face determination is campaign-specific and may move which Pikp-HMA residues are flex vs anchor."
