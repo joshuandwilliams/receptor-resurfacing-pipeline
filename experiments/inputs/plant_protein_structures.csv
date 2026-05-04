@@ -1,0 +1,87 @@
+﻿PDB,Complex / Description,NLR System,Type,Method,Resolution,Release Date,Reference,DOI,Notes
+9H2L,G10-resistosome octamer from wheat,G10,Active resistosome,Cryo-EM,3.95 Å,24/09/2025,Guo et al. (2025) bioRxiv,10.1101/2025.08.26.672026,Novel octameric wheat NLR resistosome
+9H4I,G10-resistosome octamer (N-to-N),G10,Active resistosome,Cryo-EM,4.60 Å,24/09/2025,Guo et al. (2025) bioRxiv,10.1101/2025.08.26.672026,N-to-N arrangement of octameric resistosome
+9H73,G10-resistosome octamer (back-to-back),G10,Active resistosome,Cryo-EM,3.60 Å,24/09/2025,Guo et al. (2025) bioRxiv,10.1101/2025.08.26.672026,Back-to-back arrangement
+7CRC,RPP1 tetramer / ATR1 (full resistosome),RPP1,Active resistosome,Cryo-EM,3.02 Å,16/12/2020,Ma et al. (2020) Science,10.1126/science.abe3069,
+7JLV,ROQ1-XopQ tetramer (full resistosome),ROQ1,Active resistosome,Cryo-EM,3.80 Å,02/12/2020,Martin et al. (2020) Science,10.1126/science.abd9993,Tetrameric TNL resistosome
+6J5T,"ZAR1 resistosome (active pentamer, dATP)",ZAR1,Active resistosome,Cryo-EM,3.40 Å,20/03/2019,Wang et al. (2019) Science,10.1126/science.aav5870,Active pentameric calcium channel
+9RI9,NRC3 hexameric resistosome,NRC3,Active resistosome,Cryo-EM,2.85 Å,23/07/2025,Seager et al. (2025) bioRxiv,10.1101/2025.07.14.664264,Tomato NRC3; hexameric like NRC2/NRC4
+9CC8,NRC4 hexameric resistosome,NRC4,Active resistosome,Cryo-EM,2.66 Å,11/09/2024,Liu et al. (2024) Cell,10.1016/j.cell.2024.07.013,Activated by Bs2/AvrBs2; hexameric; Ca2+ channel
+9FP6,NbNRC2 hexameric resistosome (active),NRC2,Active resistosome,Cryo-EM,2.90 Å,03/07/2024,Madhuprakash et al. (2024) Sci Adv,10.1126/sciadv.adr2594,Activated by Rx; hexameric
+7XX2,Sr35 resistosome / AvrSr35 (variant),Sr35,Active resistosome,Cryo-EM,3.60 Å,02/11/2022,Zhao et al. (2022) Sci Adv,10.1126/sciadv.abq5108,
+7XEO,Sr35 resistosome (Cryo-EM),Sr35,Active resistosome,Cryo-EM,3.33 Å,28/09/2022,Zhao et al. (2022) Sci Adv,10.1126/sciadv.abq5108,
+7XC2,Sr35 resistosome / AvrSr35 (pentamer),Sr35,Active resistosome,Cryo-EM,3.00 Å,21/09/2022,Förderer et al. (2022) Nature,10.1038/s41586-022-05231-w,
+6J6I,ZAR1 resistosome (alternate deposition),ZAR1,Active resistosome,Cryo-EM,3.90 Å,03/04/2019,Wang et al. (2019) Science,10.1126/science.aav5868,Alternate deposition of ZAR1 resistosome
+7BNT,Ancestral Pik1-HMA (ancHMA-Pikp) / AVR-PikD,Pik,Ancestral complex,X-ray,1.32 Å,17/02/2021,Białas et al. (2021) eLife,10.7554/eLife.66961,Ancestral sequence reconstruction
+7DVG,RGA5-HMA5 mutant crystal structure,RGA5,Apo domain,X-ray,2.80 Å,19/01/2022,Zhang et al. (Unpublished),,RGA5 HMA domain mutant (HMA5)
+7DV8,RGA5-HMA2 crystal structure,RGA5,Apo domain,X-ray,2.45 Å,20/10/2021,Liu et al. (2021) PNAS,10.1073/pnas.2110751118,RGA5 HMA domain variant (HMA2)
+5ZNE,RGA5A_S immune receptor (apo),RGA5,Apo domain,X-ray,1.78 Å,24/10/2018,Guo et al. (2018) PNAS,10.1073/pnas.1810705115,RGA5A_S apo; pair with 5ZNG complex
+5A6P,Pikp1-HMA Apo,Pik,Apo domain,X-ray,2.10 Å,26/08/2015,Maqbool et al. (2015) eLife,10.7554/eLife.08709,Apo HMA dimer; reference for binding-induced conformational changes
+6S2P,"NRC1 NB-ARC domain (apo, ADP-bound)",NRC1,Apo domain,X-ray,2.50 Å,03/07/2019,Steele et al. (2019) PLoS One,10.1371/journal.pone.0221226,First plant NLR NB-ARC crystal structure; ADP co-purified
+9CC9,NRC4 dodecameric resistosome,NRC4,Double resistosome,Cryo-EM,3.54 Å,11/09/2024,Liu et al. (2024) Cell,10.1016/j.cell.2024.07.013,Double-layer dumbbell; similar to NLRC4 inflammasome
+8XGL,NIS1 effector from M. oryzae,NIS,Effector alone,X-ray,2.30 Å,18/09/2024,Han et al. (2024) Int J Biol Macromol,10.1016/j.ijbiomac.2024.134821,Secreted fungal effector
+8C8A,MAX28 effector (NMR),MAX/RGA5,Effector alone,NMR,NA,14/02/2024,Lahfa et al. (2024) PLoS Pathog,10.1371/journal.ppat.1012176,MAX effector fold variant
+8SXS,Nudix hydrolase effector from M. oryzae,Nudix,Effector alone,X-ray,1.57 Å,22/11/2023,McCombe et al. (2025) Science,10.1126/science.adl5764,Nudix domain effector
+8A14,Cpl1 cerato-platanin from U. maydis,Cpl,Effector alone,X-ray,1.90 Å,17/05/2023,Weiland et al. (2023) Mol Plant Pathol,10.1111/mpp.13349,Fungal elicitor protein
+7ZJY,MAX67 effector (NMR),MAX/RGA5,Effector alone,NMR,NA,26/04/2023,Lahfa et al. (2024) PLoS Pathog,10.1371/journal.ppat.1012176,MAX effector fold; RGA5-recognised family
+7ZK0,MAX60 effector (NMR),MAX/RGA5,Effector alone,NMR,NA,26/04/2023,Lahfa et al. (2024) PLoS Pathog,10.1371/journal.ppat.1012176,MAX effector fold variant
+7ZKD,MAX47 effector (NMR),MAX/RGA5,Effector alone,NMR,NA,26/04/2023,Lahfa et al. (2024) PLoS Pathog,10.1371/journal.ppat.1012176,MAX effector fold variant
+7XDS,AvrSr35 crystal structure (homodimer),Sr35,Effector alone,X-ray,2.06 Å,28/09/2022,Zhao et al. (2022) Sci Adv,10.1126/sciadv.abq5108,Homodimer dissociated by Sr35 binding
+6R5J,New MAX effector from M. oryzae,MAX/RGA5,Effector alone,X-ray,1.38 Å,06/05/2020,Hoh et al. (Unpublished),,Crystal structure of MAX family effector
+5Z1V,AvrPib crystal structure,Pib,Effector alone,X-ray,1.66 Å,05/09/2018,Zhang et al. (2018) Plant J,10.1111/tpj.14023,M. oryzae effector recognised by NLR Pib
+5JHJ,AVR-Pia mutant H3 (crystal),Pia/RGA5,Effector alone,NMR,NA,29/03/2017,Ortiz et al. (2017) Plant Cell,10.1105/tpc.16.00435,AVR-Pia mutant crystal structure
+5L7S,PexRD54 from P. infestans,RxLR,Effector alone,X-ray,2.90 Å,03/08/2016,Maqbool et al. (2016) J Biological Chem,10.1074/jbc.M116.744995,Targets autophagy pathway
+2MYW,AVR-PIA solution structure (NMR),Pia/RGA5,Effector alone,NMR,NA,14/10/2015,de Guillen et al. (2015) PLoS Pathog,10.1371/journal.ppat.1005228,MAX effector; NMR structure
+2N37,AVR-Pia solution structure (alternate NMR),Pia/RGA5,Effector alone,NMR,NA,14/10/2015,Ose et al. (2015) J Biomol NMR,10.1007/s10858-015-9979-7,Alternate NMR deposition of AVR-Pia
+2MYV,AVR1-CO39 solution structure (NMR),RGA5,Effector alone,NMR,NA,14/10/2015,de Guillen et al. (2015) PLoS Pathog,10.1371/journal.ppat.1005228,MAX effector; NMR structure
+4B6X,"AvrRps4 (in planta processed, apo)",RRS1/RPS4,Effector alone,X-ray,2.20 Å,19/09/2012,Sohn et al. (2012) PNAS,10.1073/pnas.1212332109,Effector alone; basis for WRKY recognition
+2LW6,AvrPiz-t solution structure (NMR),Piz-t,Effector alone,NMR,NA,12/09/2012,Zhang et al. (2013) J Biomol NMR,10.1007/s10858-012-9695-5,M. oryzae effector recognised by NLR Piz-t
+2LAI,ATR13 effector (NMR),RPP13,Effector alone,NMR,NA,18/01/2012,Leonelli et al. (2011) PLoS Pathog,10.1371/journal.ppat.1002428,H. arabidopsidis effector; recognised by RPP13
+3ZR8,RxLR effector Avr3a11 from P. capsici,RxLR,Effector alone,X-ray,0.90 Å,03/08/2011,Boutemy et al. (2011) J Biological Chem,10.1074/jbc.M111.262303,RxLR effector; WY-domain fold
+3ZRG,RxLR effector PexRD2 from P. infestans,RxLR,Effector alone,X-ray,1.75 Å,03/08/2011,Boutemy et al. (2011) J Biological Chem,10.1074/jbc.M111.262303,RxLR effector; WY-domain fold
+3RMR,"ATR1 effector domain (crystal, apo)",RPP1,Effector alone,X-ray,2.30 Å,20/07/2011,Chou et al. (Unpublished),,H. arabidopsidis ATR1 alone; compare with 7CRB
+9RSV,AVR-Pia / OsHPP09-HMA,Pik/RGA5,Effector-target complex,X-ray,1.65 Å,27/08/2025,Maidment et al. (2025) bioRxiv,10.1101/2025.07.11.664054,AVR-Pia with new HMA target OsHPP09
+9RDC,AVRcap1b / NbTOL9a ENTH domain,NRC3,Effector-target complex,X-ray,4.10 Å,16/07/2025,Madhuprakash et al. (2025) bioRxiv,10.1101/2025.07.06.663370,P. infestans effector with host target NbTOL9a
+8R7D,Pwl2-SNDE mutant / OsHIPP43-HMA,Pwl2,Effector-target complex,X-ray,2.50 Å,31/01/2024,Zdrzałek et al. (2024) PNAS,10.1073/pnas.2402872121,Robust interface; basis for Pikm-1_OsHIPP43 chimera engineering
+8R7A,Pwl2 (wild-type) / OsHIPP43-HMA,Pwl2,Effector-target complex,X-ray,1.80 Å,31/01/2024,Zdrzałek et al. (2024) PNAS,10.1073/pnas.2402872121,Wild-type Pwl2; complements mutant 8R7D above
+8PQ7,Pi04134 / PP1c complex,RxLR,Effector-target complex,X-ray,2.10 Å,19/07/2023,Bentham et al. (2024) MPMI,10.1094/MPMI-08-23-0118-FI,P. infestans effector with potato phosphatase
+8PFC,SAP05 / SPL5 zinc finger complex,SAP,Effector-target complex,X-ray,2.20 Å,05/07/2023,Liu et al. (2023) PNAS,10.1073/pnas.2310664120,Phytoplasma effector targeting plant TF
+8PFD,SAP05 / Rpn10 vWA domain complex,SAP,Effector-target complex,X-ray,2.17 Å,05/07/2023,Liu et al. (2023) PNAS,10.1073/pnas.2310664120,SAP05 targeting proteasomal receptor
+7PP2,AVR-Pii / Exo70F2,Pii,Effector-target complex,X-ray,2.69 Å,29/06/2022,De la Concepcion et al. (2022) PNAS,10.1073/pnas.2210559119,Effector-host target complex; different effector family
+7NLJ,APikL2A / sHMA25 (Setaria italica),Pik-like,Effector-target complex,X-ray,1.80 Å,24/03/2021,Bentham et al. (2021) PLoS Pathog,10.1371/journal.ppat.1009957,Pik-like effector with Setaria HMA; expands HMA landscape
+7NMM,APikL2F / sHMA94 (Setaria italica),Pik-like,Effector-target complex,X-ray,2.30 Å,24/03/2021,Bentham et al. (2021) PLoS Pathog,10.1371/journal.ppat.1009957,Pik-like effector with different Setaria HMA target
+8B2R,Engineered RGA5-HMA mutant / AVR-PikF,Pik/RGA5,Engineered complex,X-ray,1.22 Å,19/10/2022,Bentham et al. (2023) Plant Cell,10.1093/plcell/koad204,Cross-system engineering
+7QPX,Engineered Pikp1-HMA (SNK-EKE) / AVR-PikC,Pik,Engineered complex,X-ray,2.05 Å,22/06/2022,Maidment et al. (2023) eLife,10.7554/eLife.81123,Target-guided engineering; OsHIPP19-informed mutations
+7QZD,Engineered Pikp1-HMA (SNK-EKE) / AVR-PikF,Pik,Engineered complex,X-ray,2.20 Å,22/06/2022,Maidment et al. (2023) eLife,10.7554/eLife.81123,Target-guided engineering; recognition of stealthy AVR-PikF
+6R8K,Engineered Pikp1-HMA (NK-KE) / AVR-PikD,Pik,Engineered complex,X-ray,1.60 Å,24/04/2019,De la Concepcion et al. (2019) eLife,10.7554/eLife.47713,Gain-of-function engineering
+6R8M,Engineered Pikp1-HMA (NK-KE) / AVR-PikE,Pik,Engineered complex,X-ray,1.85 Å,24/04/2019,De la Concepcion et al. (2019) eLife,10.7554/eLife.47713,
+7A8W,Engineered Pikp1-HMA (NK-KE) / AVR-PikC,Pik,Engineered complex,X-ray,2.15 Å,17/03/2021,Maidment et al. (2023) PLoS Pathog,10.1371/journal.ppat.1009368,Engineered to recognise stealthy AVR-PikC
+7B1I,OsHIPP19-HMA / AVR-PikF,Pik,Host target complex,X-ray,1.90 Å,03/02/2021,Maidment et al. (2021) J Biological Chem,10.1016/j.jbc.2021.100371,Host target; foundation for Pik engineering
+8XUO,SlNRC2 dimer (inactive),NRC2,Inactive dimer,Cryo-EM,2.84 Å,22/05/2024,Ma et al. (2024) Nature,10.1038/s41586-024-07668-7,Tomato NRC2; ADP + IP6 bound; autoinhibition mechanism
+8XUV,SlNRC2 filament (inactive),NRC2,Inactive filament,Cryo-EM,3.60 Å,22/05/2025,Ma et al. (2024) Nature,10.1038/s41586-024-07668-7,Sequestration mechanism; IP6 cofactor
+8RFH,NbNRC2 homodimer (resting state),NRC2,Inactive homodimer,Cryo-EM,3.90 Å,10/01/2024,Selvaraj et al. (2024) PLOS Biol,10.1371/journal.pbio.3002868,N. benthamiana NRC2; autoinhibited dimer
+6J5W,"ZAR1-RKS1 (inactive, ADP-bound)",ZAR1,Inactive NLR,Cryo-EM,3.70 Å,03/04/2019,Wang et al. (2019) Science,10.1126/science.aav5868,Inactive state
+8XUQ,SlNRC2 tetramer (inactive),NRC2,Inactive tetramer,Cryo-EM,3.17 Å,22/05/2024,Ma et al. (2024) Nature,10.1038/s41586-024-07668-7,Higher-order oligomer; concentration-dependent
+9IP6,RGA5-HMA8 / AVR1-CO39,RGA5,NLR-Effector complex,X-ray,2.63 Å,16/07/2025,Zhang et al. (Unpublished),,New RGA5-HMA variant with AVR1-CO39
+9IMU,RGA5-HMA8 / AVR-PikD,RGA5/Pik,NLR-Effector complex,X-ray,2.38 Å,09/07/2025,Zhang et al. (Unpublished),,New RGA5-HMA variant with AVR-PikD; cross-system
+7P8K,AvrRps4 / WRKY domain of RRS1,RRS1/RPS4,NLR-Effector complex,X-ray,2.65 Å,04/08/2021,Mukhi et al. (2021) PNAS,10.1073/pnas.2113996118,TIR-NLR pair; WRKY ID recognition of effector
+7A8X,Pikh1-HMA / AVR-PikC,Pik,NLR-Effector complex,X-ray,2.30 Å,03/02/2021,Maidment et al. (2021) PLoS Pathog,10.1371/journal.ppat.1009368,
+7CRB,RPP1 LRR-C-JID / ATR1 (focused),RPP1,NLR-Effector complex,Cryo-EM,3.16 Å,16/12/2020,Ma et al. (2020) Science,10.1126/science.abe3069,
+7JLU,ROQ1 LRR-C-JID / XopQ (focused refinement),ROQ1,NLR-Effector complex,Cryo-EM,3.80 Å,02/12/2020,Martin et al. (2020) Science,10.1126/science.abd9993,C-JID mimics substrate binding
+6Q76,Pikp1-HMA / AVR-Pia,Pik,NLR-Effector complex,X-ray,1.90 Å,10/07/2019,Varden et al. (2019) J Biological Chem,10.1074/jbc.RA119.007730,DIFFERENT binding interface from AVR-PikD; key orientation test
+9RIA,NRC3-AVRcap1b complex,NRC3,NLR-Effector complex,Cryo-EM,3.20 Å,23/07/2025,Seager et al. (2025) bioRxiv,10.1101/2025.07.14.664264,First NRC3-effector complex structure
+8BV0,NRC1 NB-ARC / SS15 complex,NRC1,NLR-Effector complex,X-ray,4.50 Å,21/12/2022,Contreras et al. (2023),10.1126/sciadv.adg3861,Nematode SPRY effector binds between NBD and HD1; suppression mechanism
+7XVG,Sr35 / AvrSr35 binary complex,Sr35,NLR-Effector complex,Cryo-EM,2.06 Å,28/09/2022,Zhao et al. (2022) Sci Adv,10.1126/sciadv.abq5108,
+5ZNG,RGA5-HMA / AVR1-CO39,RGA5,NLR-Effector complex,X-ray,2.19 Å,24/10/2018,Guo et al. (2018) PNAS,10.1073/pnas.1810705115,Different binding surface from Pikp-HMA/AVR-PikD; convergent evolution
+6G10,Pikp1-HMA / AVR-PikD,Pik,NLR-Effector complex,X-ray,1.35 Å,13/06/2018,De la Concepcion et al. (2018) Nat Plants,10.1038/s41477-018-0194-x,Higher resolution than 5A6W
+6G11,Pikp1-HMA / AVR-PikE,Pik,NLR-Effector complex,X-ray,1.90 Å,13/06/2018,De la Concepcion et al. (2018) Nat Plants,10.1038/s41477-018-0194-x,
+6FU9,Pikm1-HMA / AVR-PikD,Pik,NLR-Effector complex,X-ray,1.20 Å,13/06/2018,De la Concepcion et al. (2018) Nat Plants,10.1038/s41477-018-0194-x,Different allele; expanded specificity
+6FUB,Pikm1-HMA / AVR-PikE,Pik,NLR-Effector complex,X-ray,1.30 Å,13/06/2018,De la Concepcion et al. (2018) Nat Plants,10.1038/s41477-018-0194-x,
+6FUD,Pikm1-HMA / AVR-PikA,Pik,NLR-Effector complex,X-ray,1.30 Å,13/06/2018,De la Concepcion et al. (2018) Nat Plants,10.1038/s41477-018-0194-x,
+5A6W,Pikp1-HMA / AVR-PikD,Pik,NLR-Effector complex,X-ray,1.60 Å,26/08/2015,Maqbool et al. (2015) eLife,10.7554/eLife.08709,First Pik-HMA/AVR-Pik structure
+6J5V,ZAR1-RKS1-PBL2^UMP (intermediate),ZAR1,Primed NLR,Cryo-EM,4.25 Å,03/04/2019,Wang et al. (2019) Science,10.1126/science.aav5868,Intermediate/primed state
+6J5U,"ZAR1-RKS1-PBL2^UMP (primed, alternate)",ZAR1,Primed NLR,Cryo-EM,3.70 Å,20/03/2019,Wang et al. (2019) Science,10.1126/science.aav5870,Allosteric ADP release; additional intermediate state
+7DFV,RPP1-ATR1 related structure,RPP1,Related structure,Cryo-EM,2.99 Å,16/12/2020,Ma et al. (2020) Science,10.1126/science.abe3069,
+8ZF0,OsEDS1-PAD4-ADR1 complex (pRib-ADP),EDS1/ADR1,Signaling complex,Cryo-EM,2.96 Å,13/11/2024,Wu et al. (2024) Science,10.1126/science.adr2138,Rice EDS1-PAD4-ADR1 helper NLR signaling node
+7JLX,ROQ1 TIR domains (focused refinement),ROQ1,TIR domain,Cryo-EM,4.60 Å,02/12/2020,Martin et al. (2020) Science,10.1126/science.abd9993,NADase dimer-of-dimers
+6O0W,RUN1 TIR domain / NADP+ complex,RUN1,TIR domain,X-ray,1.75 Å,04/09/2019,Horsefield et al. (2019) Science,10.1126/science.aax1911,Grapevine TIR-NLR; NADase mechanism
