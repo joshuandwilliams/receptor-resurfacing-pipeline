@@ -1,0 +1,79 @@
+# pikp1_pwt7 — ChimeraX commands to assemble the 4e design-input complex
+#
+# Strategy 4e ("Josh Intuition"): hypothesis that PWT7 is a MAX effector and
+# therefore binds Pikp-HMA on the same α1/β2 face as AVR-Pia. We test this
+# by using 6Q76 (native Pikp-HMA / AVR-Pia complex, 1.90 Å) as a double anchor:
+#   - Pikp AF3 is superposed onto 6Q76/A (Pikp-HMA anchor)
+#   - PWT7 (9TFP chain A) is superposed onto 6Q76/B (AVR-Pia anchor)
+# Both alignments lock the two proteins into a consistent Pikp/MAX-effector
+# binding frame. The existing chimerax_assemble_complex.txt placed PWT7 at the
+# N-terminal β1/M1 face (its native Rwt7-HMA binding mode); this script instead
+# forces it into the canonical MAX-effector pose and lets the downstream pipeline
+# judge whether that produces viable binders.
+#
+# Quality check at step 3: inspect the alignment RMSD reported in the log.
+#   < ~3.5 Å  → PWT7 folds like a MAX effector, proceed
+#   > 5 Å     → poor structural match; MAX hypothesis is questionable
+# Also visually check that PWT7 chain B is on the correct face of Pikp-HMA
+# (α1/β2, i.e. the same side as AVR-Pia chain B in the original 6Q76) before
+# saving.
+#
+# Output complex (`pikp1_pwt7_4e_complex.pdb`) will have:
+#   chain A: AF3 Pikp-HMA, residues 1–78
+#   chain B: PWT7, residues 19–98 (9TFP precursor numbering preserved)
+#
+# Design contig (matching pikp1_avrpia v1_4b): A1-13/22-36/A43-78 B
+#   flex / design region = chain A residues 14–42 (α1/β2 face)
+
+# 1) Open structures ---------------------------------------------------------
+open /Users/jowillia/Documents/GitHub/receptor-pipeline-experiments/experiments/inputs/structures/AF3/Pikp-1_HMA.pdb
+open /Users/jowillia/Documents/GitHub/receptor-pipeline-experiments/experiments/inputs/structures/9TFP_refmac_final.pdb
+open /Users/jowillia/Documents/GitHub/receptor-pipeline-experiments/experiments/inputs/structures/6Q76.pdb
+
+# Models after open:
+#   #1 = AF3 Pikp-HMA (chain A, residues 1–78)
+#   #2 = 9TFP (chain A+C = PWT7, chains B+D = Rwt7-HMA)
+#   #3 = 6Q76 (chain A = Pikp-HMA 186–260, chain B = AVR-Pia 18–85)
+
+# 2) Double-anchor superposition using 6Q76 ----------------------------------
+# Receptor anchor: place AF3 Pikp-HMA in the 6Q76 frame.
+matchmaker #1/A to #3/A
+
+# Effector anchor: place PWT7 where AVR-Pia sits in 6Q76.
+# Check RMSD in the log — if > 5 Å or orientation looks wrong, MAX hypothesis
+# may not hold. Try `alg sw ssFraction 0.7` if the default NW alignment
+# chooses a poor register.
+matchmaker #2/A to #3/B
+
+# 3) Drop 6Q76 (alignment reference only) ------------------------------------
+close #3
+
+# 4) Drop the Rwt7-HMA chains and the duplicate PWT7 copy --------------------
+delete #2/B
+delete #2/C
+delete #2/D
+delete solvent
+delete ~protein
+
+# 5) Relabel PWT7 chain A → B -------------------------------------------------
+# Pikp-HMA (#1/A) is unaffected — atom-spec is scoped to #2.
+changechains #2/A B
+
+# 6) Combine into one model ---------------------------------------------------
+# Chain A: AF3 Pikp-HMA (1–78); chain B: PWT7 in precursor numbering (19–98).
+combine #1 #2 modelId 4 name pikp1_pwt7_4e_complex close true
+
+# 7) Sanity-check the binding pose -------------------------------------------
+# If PWT7 lands on the α1/β2 face, contacts should cluster in chain A 14–42.
+# The AVR-Pia salt-bridge partner in avrpia is chain A:32 (Asp-217); check
+# if PWT7 has anything in that vicinity.
+contacts #4/A:14-42 restrict #4/B
+
+# 8) Colour the design region -------------------------------------------------
+# Strategy 4e: α1/β2 face (pipeline 14–42), identical to avrpia v1_4b contig.
+color #4 gray
+color #4/B yellow
+color #4/A:14-42 red
+
+# 9) Save --------------------------------------------------------------------
+save /Users/jowillia/Documents/GitHub/receptor-pipeline-experiments/experiments/campaigns/pikp1_pwt7/inputs/pikp1_pwt7_4e_complex.pdb #4
