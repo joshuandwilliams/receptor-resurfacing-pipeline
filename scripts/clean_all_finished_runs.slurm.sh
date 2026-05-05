@@ -29,14 +29,19 @@
 
 set -euo pipefail
 
-# Resolve pipeline root from this script's location, regardless of where
-# sbatch was called from.
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PIPELINE_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+# SLURM copies the submitted script into /var/spool/slurmd/jobN/ before
+# executing, so BASH_SOURCE[0] does NOT point to the original location in
+# scripts/. Use SLURM_SUBMIT_DIR (set by SLURM to the directory sbatch was
+# called from) as the pipeline root. Submit from the pipeline root, e.g.:
+#   cd /hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline
+#   sbatch scripts/clean_all_finished_runs.slurm.sh
+PIPELINE_ROOT="${SLURM_SUBMIT_DIR:-$(pwd)}"
+CLEAN="$PIPELINE_ROOT/scripts/clean_finished_run.sh"
 
-CLEAN="$SCRIPT_DIR/clean_finished_run.sh"
 if [[ ! -x "$CLEAN" ]]; then
-    echo "ERROR: $CLEAN is not executable. Run: chmod +x $CLEAN" >&2
+    echo "ERROR: $CLEAN is not executable" >&2
+    echo "  PIPELINE_ROOT=$PIPELINE_ROOT" >&2
+    echo "  Submit from the pipeline root, or run: chmod +x $CLEAN" >&2
     exit 1
 fi
 
