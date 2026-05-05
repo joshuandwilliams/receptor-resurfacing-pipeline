@@ -1,0 +1,122 @@
+# =============================================================================
+# Pipeline params for pikp1_pwt3 campaign, run v1_4e
+#
+# Strategy 4e ("Josh Intuition"): hypothesis that PWT3 is a MAX effector and
+# binds Pikp-HMA on the same α1/β2 face as AVR-Pia. The input complex was
+# assembled by fold-only alignment of the PWT3 AFDB model (Pwt3_AFDB.pdb,
+# UniProt A0A223ZP76 full precursor numbering, signal peptide ~1-18 / mature
+# domain ~19-141) onto AVR-Pia (chain B of pikp1_avrpia_complex.pdb) using
+# matchmaker ssFraction 1.0 in ChimeraX, then combining with Pikp-1 HMA.
+#
+# ⚠ NUMBERING NOTE: chain B here is the AFDB model in precursor numbering
+# (residues 1-141 of A0A223ZP76), unlike the v1_4b chain B which uses the
+# in-house AF3 mature-only model (residues 1-123). Do not mix contig residue
+# numbers between v1_4b and v1_4e for chain B.
+#
+# Contig (matching pikp1_avrpia v1_4b and pikp1_pwt7 v1_4e):
+#   A1-13/22-36/A43-78 B
+#   flex / design region = chain A residues 14–42 (α1/β2 face)
+#
+# Input PDB: pikp1_pwt3_4e_complex.pdb (assembled via AFDB alignment; distinct
+# from pikp1_pwt3_complex.pdb used by v1_4b, which uses the in-house AF3
+# monomer).
+#
+# Submit:
+#   sbatch run_pipeline.slurm.sh ./experiments/campaigns/pikp1_pwt3/runs/v1_4e/params.yml
+#
+# Resume after partial completion:
+#   sbatch run_pipeline.slurm.sh ./experiments/campaigns/pikp1_pwt3/runs/v1_4e/params.yml --resume
+# =============================================================================
+
+# ── Project ───────────────────────────────────────────────────────────
+project_name: "PikP1_Pwt3_v1_4e"
+outdir: "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/experiments/campaigns/pikp1_pwt3/runs/v1_4e/results"
+
+# ── Execution ─────────────────────────────────────────────────────────
+max_boltz2_parallel: 24
+
+# ═════════════════════════════════════════════════════════════════════════
+# INPUT MODE 2: Pre-docked complex PDB
+# ═════════════════════════════════════════════════════════════════════════
+pdb_file: "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/experiments/campaigns/pikp1_pwt3/inputs/pikp1_pwt3_4e_complex.pdb"
+hotspot: ""
+
+# ═════════════════════════════════════════════════════════════════════════
+# SHARED SETTINGS
+# ═════════════════════════════════════════════════════════════════════════
+
+# ── Chain identifiers ─────────────────────────────────────────────────
+receptor_chain: "A"
+effector_chain: "B"
+
+# ── HADDOCK3 (modes 1/3 only — UNUSED in mode 2) ──────────────────────
+# These have no effect on this run but are required by the schema.
+haddock_sampling: 1
+haddock_seletop: 1
+effector_active_residues: ""
+
+# ── RFDiffusion ───────────────────────────────────────────────────────
+contigs: "A1-13/22-36/A43-78 B"
+num_designs: 64
+rfdiff_iterations: 100
+min_hotspot_frac: 0.0
+rfdiff_contact_cutoff: 8.0
+
+# ── Rosetta pre-validation ────────────────────────────────────────────
+sc_threshold: 0.5
+
+# ── ProteinMPNN ───────────────────────────────────────────────────────
+num_seqs: 2
+mpnn_sampling_temp: 0.25
+rm_aa: "C"
+mpnn_top_n: 128
+
+# ── ProteinMPNN sequence quality control ───────────────────────────────────────────────────
+max_poly_x: 5
+min_pct_identity: 0.0
+max_pct_identity: 100.0
+
+# ═════════════════════════════════════════════════════════════════════════
+# Boltz2 negative-steering — all values from test_negative_steering.nf
+# ═════════════════════════════════════════════════════════════════════════
+
+# Steering strategy
+negsteer_mode: "mild"
+negsteer_max_mutations: 6
+negsteer_candidate_pool_size: 10
+negsteer_protected_set_source: "design_region_union"
+
+# Design / seed counts
+negsteer_n_designs: 3
+negsteer_num_seeds: 3
+negsteer_n_cycles: 1
+
+# Boltz prediction hyperparameters
+negsteer_diffusion_samples: 5
+negsteer_recycling_steps: 3
+negsteer_rmsd_threshold: 6.0
+negsteer_contact_cutoff: 4.5
+negsteer_no_kernels: true
+
+# Post-processing thresholds
+negsteer_postprocess_rmsd_threshold: 5.0
+negsteer_postprocess_metric_column: "steered_ra_eff_vs_truth"
+negsteer_postprocess_contact_cutoff: 5.0
+
+# ── Negative controls ─────────────────────────────────────────────────
+run_negative_controls: true
+negsteer_controls_n_designs: 1
+controls_warning_ipsae_max: 0.5
+controls_warning_ra_eff_min: 5.0
+
+# ── Interface metrics ─────────────────────────────────────────
+interface_plddt_trim_threshold: 50.0
+interface_intact_threshold: 5.0
+weighted_jaccard_pair_cutoff: 8.0
+
+# ── Orthogonal validation metrics ─────────────────────────────────────
+af3_nomsa_seeds: [42, 123, 456]
+orthogonal_filter_sc_min: 0.55
+orthogonal_filter_bsa_min: 600
+orthogonal_filter_plddt_min: 0.75
+orthogonal_filter_af3_ra_max: 5.0
