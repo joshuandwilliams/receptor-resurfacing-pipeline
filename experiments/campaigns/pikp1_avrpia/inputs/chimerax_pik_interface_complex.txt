@@ -1,0 +1,60 @@
+# pikp1_avrpia — ChimeraX commands to assemble the v1_4f Pik-interface complex
+#
+# Strategy: align AVR-Pia (6Q76/B) onto AVR-PikF in the avrpikf reference
+# complex, placing AVR-Pia at the canonical Pik-face binding position.
+# This is a MODEL position — AVR-Pia natively binds the Pia face of Pikp-HMA,
+# not the Pik face. The assembled complex gives RFDiffusion a starting geometry
+# for redesigning the Pik face to recognise AVR-Pia.
+#
+# Reference complex (chain A = Pikp-1 HMA 1-78, chain B = AVR-PikF 32-113):
+#   pikp1_avrpikf_complex_ab.pdb
+# Effector source (chain B = AVR-Pia 18-85):
+#   6Q76.pdb
+#
+# Contig (Option A): A1-32/10-30/A50-68/8-10 B
+#   Design regions: chain A 33-49 (b2 C-end + loop + b3) and A 69-78 (b4 partial + tail)
+#
+# Output complex:
+#   chain A: Pikp-1 HMA, residues 1-78
+#   chain B: AVR-Pia,    residues 18-85 (6Q76 precursor numbering preserved)
+
+# 1) Open structures ---------------------------------------------------------
+open /Users/jowillia/Documents/GitHub/receptor-pipeline-experiments/experiments/campaigns/pikp1_avrpikf/inputs/pikp1_avrpikf_complex_ab.pdb
+open /Users/jowillia/Documents/GitHub/receptor-pipeline-experiments/experiments/inputs/structures/6Q76.pdb
+
+# Models:
+#   #1 = reference complex  (chain A = Pikp-HMA 1-78, chain B = AVR-PikF 32-113)
+#   #2 = 6Q76               (chain A = Pikp-HMA 186-260, chain B = AVR-Pia 18-85)
+
+# 2) Align AVR-Pia onto AVR-PikF (Pik-face reference chain) ------------------
+# Both are MAX effectors with the same βαββα sandwich fold; the default
+# matchmaker alignment should give RMSD < 2 Å over the conserved core.
+# Check the log — if RMSD > 3 Å try: alg sw ssFraction 0.7
+matchmaker #2/B to #1/B
+
+# 3) Remove the parts we no longer need --------------------------------------
+# Delete AVR-PikF from the reference (being replaced by AVR-Pia).
+delete #1/B
+# Delete Pikp-HMA from 6Q76 (we use the AF3 version from the reference).
+delete #2/A
+delete solvent
+delete ~protein
+
+# 4) Combine into one model --------------------------------------------------
+# #1 now has only chain A (Pikp-HMA); #2 has only chain B (AVR-Pia, now in
+# Pik-face position). Chain labels are already correct — no relabelling needed.
+combine #1 #2 modelId 3 name pikp1_avrpia_pik_interface close true
+
+# 5) Sanity-check the binding pose -------------------------------------------
+# After alignment, chain A design regions should be proximal to chain B.
+contacts #3/A:33-49 restrict #3/B
+contacts #3/A:69-78 restrict #3/B
+
+# 6) Colour: Pikp-HMA gray, AVR-Pia yellow, design regions red ---------------
+color #3 gray
+color #3/B yellow
+color #3/A:33-49 red
+color #3/A:69-78 red
+
+# 7) Save --------------------------------------------------------------------
+save /Users/jowillia/Documents/GitHub/receptor-pipeline-experiments/experiments/campaigns/pikp1_avrpia/inputs/pikp1_avrpia_pik_interface_complex.pdb #3

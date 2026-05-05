@@ -1,0 +1,60 @@
+# pikp1_pby2 — ChimeraX commands to assemble the v1_4f Pik-interface complex
+#
+# Strategy: align PBY2 (9TFO/C) onto AVR-PikF in the avrpikf reference
+# complex, placing PBY2 at the canonical Pik-face binding position.
+# PBY2 is a MAX effector. The previous pby2 campaign placed PBY2 at the
+# Pia face via alignment to Rmo2-HMA; this script overrides that by aligning
+# directly to AVR-PikF — a more appropriate reference for the Pik interface.
+#
+# Reference complex (chain A = Pikp-1 HMA 1-78, chain B = AVR-PikF 32-113):
+#   pikp1_avrpikf_complex_ab.pdb
+# Effector source (chain C = PBY2 24-84, asymmetric-unit pair with chain A):
+#   9TFO_refmac_final.pdb
+#
+# Contig (Option A): A1-32/10-30/A50-68/8-10 B
+#   Design regions: chain A 33-49 (b2 C-end + loop + b3) and A 69-78 (b4 partial + tail)
+#
+# Output complex:
+#   chain A: Pikp-1 HMA, residues 1-78
+#   chain B: PBY2,       residues 24-84 (9TFO precursor numbering preserved)
+
+# 1) Open structures ---------------------------------------------------------
+open /Users/jowillia/Documents/GitHub/receptor-pipeline-experiments/experiments/campaigns/pikp1_avrpikf/inputs/pikp1_avrpikf_complex_ab.pdb
+open /Users/jowillia/Documents/GitHub/receptor-pipeline-experiments/experiments/inputs/structures/9TFO_refmac_final.pdb
+
+# Models:
+#   #1 = reference complex  (chain A = Pikp-HMA 1-78, chain B = AVR-PikF 32-113)
+#   #2 = 9TFO               (chains A,B = Rmo2-HMA 2-76; chains C,D = PBY2)
+#                            chain C (24-84) is the AU pair with chain A (Rmo2-HMA)
+
+# 2) Align PBY2 (chain C) onto AVR-PikF (Pik-face reference) ----------------
+# Both are MAX effectors sharing the βαββα sandwich fold.
+# Check RMSD in the log — expect < 2 Å over conserved core.
+matchmaker #2/C to #1/B
+
+# 3) Remove parts no longer needed -------------------------------------------
+delete #1/B
+delete #2/A
+delete #2/B
+delete #2/D
+delete solvent
+delete ~protein
+
+# 4) Relabel PBY2 chain C → B so contig syntax matches ----------------------
+changechains #2/C B
+
+# 5) Combine into one model --------------------------------------------------
+combine #1 #2 modelId 3 name pikp1_pby2_pik_interface close true
+
+# 6) Sanity-check the binding pose -------------------------------------------
+contacts #3/A:33-49 restrict #3/B
+contacts #3/A:69-78 restrict #3/B
+
+# 7) Colour: Pikp-HMA gray, PBY2 yellow, design regions red -----------------
+color #3 gray
+color #3/B yellow
+color #3/A:33-49 red
+color #3/A:69-78 red
+
+# 8) Save --------------------------------------------------------------------
+save /Users/jowillia/Documents/GitHub/receptor-pipeline-experiments/experiments/campaigns/pikp1_pby2/inputs/pikp1_pby2_pik_interface_complex.pdb #3

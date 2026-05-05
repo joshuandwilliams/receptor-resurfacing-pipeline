@@ -1,0 +1,31 @@
+# pikp1_avrpikf — ChimeraX commands to assemble the v1_4f Pik-interface complex
+#
+# AVR-PikF is already at the canonical Pik-face position in the reference
+# complex — no effector alignment is required. This script simply colours
+# the design regions and saves under the v1_4f naming convention.
+#
+# Source complex (chain A = Pikp-1 HMA 1-78, chain B = AVR-PikF 32-113):
+#   pikp1_avrpikf_complex_ab.pdb
+#
+# Contig (Option A): A1-32/10-30/A50-68/8-10 B
+#   Design regions: chain A 33-49 (b2 C-end + loop + b3) and A 69-78 (b4 partial + tail)
+#
+# Output complex:
+#   chain A: Pikp-1 HMA, residues 1-78
+#   chain B: AVR-PikF,   residues 32-113 (7B1I/9B1I precursor numbering preserved)
+
+# 1) Open reference complex --------------------------------------------------
+open /Users/jowillia/Documents/GitHub/receptor-pipeline-experiments/experiments/campaigns/pikp1_avrpikf/inputs/pikp1_avrpikf_complex_ab.pdb
+
+# 2) Sanity-check contacts in design regions ---------------------------------
+contacts /A:33-49 restrict /B
+contacts /A:69-78 restrict /B
+
+# 3) Colour: Pikp-HMA gray, AVR-PikF yellow, design regions red --------------
+color #1 gray
+color #1/B yellow
+color #1/A:33-49 red
+color #1/A:69-78 red
+
+# 4) Save under v1_4f naming -------------------------------------------------
+save /Users/jowillia/Documents/GitHub/receptor-pipeline-experiments/experiments/campaigns/pikp1_avrpikf/inputs/pikp1_avrpikf_pik_interface_complex.pdb #1

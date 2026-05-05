@@ -1,0 +1,61 @@
+# pikp1_pwt3 — ChimeraX commands to assemble the v1_4f Pik-interface complex
+#
+# Strategy: align the AF3 PWT3 monomer onto AVR-PikF in the avrpikf reference
+# complex using a structure-only superposition (ssFraction 1.0), placing PWT3
+# at the canonical Pik-face binding position.
+# PWT3 is a MAX effector; the alignment should give a clean fold superposition.
+#
+# IMPORTANT — RMSD check: inspect the matchmaker log output. If RMSD > 3 Å
+# over fewer than 40 Cα atoms, the MAX-fold assumption may not hold for this
+# effector and the complex should be treated with caution.
+#
+# Reference complex (chain A = Pikp-1 HMA 1-78, chain B = AVR-PikF 32-113):
+#   pikp1_avrpikf_complex_ab.pdb
+# Effector source (AF3 AFDB model, chain A):
+#   AF3/Pwt3_AFDB.pdb
+#
+# Contig (Option A): A1-32/10-30/A50-68/8-10 B
+#   Design regions: chain A 33-49 (b2 C-end + loop + b3) and A 69-78 (b4 partial + tail)
+#
+# Output complex:
+#   chain A: Pikp-1 HMA, residues 1-78
+#   chain B: PWT3,       residues as in Pwt3_AFDB.pdb (AF3 numbering from 1)
+
+# 1) Open structures ---------------------------------------------------------
+open /Users/jowillia/Documents/GitHub/receptor-pipeline-experiments/experiments/campaigns/pikp1_avrpikf/inputs/pikp1_avrpikf_complex_ab.pdb
+open /Users/jowillia/Documents/GitHub/receptor-pipeline-experiments/experiments/inputs/structures/AF3/Pwt3_AFDB.pdb
+
+# Models:
+#   #1 = reference complex  (chain A = Pikp-HMA 1-78, chain B = AVR-PikF 32-113)
+#   #2 = Pwt3_AFDB          (chain A = PWT3, AF3 numbering from residue 1)
+
+# 2) Align PWT3 onto AVR-PikF using secondary-structure matching -------------
+# PWT3 has no detectable sequence similarity to AVR-PikF so we use fold-only
+# alignment. ssFraction 1.0 disables sequence weighting entirely.
+# READ THE RMSD FROM THE LOG before proceeding.
+matchmaker #2/A to #1/B alg sw ssFraction 1.0
+
+# 3) Remove parts no longer needed -------------------------------------------
+delete #1/B
+delete solvent
+delete ~protein
+
+# 4) Relabel PWT3 chain A → B so contig syntax matches ----------------------
+changechains #2/A B
+
+# 5) Combine into one model --------------------------------------------------
+combine #1 #2 modelId 3 name pikp1_pwt3_pik_interface close true
+
+# 6) Sanity-check the binding pose -------------------------------------------
+# Verify visually that PWT3 sits on the correct (Pik) face of Pikp-HMA.
+contacts #3/A:33-49 restrict #3/B
+contacts #3/A:69-78 restrict #3/B
+
+# 7) Colour: Pikp-HMA gray, PWT3 yellow, design regions red -----------------
+color #3 gray
+color #3/B yellow
+color #3/A:33-49 red
+color #3/A:69-78 red
+
+# 8) Save --------------------------------------------------------------------
+save /Users/jowillia/Documents/GitHub/receptor-pipeline-experiments/experiments/campaigns/pikp1_pwt3/inputs/pikp1_pwt3_pik_interface_complex.pdb #3

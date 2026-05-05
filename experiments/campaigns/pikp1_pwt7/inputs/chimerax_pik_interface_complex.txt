@@ -1,0 +1,70 @@
+# pikp1_pwt7 — ChimeraX commands to assemble the v1_4f Pik-interface complex
+#
+# Strategy: align PWT7 (9TFP/A) onto AVR-PikF in the avrpikf reference
+# complex, placing PWT7 at the canonical Pik-face binding position.
+# PWT7 is a MAX effector. Previous campaigns placed PWT7 at the N-terminal β1
+# face (its native Rwt7-HMA binding mode) or at the Pia face (4e strategy);
+# this script overrides both by aligning directly to AVR-PikF.
+#
+# NOTE on asymmetric unit: 9TFP has two copies of PWT7 (chains A and C, both
+# residues 19-98). This script defaults to chain A. If visual inspection after
+# step 5 shows chain A on the wrong face, re-run with chain C instead:
+#   replace "matchmaker #2/A to #1/B" with "matchmaker #2/C to #1/B"
+#   and replace the "delete #2/C" line with "delete #2/A"
+#   and the changechains line stays the same (change whichever you kept to B).
+#
+# Reference complex (chain A = Pikp-1 HMA 1-78, chain B = AVR-PikF 32-113):
+#   pikp1_avrpikf_complex_ab.pdb
+# Effector source (chain A = PWT7 19-98, 9TFP precursor numbering):
+#   9TFP_refmac_final.pdb
+#
+# Contig (Option A): A1-32/10-30/A50-68/8-10 B
+#   Design regions: chain A 33-49 (b2 C-end + loop + b3) and A 69-78 (b4 partial + tail)
+#
+# Output complex:
+#   chain A: Pikp-1 HMA, residues 1-78
+#   chain B: PWT7,       residues 19-98 (9TFP precursor numbering preserved)
+
+# 1) Open structures ---------------------------------------------------------
+open /Users/jowillia/Documents/GitHub/receptor-pipeline-experiments/experiments/campaigns/pikp1_avrpikf/inputs/pikp1_avrpikf_complex_ab.pdb
+open /Users/jowillia/Documents/GitHub/receptor-pipeline-experiments/experiments/inputs/structures/9TFP_refmac_final.pdb
+
+# Models:
+#   #1 = reference complex  (chain A = Pikp-HMA 1-78, chain B = AVR-PikF 32-113)
+#   #2 = 9TFP               (chains A,C = PWT7 19-98; chains B,D = Rwt7-HMA 1-74)
+
+# 2) Align PWT7 (chain A) onto AVR-PikF (Pik-face reference) ----------------
+# Both are MAX effectors sharing the βαββα sandwich fold.
+# Check RMSD in the log — expect < 2 Å over conserved core.
+# If RMSD > 3 Å or orientation looks wrong, try chain C instead (see header note).
+matchmaker #2/A to #1/B
+
+# 3) Remove parts no longer needed -------------------------------------------
+delete #1/B
+delete #2/B
+delete #2/C
+delete #2/D
+delete solvent
+delete ~protein
+
+# 4) Relabel PWT7 chain A → B so contig syntax matches ----------------------
+changechains #2/A B
+
+# 5) Combine into one model --------------------------------------------------
+combine #1 #2 modelId 3 name pikp1_pwt7_pik_interface close true
+
+# 6) Sanity-check the binding pose -------------------------------------------
+# Verify visually that PWT7 sits on the Pik face (chain A 33-49 and 69-78
+# should be close to chain B). The N39/D40 contact residues of PWT7 (chain B
+# residues 39, 40) should now be near chain A:33-49.
+contacts #3/A:33-49 restrict #3/B
+contacts #3/A:69-78 restrict #3/B
+
+# 7) Colour: Pikp-HMA gray, PWT7 yellow, design regions red -----------------
+color #3 gray
+color #3/B yellow
+color #3/A:33-49 red
+color #3/A:69-78 red
+
+# 8) Save --------------------------------------------------------------------
+save /Users/jowillia/Documents/GitHub/receptor-pipeline-experiments/experiments/campaigns/pikp1_pwt7/inputs/pikp1_pwt7_pik_interface_complex.pdb #3

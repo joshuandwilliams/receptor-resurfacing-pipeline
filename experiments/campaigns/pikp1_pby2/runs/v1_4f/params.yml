@@ -1,0 +1,112 @@
+# =============================================================================
+# Pipeline params for pikp1_pby2 campaign, run v1_4f
+#
+# Strategy 4f (Pik-interface, single unified contig) — PBY2 manually placed
+# at the Pik-face binding position in ChimeraX, anchoring the MAX β-sandwich
+# against the receptor β-sheet with the strand parallel to b4. Matchmaker to
+# AVR-PikF did not give the correct orientation; placement was done by hand.
+#
+# Contig: A1-32/10-30/A50-68/8-10 B
+#   — fixed:  Pikp pipeline 1-32 (b1 + helices + b2 N-end) and 50-68 (b3-b4 loop)
+#   — flex 1: 10-30 residues replacing pipeline 33-49 (b2 C-end + loop + b3)
+#   — flex 2: 8-10 residues replacing pipeline 69-78 (b4 partial + tail, capped at 78)
+#
+# Submit:
+#   sbatch run_pipeline.slurm.sh ./experiments/campaigns/pikp1_pby2/runs/v1_4f/params.yml
+#
+# Resume after partial completion:
+#   sbatch run_pipeline.slurm.sh ./experiments/campaigns/pikp1_pby2/runs/v1_4f/params.yml --resume
+# =============================================================================
+
+# ── Project ───────────────────────────────────────────────────────────
+project_name: "PikP1_Pby2_v1_4f"
+outdir: "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/experiments/campaigns/pikp1_pby2/runs/v1_4f/results"
+
+# ── Execution ─────────────────────────────────────────────────────────
+max_boltz2_parallel: 24
+
+# ═════════════════════════════════════════════════════════════════════════
+# INPUT MODE 2: Pre-docked complex PDB
+# ═════════════════════════════════════════════════════════════════════════
+pdb_file: "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/experiments/campaigns/pikp1_pby2/inputs/pikp1_pby2_pik_interface_complex.pdb"
+hotspot: ""
+
+# ═════════════════════════════════════════════════════════════════════════
+# SHARED SETTINGS
+# ═════════════════════════════════════════════════════════════════════════
+
+# ── Chain identifiers ─────────────────────────────────────────────────
+receptor_chain: "A"
+effector_chain: "B"
+
+# ── HADDOCK3 (modes 1/3 only — UNUSED in mode 2) ──────────────────────
+# These have no effect on this run but are required by the schema.
+haddock_sampling: 1
+haddock_seletop: 1
+effector_active_residues: ""
+
+# ── RFDiffusion ───────────────────────────────────────────────────────
+contigs: "A1-32/10-30/A50-68/8-10 B"
+num_designs: 64
+rfdiff_iterations: 100
+min_hotspot_frac: 0.0
+rfdiff_contact_cutoff: 8.0
+
+# ── Rosetta pre-validation ────────────────────────────────────────────
+sc_threshold: 0.5
+
+# ── ProteinMPNN ───────────────────────────────────────────────────────
+num_seqs: 2
+mpnn_sampling_temp: 0.25
+rm_aa: "C"
+mpnn_top_n: 128
+
+# ── ProteinMPNN sequence quality control ──────────────────────────────
+max_poly_x: 5
+min_pct_identity: 0.0
+max_pct_identity: 100.0
+
+# ═════════════════════════════════════════════════════════════════════════
+# Boltz2 negative-steering
+# ═════════════════════════════════════════════════════════════════════════
+
+# Steering strategy
+negsteer_mode: "mild"
+negsteer_max_mutations: 6
+negsteer_candidate_pool_size: 10
+negsteer_protected_set_source: "design_region_union"
+
+# Design / seed counts
+negsteer_n_designs: 3
+negsteer_num_seeds: 3
+negsteer_n_cycles: 1
+
+# Boltz prediction hyperparameters
+negsteer_diffusion_samples: 5
+negsteer_recycling_steps: 3
+negsteer_rmsd_threshold: 6.0
+negsteer_contact_cutoff: 4.5
+negsteer_no_kernels: true
+
+# Post-processing thresholds
+negsteer_postprocess_rmsd_threshold: 5.0
+negsteer_postprocess_metric_column: "steered_ra_eff_vs_truth"
+negsteer_postprocess_contact_cutoff: 5.0
+
+# ── Negative controls ─────────────────────────────────────────────────
+run_negative_controls: true
+negsteer_controls_n_designs: 1
+controls_warning_ipsae_max: 0.5
+controls_warning_ra_eff_min: 5.0
+
+# ── Interface metrics ─────────────────────────────────────────────────
+interface_plddt_trim_threshold: 50.0
+interface_intact_threshold: 5.0
+weighted_jaccard_pair_cutoff: 8.0
+
+# ── Orthogonal validation metrics ─────────────────────────────────────
+af3_nomsa_seeds: [42, 123, 456]
+orthogonal_filter_sc_min: 0.55
+orthogonal_filter_bsa_min: 600
+orthogonal_filter_plddt_min: 0.75
+orthogonal_filter_af3_ra_max: 5.0
