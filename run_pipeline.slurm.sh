@@ -41,7 +41,7 @@ NEXTFLOW_IMG="/hpc-home/jowillia/singularity/NextFlow/NextFlow.img"
 # MMseqs2 (variable name kept as RFDIFF_CONTAINER for backwards
 # compatibility with the .nf modules that reference it as
 # params.rfdiff_container).
-RFDIFF_CONTAINER="/hpc-home/jowillia/singularity/HADDOCK_RFDiffusion_ProteinMPNN_MMseqs2/LRR_Pipeline.img"
+RFDIFF_CONTAINER="/hpc-home/jowillia/singularity/HADDOCK_RFDiffusion_ProteinMPNN_MMseqs2/HADDOCK_RFDiffusion_ProteinMPNN_MMseqs2.img"
 AF2_DATA_DIR="/nbi/Reference-Data/AlphaFold/db-v2.3.2"
 
 EXPERIMENT_DIR="$(dirname "${PARAMS_FILE}")"

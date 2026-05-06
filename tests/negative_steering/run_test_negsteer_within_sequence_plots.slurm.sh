@@ -71,7 +71,7 @@ TEST_SCRIPT="${TEST_DIR}/test_negsteer_within_sequence_plots.py"
 
 # ── Container ─────────────────────────────────────────────────────────────
 # Same image as the cohort-level plots — matplotlib + numpy only.
-RFDIFF_CONTAINER="/hpc-home/jowillia/singularity/HADDOCK_RFDiffusion_ProteinMPNN_MMseqs2/LRR_Pipeline.img"
+RFDIFF_CONTAINER="/hpc-home/jowillia/singularity/HADDOCK_RFDiffusion_ProteinMPNN_MMseqs2/HADDOCK_RFDiffusion_ProteinMPNN_MMseqs2.img"
 
 # ── Sanity checks ─────────────────────────────────────────────────────────
 if [ ! -f "${TEST_SCRIPT}" ]; then
