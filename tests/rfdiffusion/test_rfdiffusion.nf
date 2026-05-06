@@ -23,17 +23,24 @@ nextflow.enable.dsl = 2
 // Parameter defaults — override via params.yml or --param on the command line
 // ---------------------------------------------------------------------------
 
-params.pdb_file          = "${projectDir}/data/af3_pikp1_native_avrpikf_complex.pdb"
-params.receptor_chain    = "A"
-params.effector_chain    = "C"
-params.contigs           = "A1-32/10-20/A46-72/6-6 C"
-params.hotspot           = ""              // leave blank to test without hotspots
-params.num_designs       = 8               // small number for fast test
-params.rfdiff_iterations = 50
-params.rfdiff_contact_cutoff = 8.0
-params.min_hotspot_frac  = 0.0             // 0.0 = no filtering (test all designs pass)
-params.project_name      = "test_rfdiffusion"
-params.outdir            = "${projectDir}/results"
+params.pdb_file               = "${projectDir}/data/af3_pikp1_native_avrpikf_complex.pdb"
+params.receptor_chain         = "A"
+params.effector_chain         = "C"
+params.contigs                = "A1-32/10-20/A46-72/6-6 C"
+params.hotspot                = ""              // leave blank to test without hotspots
+params.num_designs            = 8               // small number for fast test
+params.rfdiff_iterations      = 50
+params.rfdiff_checkpoint      = "Complex_beta_ckpt.pt"
+params.rfdiff_contact_cutoff  = 8.0
+params.min_hotspot_frac       = 0.0             // 0.0 = no filtering (test all designs pass)
+params.add_potential          = true
+params.rfdiff_guide_scale     = 2
+params.rfdiff_guide_decay     = "quadratic"
+params.rfdiff_interface_weight = 1.0
+params.rfdiff_rog_weight      = 0.5
+params.rfdiff_rog_min_dist    = 5
+params.project_name           = "test_rfdiffusion"
+params.outdir                 = "${projectDir}/results"
 
 // Infrastructure — params.rfdiff_container is inherited from nextflow.config
 // (single source of truth across the main pipeline and per-module tests).
@@ -62,6 +69,13 @@ workflow {
         hotspot_ch,
         params.num_designs,
         params.rfdiff_iterations,
+        params.rfdiff_checkpoint,
+        params.add_potential,
+        params.rfdiff_guide_scale,
+        params.rfdiff_guide_decay,
+        params.rfdiff_interface_weight,
+        params.rfdiff_rog_weight,
+        params.rfdiff_rog_min_dist,
         Channel.value(file("${projectDir}/bin/rfdiffusion_contigs.py"))
     )
 

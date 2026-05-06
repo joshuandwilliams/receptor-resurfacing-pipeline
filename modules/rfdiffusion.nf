@@ -40,6 +40,13 @@ process RFDIFFUSION {
     val  hotspot
     val  num_designs
     val  iterations
+    val  checkpoint
+    val  add_potential
+    val  guide_scale
+    val  guide_decay
+    val  interface_weight
+    val  rog_weight
+    val  rog_min_dist
     // Stage bin scripts as path inputs so Nextflow content-hashes them
     // for the task-cache key.  Without this, edits to bin/*.py do not
     // invalidate the cache (see comment on AF3_PARSE_OUTPUT in
@@ -53,6 +60,17 @@ process RFDIFFUSION {
     script:
     def raw_contigs = contigs.replaceAll("'", "")
     def hotspot_arg = hotspot ? "\"ppi.hotspot_res=[${hotspot}]\"" : ""
+    def ckpt_arg    = checkpoint ? "inference.ckpt_override_path=/opt/RFdiffusion/models/${checkpoint}" : ""
+    def potential_arg = ""
+    if (add_potential) {
+        def pot_list = []
+        if ((interface_weight as Double) > 0) pot_list << "type:interface_ncontacts,weight:${interface_weight}"
+        if ((rog_weight as Double) > 0)       pot_list << "type:monomer_ROG,weight:${rog_weight},min_dist:${rog_min_dist}"
+        if (pot_list) {
+            def pot_str = pot_list.collect { "'${it}'" }.join(",")
+            potential_arg = "\"potentials.guiding_potentials=[${pot_str}]\" potentials.guide_scale=${guide_scale} potentials.guide_decay=${guide_decay}"
+        }
+    }
     """
     cp ${pdb_file} input.pdb
     mkdir -p traj
@@ -85,6 +103,8 @@ process RFDIFFUSION {
             inference.num_designs=${num_designs} \\
             "contigmap.contigs=[\${PROCESSED_CONTIGS}]" \\
             ${hotspot_arg} \\
+            ${ckpt_arg} \\
+            ${potential_arg} \\
             diffuser.T=${iterations}
     """
 }

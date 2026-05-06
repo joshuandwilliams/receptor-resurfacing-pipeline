@@ -58,13 +58,32 @@ effector_chain: "B"
 # In mode 4, you can write "B1-123" explicitly or use "B" if the PDB
 # contains the effector chain.
 contigs: "B A1-400/20-30/A426-435"
-hotspot: ""            # auto-derived from HADDOCK3 in modes 1-3
+hotspot: ""            # auto-derived from HADDOCK3 in modes 1-3; set manually in mode 2
+                       # e.g. "B45,B67,B89" — soft hint, not exhaustive; RFDiffusion
+                       # aims for these residues but may also contact neighbours
 num_designs: 32
 rfdiff_iterations: 100
+rfdiff_checkpoint: "Complex_beta_ckpt.pt"  # Checkpoint filename in /opt/RFdiffusion/models/
+                                           # Options: Base_ckpt.pt | Complex_base_ckpt.pt | Complex_beta_ckpt.pt
 min_hotspot_frac: 0.5      # Min fraction of effector contacts inside design region to keep a design (0.0 = no filter)
 rfdiff_contact_cutoff: 8.0 # Cα–Cα distance cutoff (Å) for receptor–effector contact
                            # detection in rfdiffusion_filter.py.  Also reused as the
                            # heavy-atom cutoff for HADDOCK hotspot extraction.
+
+# ── RFDiffusion guiding potentials ───────────────────────────────────
+# Soft energy terms applied at each denoising step to bias diffusion
+# toward better interface geometries.  ~10-20% slower wall time per run.
+add_potential: true
+rfdiff_guide_scale: 2              # Global multiplier on all potentials
+rfdiff_guide_decay: "quadratic"    # Weight decay schedule: constant | linear | quadratic | cubic
+                                   # quadratic concentrates guidance early (topology-setting
+                                   # steps) and fades before fine structure is locked in
+rfdiff_interface_weight: 1.0       # interface_ncontacts: promotes Cα contacts between
+                                   # design region and effector chain; set 0 to disable
+rfdiff_rog_weight: 0.5             # monomer_ROG: penalises high radius of gyration,
+                                   # discourages floppy extended loops; set 0 to disable
+rfdiff_rog_min_dist: 5             # monomer_ROG minimum Rg floor (Å) — Rg values below
+                                   # this are not penalised (prevents over-collapsing short loops)
 
 # ── HADDOCK3 (modes 1-3 only) ────────────────────────────────────────
 haddock_sampling: 10000    # 10000 = semi-blind, 1000 = targeted
@@ -79,7 +98,8 @@ effector_active_residues: ""  # Comma-separated effector residue numbers to stee
                               # docked interface (or set via the hotspot param).
 
 # ── Rosetta pre-validation physics filter ────────────────────────────
-sc_threshold: 0.62             # Min shape complementarity (Sc) to pass filter
+sc_threshold: 0.62
+stop_after_rosetta: false  # Set true to halt after Sc filtering; re-run with --resume to continue             # Min shape complementarity (Sc) to pass filter
                                # (Overath et al., 2025).  Designs below this are
                                # removed before ProteinMPNN sequence design.
 

@@ -78,13 +78,20 @@ params.contigs            = null   // RFDiffusion contig string
 params.hotspot            = ""     // Auto-derived from HADDOCK if blank
 params.num_designs        = 10
 params.rfdiff_iterations  = 50
+params.rfdiff_checkpoint  = "Complex_beta_ckpt.pt" // Filename inside /opt/RFdiffusion/models/
 params.min_hotspot_frac   = 0.0     // Min fraction of contacts inside design region (0.0 = no filtering)
-params.symmetry           = "none"
-params.order              = 1
-params.add_potential       = true
+params.symmetry                = "none"
+params.order                   = 1
+params.add_potential           = false       // Enable guiding potentials during diffusion
+params.rfdiff_guide_scale      = 2           // Global potential multiplier
+params.rfdiff_guide_decay      = "quadratic" // Weight decay schedule: constant | linear | quadratic | cubic
+params.rfdiff_interface_weight = 1.0         // interface_ncontacts weight (0 to disable)
+params.rfdiff_rog_weight       = 0.5         // monomer_ROG weight (0 to disable)
+params.rfdiff_rog_min_dist     = 5           // monomer_ROG minimum Rg floor (Å)
 
 // ── Rosetta pre-validation ──────────────────────────────────────────────
 params.sc_threshold       = 0.62   // Min shape complementarity to pass (Overath et al., 2025)
+params.stop_after_rosetta = false  // Stop pipeline after Rosetta Sc filtering; resume with -resume
 
 // ── ProteinMPNN ─────────────────────────────────────────────────────────
 params.num_seqs           = 8
@@ -480,6 +487,13 @@ workflow {
         hotspot_ch,
         params.num_designs,
         params.rfdiff_iterations,
+        params.rfdiff_checkpoint,
+        params.add_potential,
+        params.rfdiff_guide_scale,
+        params.rfdiff_guide_decay,
+        params.rfdiff_interface_weight,
+        params.rfdiff_rog_weight,
+        params.rfdiff_rog_min_dist,
         Channel.value(file("${projectDir}/bin/rfdiffusion_contigs.py"))
     )
 
@@ -530,6 +544,8 @@ workflow {
         ROSETTA_FILTER.out.metrics,
         Channel.value(file("${projectDir}/bin/rosetta_filter_plots.py"))
     )
+
+    if (!params.stop_after_rosetta) {
 
     // =====================================================================
     // Step 3: ProteinMPNN
@@ -999,6 +1015,8 @@ workflow {
     //   plus per-sequence workdirs under ${params.outdir}/negative_steering/runs/
     //   and per-survivor AF3/biophysical/Rosetta artifacts under
     //   ${params.outdir}/orthogonal_metrics/{af3_nomsa,biophysical,rosetta}/<seq_name>/
+
+    } // end if (!params.stop_after_rosetta)
 }
 
 // ---------------------------------------------------------------------------

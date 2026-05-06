@@ -46,13 +46,22 @@ effector_active_residues: ""
 
 # ── RFDiffusion ───────────────────────────────────────────────────────
 contigs: "A1-32/10-20/A46-72/6-6 C"
+hotspot: ""
 num_designs: 64
 rfdiff_iterations: 50
+rfdiff_checkpoint: "Complex_beta_ckpt.pt"
 min_hotspot_frac: 0.0
 rfdiff_contact_cutoff: 8.0
+add_potential: true
+rfdiff_guide_scale: 2
+rfdiff_guide_decay: "quadratic"
+rfdiff_interface_weight: 1.0
+rfdiff_rog_weight: 0.5
+rfdiff_rog_min_dist: 5
 
 # ── Rosetta pre-validation ────────────────────────────────────────────
 sc_threshold: 0.5
+stop_after_rosetta: false
 
 # ── ProteinMPNN ───────────────────────────────────────────────────────
 num_seqs: 2
