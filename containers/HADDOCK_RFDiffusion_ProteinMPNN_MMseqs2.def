@@ -80,7 +80,7 @@ Include: yum
     git clone https://github.com/dauparas/ProteinMPNN.git
 
     # Install ColabDesign utilities
-    pip install https://github.com/sokrypton/ColabDesign/archive/refs/tags/v1.1.1.tar.gz
+    pip install https://github.com/sokrypton/ColabDesign/archive/refs/heads/v1.1.1.tar.gz
 
     # =========================================================================
     # SECTION 2: HADDOCK3
