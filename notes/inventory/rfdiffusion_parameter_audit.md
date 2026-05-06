@@ -244,6 +244,66 @@ The following files were changed to expose `interface_ncontacts` and
 - **`tests/full_test_run/params_full_test.yml`**: All six params added,
   `add_potential: true`.
 
+### `stop_after_rosetta` added to pipeline
+
+`params.stop_after_rosetta = false` added to `main.nf`. When set to `true`,
+the workflow exits cleanly after `ROSETTA_FILTER_PLOTS` without running MPNN
+or any downstream steps. Re-running with `--resume` and `stop_after_rosetta:
+false` picks up from MPNN using cached RFDiffusion and Rosetta outputs.
+Added to `params_example.yml` and `tests/full_test_run/params_full_test.yml`.
+
+### Container rebuild notes (`HADDOCK_RFDiffusion_ProteinMPNN_MMseqs2.img`)
+
+- `containers/LRR_Pipeline.def` renamed to
+  `containers/HADDOCK_RFDiffusion_ProteinMPNN_MMseqs2.def` to match the
+  container filename.
+- `Complex_beta_ckpt.pt` download added to the def file and successfully
+  downloaded during rebuild (URL:
+  `http://files.ipd.uw.edu/pub/RFdiffusion/f572d396fae9206628714fb2ce00f72e/Complex_beta_ckpt.pt`).
+- ColabDesign install changed from `git+https://...@v1.1.1` (fails with
+  HTTP 500 via git partial-clone) to tarball:
+  `https://github.com/sokrypton/ColabDesign/archive/refs/heads/v1.1.1.tar.gz`.
+  Note: `v1.1.1` is a branch on the ColabDesign repo, not a tag — the
+  `refs/tags/` URL returns 404.
+
+---
+
+## First test run results — pikp1_avrpia v1_4f_rfdtest_1 (2026-05-06)
+
+**Parameters:** `Complex_beta_ckpt.pt`, `interface_ncontacts` + `monomer_ROG`
+potentials, hotspot `B37-43`, contig `A1-32/25-35/A50-68/10-10 B`,
+4 designs, `stop_after_rosetta: true`.
+
+**Rosetta filtering:** 2 of 4 designs passed the Sc threshold (0.5).
+
+**Contact analysis on design_2 (highest Sc) vs input complex:**
+
+Cα–Cα contacts at 8 Å between effector hotspot region and receptor:
+
+| Structure | Hotspot residues | Cα contacts |
+|---|---|---|
+| Input complex | B37–43 | 8 |
+| design_2 | B116–122 | 81 |
+
+Heavy-atom contacts at 4.5 Å:
+
+| Structure | Contacts |
+|---|---|
+| Input complex | 70 |
+| design_2 | 0 |
+
+**Interpretation:** design_2 has substantially more Cα-level contacts with
+the hotspot region, suggesting RFDiffusion has genuinely extended the
+receptor toward the effector rather than simply elongating the beta strands
+away from it. The absence of heavy-atom contacts at 4.5 Å is expected at
+this stage — the backbone is in the right neighbourhood but side chains have
+not yet been designed (that is ProteinMPNN's job). The large increase in
+backbone contacts is the meaningful signal here.
+
+**Caveat:** n=4 designs is a very small sample. This result warrants a larger
+run before drawing firm conclusions about whether the parameter set is solving
+the AVR-Pia gap problem.
+
 ---
 
 ## RFDiffusion version landscape (as of May 2026)
