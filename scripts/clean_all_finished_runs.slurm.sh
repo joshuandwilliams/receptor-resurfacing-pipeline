@@ -6,6 +6,7 @@
 #SBATCH -c 1
 #SBATCH --mem=1G
 #SBATCH --time=06:00:00
+#SBATCH --chdir=/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/scripts
 #SBATCH --output=cleanup_%A_%a.out
 #SBATCH --error=cleanup_%A_%a.err
 #SBATCH --array=0-14
