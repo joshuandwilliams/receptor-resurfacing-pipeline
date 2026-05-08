@@ -122,6 +122,9 @@ tests/*/*.err
 # Pulled-from-HPC helper artefacts for path-coverage analysis
 tests/full_test_run/reference_data_helpers/
 
+# Lab protocols — large binary reference documents (209 MB); not version-controlled
+notes/Lab Protocols/
+
 # Nextflow runtime artefacts (work dirs, logs, metadata, report outputs)
 work/
 .nextflow/
