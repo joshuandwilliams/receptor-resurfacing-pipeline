@@ -5,10 +5,10 @@
 #SBATCH -n 1
 #SBATCH -c 1
 #SBATCH --mem=1G
-#SBATCH --time=00:30:00
+#SBATCH --time=06:00:00
 #SBATCH --output=cleanup_%A_%a.out
 #SBATCH --error=cleanup_%A_%a.err
-#SBATCH --array=0-7
+#SBATCH --array=0-14
 #SBATCH --mail-type=FAIL
 #SBATCH --mail-user=jowillia@nbi.ac.uk
 #
@@ -45,23 +45,29 @@ if [[ ! -x "$CLEAN" ]]; then
     exit 1
 fi
 
-# Eligible runs as of 2026-05-05 (see notes/inventory/17_storage_bloat_audit.md §8).
+# Eligible runs as of 2026-05-08 (see notes/inventory/17_storage_bloat_audit.md §8).
 # Index in this array corresponds to the SLURM array task id.
 # Status (OK / ERR) shown as a comment — the per-run cleaner re-checks
 # .nextflow/history at runtime so an out-of-date comment is harmless.
 RUNS=(
-    "experiments/campaigns/pikp1_avrpia/runs/v1_4a"     # 0  OK,  62 negsteer designs
-    "experiments/campaigns/pikp1_avrpia/runs/v1_4b"     # 1  OK, 102 negsteer designs (representative)
-    "experiments/campaigns/pikp1_avrpikf/runs/v1_4a"    # 2  OK, 118 negsteer designs
-    "experiments/campaigns/pikp1_pby2/runs/v1_4a"       # 3  OK, 114 negsteer designs
-    "experiments/campaigns/pikp1_pby2/runs/v1_4e"       # 4  OK, 116 negsteer designs
-    "experiments/campaigns/pikp1_pwt3/runs/v1_4e"       # 5  OK,  26 negsteer designs
-    "experiments/campaigns/pikp1_pwt7/runs/v1_4a"       # 6  OK,  30 negsteer designs
-    "experiments/campaigns/pikp1_pwt7/runs/v1_4e"       # 7  ERR, 0 designs passed; clean for work/
+    "experiments/campaigns/pikp1_avrpia/runs/v1_4a"          #  0  OK,  62 negsteer designs
+    "experiments/campaigns/pikp1_avrpia/runs/v1_4b"          #  1  OK, 102 negsteer designs
+    "experiments/campaigns/pikp1_avrpia/runs/v1_4f"          #  2  ERR; clean work/ + traj
+    "experiments/campaigns/pikp1_avrpia/runs/v1_4f_rfdtest_1" #  3  OK
+    "experiments/campaigns/pikp1_avrpia/runs/v1_4f_rfdtest_2" #  4  OK,  64 designs
+    "experiments/campaigns/pikp1_avrpikf/runs/v1_4a"         #  5  OK, 118 negsteer designs
+    "experiments/campaigns/pikp1_avrpikf/runs/v1_4f"         #  6  OK
+    "experiments/campaigns/pikp1_pby2/runs/v1_4a"            #  7  OK, 114 negsteer designs
+    "experiments/campaigns/pikp1_pby2/runs/v1_4e"            #  8  OK, 116 negsteer designs
+    "experiments/campaigns/pikp1_pby2/runs/v1_4f"            #  9  OK
+    "experiments/campaigns/pikp1_pwt3/runs/v1_4e"            # 10  OK,  26 negsteer designs
+    "experiments/campaigns/pikp1_pwt3/runs/v1_4f"            # 11  OK
+    "experiments/campaigns/pikp1_pwt7/runs/v1_4a"            # 12  OK,  30 negsteer designs
+    "experiments/campaigns/pikp1_pwt7/runs/v1_4e"            # 13  ERR, 0 designs passed
+    "experiments/campaigns/pikp1_pwt7/runs/v1_4f"            # 14  OK
 )
 
 # Excluded — never executed (no .nextflow/history); preserved for future runs:
-#   experiments/campaigns/pikp1_avrpikf/runs/v2_4b
 #   experiments/campaigns/pikp1_pby2/runs/v1_4b
 #   experiments/campaigns/pikp1_pwt3/runs/v1_4b
 #   experiments/campaigns/pikp1_pwt7/runs/v1_4b

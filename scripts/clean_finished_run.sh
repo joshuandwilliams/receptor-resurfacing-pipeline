@@ -114,4 +114,17 @@ else
     echo "[$RUN]   no results/negative_steering/runs/ — skipping in-results pruning"
 fi
 
+# ── 4. Prune RFDiffusion trajectory files ──────────────────────────────────
+# RFDiffusion writes a traj/ directory alongside its design PDBs.
+# This directory is published to results/rfdiffusion/traj/ but the
+# trajectories channel is never consumed downstream (grep main.nf confirms).
+# The design PDBs in results/rfdiffusion/ are kept; only traj/ is removed.
+RFDIFF_TRAJ="$RUN/results/rfdiffusion/traj"
+if [[ -d "$RFDIFF_TRAJ" ]]; then
+    echo "[$RUN]   removing results/rfdiffusion/traj/"
+    rm -rf -- "$RFDIFF_TRAJ"
+else
+    echo "[$RUN]   no results/rfdiffusion/traj/ — skipping"
+fi
+
 echo "[$RUN] done"
