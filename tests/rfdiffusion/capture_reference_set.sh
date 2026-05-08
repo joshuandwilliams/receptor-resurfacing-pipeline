@@ -42,7 +42,15 @@ done
 
 echo "Replacing example_output_files/ with new reference set..."
 rm -rf "${REF}"
-cp -r "${RESULTS}" "${REF}"
+# Copy only the files the characterization tests actually check — exclude PDB
+# design outputs (design_*.pdb, passing/, split/, traj/) which are large and
+# not referenced by any test assertion.
+rsync -a \
+    --exclude='rfdiffusion/design_*.pdb' \
+    --exclude='rfdiffusion/passing/' \
+    --exclude='rfdiffusion/split/' \
+    --exclude='rfdiffusion/traj/' \
+    "${RESULTS}/" "${REF}/"
 
 echo ""
 echo "Done. New reference set is at: ${REF}"
