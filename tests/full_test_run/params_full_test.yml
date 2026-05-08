@@ -27,7 +27,7 @@ max_boltz2_parallel: 24
 # ═════════════════════════════════════════════════════════════════════════
 # INPUT MODE 2: Pre-docked complex PDB
 # ═════════════════════════════════════════════════════════════════════════
-pdb_file: "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/full_test_run/af3_pikp1_native_avrpikf_complex.pdb"
+pdb_file: "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/full_test_run/pikp1_avrpikf_complex.pdb"
 hotspot: ""
 
 # ═════════════════════════════════════════════════════════════════════════

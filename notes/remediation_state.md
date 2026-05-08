@@ -2,7 +2,7 @@
 
 A living document tracking where the codebase remediation effort currently stands. Read this at the start of every session; update it at the end of every session.
 
-**Last updated:** 2026-05-03 (Phase 3 complete)
+**Last updated:** 2026-05-08 (experiments branch merged; RFDiffusion improvements; Phase 4 next)
 
 ---
 
@@ -17,6 +17,39 @@ Dead code removed, key naming inconsistencies fixed, critical duplication consol
 ---
 
 ## Just Completed (this session)
+
+### experiments branch merged into remediation (2026-05-08)
+
+All commits from the `experiments` worktree have been fast-forwarded into `remediation`. The following pipeline and infrastructure changes are now in both branches:
+
+**RFDiffusion improvements (`b68e66c`)**
+- `params.rfdiff_checkpoint` exposed as a first-class parameter (default `Complex_beta_ckpt.pt` — the PPI-optimised model). Old code used the container default; this makes the choice explicit and reproducible.
+- Guiding potentials wired: `add_potential`, `rfdiff_guide_scale/decay`, `rfdiff_interface_weight`, `rfdiff_rog_weight`, `rfdiff_rog_min_dist` added to `main.nf`, `modules/rfdiffusion.nf`, `params_example.yml`.  Default `add_potential = false` so existing campaigns are unaffected unless they set it.
+- `stop_after_rosetta` param added: halts pipeline cleanly after Sc filtering; `-resume` picks up from MPNN.
+- `notes/inventory/rfdiffusion_parameter_audit.md` added — covers checkpoint landscape, guiding potentials guide, and changelog.
+
+**Container rebuild (`b4780ee`, `756dcb8`, `cda2bbc`, `daf5c8a`)**
+- `containers/LRR_Pipeline.def` renamed to `containers/HADDOCK_RFDiffusion_ProteinMPNN_MMseqs2.def`.
+- `Complex_beta_ckpt.pt` download added; container rebuilt as `HADDOCK_RFDiffusion_ProteinMPNN_MMseqs2.img`.
+- ColabDesign install switched from `git+https` to tarball (URL pointed to a branch, not a tag).
+
+**Test data replacement (`06d5746`)**
+- `tests/rfdiffusion/data/af3_pikp1_native_avrpikf_complex.pdb` replaced by `tests/rfdiffusion/data/pikp1_avrpikf_complex.pdb`.
+- `tests/rfdiffusion/test_rfdiffusion.nf` and `tests/full_test_run/params_full_test.yml` updated to reference the new filename (stale reference was a broken-path bug — test would have failed on HPC).
+
+**Negsteer bug fix (`7ce321c`)**
+- `bin/negative_steering_run_one.sh`: `skip_steering` plan exit is now a soft failure, not a hard abort. Plan stage exits 1 with `skip_steering=true` in `plan.json`; old code was calling `fail()` before reaching the skip-steering check, aborting the pipeline and scancelling in-flight tasks.
+
+**Infrastructure and cleanup**
+- `scripts/clean_finished_run.sh` / `clean_all_finished_runs.slurm.sh` added (storage bloat audit tooling).
+- `notes/inventory/17_storage_bloat_audit.md` added.
+- All test SLURM plot scripts updated to reference new container image name.
+- `scripts/sync_to_hpc.sh` updated to include experimental outputs.
+
+**Documentation fix**
+- `notes/inventory/rfdiffusion_parameter_audit.md` "Changes made" section had three stale `Complex_base_ckpt.pt` references (draft artifact); corrected to `Complex_beta_ckpt.pt` to match the actual code.
+
+---
 
 ### Phase 2 closing (earlier today)
 
@@ -172,6 +205,10 @@ Mac is authoritative. HPC has no git. Workflow: edit on Mac → `./scripts/sync_
 ---
 
 ## Verification Queue
+
+> - **What:** RFDiffusion per-module reference set needs regeneration on HPC.
+> - **Why:** Three things changed simultaneously: (1) test PDB replaced (`af3_pikp1_native_avrpikf_complex.pdb` → `pikp1_avrpikf_complex.pdb`); (2) explicit checkpoint now passed (`Complex_beta_ckpt.pt` — different from whatever the old container default was); (3) seven new `val` inputs added to the RFDIFFUSION process, invalidating the Nextflow cache. The `rfdiffusion_metrics.json` reference uses JSON-DEEP with exact Cα coordinates — any of these three changes will cause the comparison to fail. Also consider whether to demote `rfdiffusion_metrics.json` from JSON-DEEP to JSON-STRUCT (keys/types/ranges only) given that RFDiffusion is stochastic and seed honoring is not guaranteed end-to-end.
+> - **How to verify:** On HPC: delete `tests/rfdiffusion/work/`, run `sbatch tests/rfdiffusion/run_test_rfdiffusion.slurm.sh`, copy the `receptor_resurfacing_results/` output to `tests/rfdiffusion/example_output_files/`, commit, re-run `pytest -m hpc` against the new reference.
 
 > - **What:** Suspected `--n-cycles 1` silent-skip-reversion bug from notes6.
 > - **Why suspicious:** Synthesis §5 records this as not verified during Phase 1.
