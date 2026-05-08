@@ -23,7 +23,7 @@ nextflow.enable.dsl = 2
 // Parameter defaults — override via params.yml or --param on the command line
 // ---------------------------------------------------------------------------
 
-params.pdb_file               = "${projectDir}/data/af3_pikp1_native_avrpikf_complex.pdb"
+params.pdb_file               = "${projectDir}/data/pikp1_avrpikf_complex.pdb"
 params.receptor_chain         = "A"
 params.effector_chain         = "C"
 params.contigs                = "A1-32/10-20/A46-72/6-6 C"

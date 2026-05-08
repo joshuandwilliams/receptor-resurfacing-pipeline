@@ -175,7 +175,7 @@ potentials.guiding_potentials=["type:interface_ncontacts,weight:1","type:monomer
 The following files were changed to expose checkpoint selection as a
 first-class parameter:
 
-- **`main.nf`**: Added `params.rfdiff_checkpoint = "Complex_base_ckpt.pt"`
+- **`main.nf`**: Added `params.rfdiff_checkpoint = "Complex_beta_ckpt.pt"`
   in the RFDiffusion params block. Threaded it as a new positional argument
   to the `RFDIFFUSION(...)` process call.
 
@@ -188,16 +188,16 @@ first-class parameter:
   the hotspot arg and `diffuser.T`). An empty string is passed through cleanly
   as a no-op, preserving backward compatibility.
 
-- **`params_example.yml`**: Added `rfdiff_checkpoint: "Complex_base_ckpt.pt"`
+- **`params_example.yml`**: Added `rfdiff_checkpoint: "Complex_beta_ckpt.pt"`
   with a comment listing the three available options
   (`Base_ckpt.pt`, `Complex_base_ckpt.pt`, `Complex_beta_ckpt.pt`).
 
 - **`tests/full_test_run/params_full_test.yml`**: Added
-  `rfdiff_checkpoint: "Complex_base_ckpt.pt"`.
+  `rfdiff_checkpoint: "Complex_beta_ckpt.pt"`.
 
 The default is `Complex_beta_ckpt.pt` — the PPI-optimised checkpoint now
-present in the rebuilt container (`LRR_Pipeline.img`). `Complex_base_ckpt.pt`
-remains available as a fallback.
+present in the rebuilt container (`HADDOCK_RFDiffusion_ProteinMPNN_MMseqs2.img`).
+`Complex_base_ckpt.pt` remains available as a fallback.
 
 Campaign `params.yml` files under `experiments/` are intentionally NOT updated
 here — they will pick up the `main.nf` default until explicitly overridden.
