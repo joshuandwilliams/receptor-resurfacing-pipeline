@@ -2,7 +2,7 @@
 
 A living document tracking where the codebase remediation effort currently stands. Read this at the start of every session; update it at the end of every session.
 
-**Last updated:** 2026-05-08 (experiments branch merged; RFDiffusion improvements; Phase 4 next)
+**Last updated:** 2026-05-08 (traj cleanup wired in; 15-run cleanup array updated; Phase 4 next)
 
 ---
 
@@ -17,6 +17,20 @@ Dead code removed, key naming inconsistencies fixed, critical duplication consol
 ---
 
 ## Just Completed (this session)
+
+### Cleanup script: RFDiffusion traj/ added; array extended (2026-05-08)
+
+- `scripts/clean_finished_run.sh`: step 4 added — deletes `results/rfdiffusion/traj/` after
+  work/ and Boltz pruning. The `trajectories` channel emitted by `rfdiffusion.nf` is never
+  consumed in `main.nf`; traj files are published but dead weight, and in practice the largest
+  remaining space consumer after work/ is gone.
+- `scripts/clean_all_finished_runs.slurm.sh`: `--time` extended to 6 h (prior 30-min limit
+  was too short for some runs). `--array` extended from 0-7 to 0-14; the 7 v1_4f runs that
+  completed since the original audit are now included. `pikp1_avrpikf/v2_4b` removed from
+  the excluded list (does not exist on HPC).
+- 15 runs confirmed as needing cleanup (traj present); 3 never-run runs correctly excluded.
+- Characterisation suite confirmed green against updated RFDiffusion reference set:
+  272 passed, 26 skipped, 0 failed (HPC job 19997103, 2026-05-08 21:15).
 
 ### experiments branch merged into remediation (2026-05-08)
 
@@ -201,14 +215,17 @@ Mac is authoritative. HPC has no git. Workflow: edit on Mac → `./scripts/sync_
 - `rfdiff_contact_cutoff` / `haddock_hotspot_cutoff` split.
 - F821 undefined-name ruff errors — review for latent runtime bugs before fixing.
 - Six remaining F-rated `cmd_*` functions in `boltz2_iterate_steering.py` (CC 45–50).
+- **Inline RFDiffusion traj/ cleanup into the pipeline.** Currently handled retroactively by
+  `scripts/clean_finished_run.sh`. The right fix is to stop publishing the directory at all:
+  change the `publishDir` in `modules/rfdiffusion.nf` to add a `pattern:` filter that excludes
+  `traj/`, or delete `traj/` at the end of the process script body. Either approach means future
+  runs never accumulate traj files and the standalone cleanup step becomes unnecessary.
+  Analogous to the §10 forward-looking change in `notes/inventory/17_storage_bloat_audit.md`
+  for Boltz unused samples.
 
 ---
 
 ## Verification Queue
-
-> - **What:** RFDiffusion per-module reference set needs regeneration on HPC.
-> - **Why:** Three things changed simultaneously: (1) test PDB replaced (`af3_pikp1_native_avrpikf_complex.pdb` → `pikp1_avrpikf_complex.pdb`); (2) explicit checkpoint now passed (`Complex_beta_ckpt.pt` — different from whatever the old container default was); (3) seven new `val` inputs added to the RFDIFFUSION process, invalidating the Nextflow cache. The `rfdiffusion_metrics.json` reference uses JSON-DEEP with exact Cα coordinates — any of these three changes will cause the comparison to fail. Also consider whether to demote `rfdiffusion_metrics.json` from JSON-DEEP to JSON-STRUCT (keys/types/ranges only) given that RFDiffusion is stochastic and seed honoring is not guaranteed end-to-end.
-> - **How to verify:** On HPC: delete `tests/rfdiffusion/work/`, run `sbatch tests/rfdiffusion/run_test_rfdiffusion.slurm.sh`, copy the `receptor_resurfacing_results/` output to `tests/rfdiffusion/example_output_files/`, commit, re-run `pytest -m hpc` against the new reference.
 
 > - **What:** Suspected `--n-cycles 1` silent-skip-reversion bug from notes6.
 > - **Why suspicious:** Synthesis §5 records this as not verified during Phase 1.
