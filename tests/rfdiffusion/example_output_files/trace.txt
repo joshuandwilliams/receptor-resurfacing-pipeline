@@ -1,4 +1,0 @@
-task_id	hash	native_id	name	status	exit	submit	duration	realtime	%cpu	peak_rss	peak_vmem	rchar	wchar	cpus	memory	time
-1	55/969880	19845610	RFDIFFUSION (receptor_resurfacing)	COMPLETED	0	2026-05-03 10:34:39.270	6m 59s	6m 28s	143.5%	1.8 GB	16 GB	519.8 MB	68.5 MB	20	64 GB	12h
-2	d3/f28287	19845648	RFDIFFUSION_FILTER (rfdiff_filter)	COMPLETED	0	2026-05-03 10:41:38.875	4.7s	1s	91.0%	8.8 MB	26.8 MB	5.4 MB	743.9 KB	2	8 GB	1h
-3	f8/8bc4b5	19845651	RFDIFFUSION_PLOTS (rfdiff_plots)	COMPLETED	0	2026-05-03 10:41:43.755	9.8s	5.1s	101.4%	168.1 MB	1.6 GB	24.1 MB	343.6 KB	2	8 GB	1h
