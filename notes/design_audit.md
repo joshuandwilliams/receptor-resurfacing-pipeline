@@ -2946,3 +2946,23 @@ or novelty exhausted. Gate implemented using existing `cmd_kickoff_distances` lo
 1. Research and document reasoning for each threshold
 2. Run all five campaigns with corrected code
 3. Assess per-campaign; update thresholds accordingly
+
+---
+
+# Phase 4 architecture grill-me — restructuring toward deep modules
+
+Opened 2026-05-12 against commit `1f735c0` (pre-architecture baseline).  Sessions 1–5 (Q1–Q128) established the WHAT (scope of each library extraction, terminology, latent bugs); this session is about the HOW (module boundaries, public interfaces, migration sequencing, success criteria).
+
+Format mirrors the earlier sessions: numbered questions, [VERIFY]/[UNKNOWN]/[VERIFY+INVESTIGATION] tags, the user's free-form answer, then a synthesis note recording the decision and its Phase 4 implementation implication.  Sessions append; nothing is deleted.
+
+Authoritative inputs (re-read at the start of every session):
+- `notes/design_audit.md` itself (Sessions 1–5)
+- `notes/inventory/04_functional_categorization.md` (the bottom-up category map)
+- `notes/inventory/06_ubiquitous_language.md` (post-rename glossary)
+- `notes/inventory/05_findings.md` (duplication / coupling findings)
+- `notes/inventory/10_phase_1_synthesis.md` (the original design-concept doc)
+- `notes/remediation_state.md` (running state)
+
+## Session 6 — Migration strategy and success criteria (meta-decisions before per-module design)
+
+

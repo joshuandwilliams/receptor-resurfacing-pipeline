@@ -4,6 +4,22 @@ A living document tracking where the codebase remediation effort currently stand
 
 **Last updated:** 2026-05-12 (six pre-Phase-4 audit-close items landed; Phase 4 grill-me is next)
 
+## Pre-Phase-4 baseline commit
+
+**`1f735c0`** — captured at end of pre-architecture work, 2026-05-12.
+
+If a regression surfaces in the rfdiffusion or negsteer module test after this commit (those two were queued on GPU at the time and could not be verified in-session), bisect against `1f735c0` to pinpoint when the divergence was introduced.  The four CPU-only module tests (proteinmpnn, rosetta_filtering, orthogonal_metrics, and rfdiffusion's CPU portion) all reported `Success: true` against this commit; only negsteer needed a follow-up fix (`1cdefd6`, NO_FILE sentinel for the new `scored_metadata` input) before its first successful run.
+
+## Phase 4 architecture spec — Session 6 (in progress)
+
+Architecture grill-me Session 6 produced `notes/phase4_architecture_spec.md` — the written specification for the Phase 4 codebase rebuild under Strategy B (deep modules).  Spec covers 13 domain types: `ProteinStructurePrediction`, `ContigSpec`, `PositionSet`, `BoltzConfidenceMetrics`, `AF3ConfidenceAggregate`, `DesignedBackbone`, `DesignedSequence`, `StageResult`, `NegativeSteeringRun`, `DesignCohort`, `OrthogonalMetrics`, `PipelineParams`, `PipelineInternalThresholds`.
+
+**Step 1 (candidate type list) and Step 2 (per-type interfaces) are populated.**  Step 3 (type relationships) and Step 4 (code-fit validation against 3-4 representative current-code samples) are TODO — next grill-me batch.
+
+**CL-3 captured as the most significant behaviour-change to land during Phase 4 migration**: the reversion-gating rule moves from per-(design, seed) to per-design majority-of-correctly-placed.  This is the only intentional behaviour change in the Phase 4 plan; everything else is structural.
+
+Two new memory files added (recurring Claude failure modes): `project_no_reversion_semantics.md` and `project_contig_string_format.md`.  Both indexed in `MEMORY.md`.
+
 ---
 
 ## Current Phase
