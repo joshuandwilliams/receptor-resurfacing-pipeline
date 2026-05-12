@@ -37,7 +37,7 @@ For each row in the input CSV, adds eight columns:
                    compare the two head-to-head before any composite-
                    score migration.
 
-The model is the `representative_canonical_pdb` cached Boltz prediction.
+The model is the `rep_canonical_pdb` cached Boltz prediction.
 The native is the parent RFDiffusion design PDB (receptor+effector),
 the same ground-truth structure used by the existing ra_eff metric.
 Its path is read from the per-sequence workdir's `plan.json` under the
@@ -46,7 +46,7 @@ Its path is read from the per-sequence workdir's `plan.json` under the
 Inputs
 ------
 --input-csv        cross_sequence_summary.csv from NEGSTEER_CROSS_SEQUENCE.
-                   Must have a `representative_canonical_pdb` column.
+                   Must have a `rep_canonical_pdb` column.
 --output-csv       Where to write the extended CSV.
 --workdirs-glob    Glob pattern matching per-sequence workdirs, e.g.
                    '<outdir>/runs/design_*_seq_*'.  Used to locate
@@ -80,7 +80,7 @@ Notes
 -----
 - The existing 10 Å iPSAE values (ipsae_ab, ipsae_ba, ipsae_min) are
   left as-is and NOT recomputed; they come through as
-  `representative_ipsae_*` columns from the per-row passing_summary.
+  `rep_ipsae_*` columns from the per-row passing_summary.
   This keeps the existing ranker behaviour unchanged.
 - Rows where DockQ, ipSAE, or pLDDT fail have the corresponding
   columns set to NaN and a comma-separated reason written to a new
@@ -112,7 +112,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 # intact_core, weighted_jaccard, interface_plddt) are now computed
 # per-prediction inside compute_metrics.py and propagated through
 # passing_summary.csv → cross_sequence_summary.csv as
-# `representative_*_median` — see boltz2_iterate_steering.py's
+# `rep_*_median` — see boltz2_iterate_steering.py's
 # METRIC_KEYS_RAW for the authoritative list.  This script only
 # adds the DockQ family, which genuinely needs a post-hoc external
 # tool invocation.
@@ -161,7 +161,7 @@ def _find_ground_truth(seq_name: str, workdirs_glob: str) -> Optional[Path]:
     """
     Locate the ground-truth PDB for a row by reading its per-sequence
     workdir's plan.json.  `seq_name` is the row's
-    representative_canonical_pdb workdir suffix (e.g. "design_3_seq_1").
+    rep_canonical_pdb workdir suffix (e.g. "design_3_seq_1").
     """
     from glob import glob
     for wd in glob(workdirs_glob):
@@ -615,7 +615,7 @@ def process_row(
 
     Other interface metrics (15Å iPSAE, intact_core, weighted_jaccard,
     interface_plddt) are now computed per-prediction by
-    compute_metrics.py and reach this CSV as `representative_*_median`
+    compute_metrics.py and reach this CSV as `rep_*_median`
     columns through cross_sequence_summary.py — they are NOT recomputed
     here.
     """
@@ -624,7 +624,7 @@ def process_row(
         out[col] = ""
     failures: List[str] = []
 
-    canonical_pdb_str = row.get("representative_canonical_pdb", "")
+    canonical_pdb_str = row.get("rep_canonical_pdb", "")
     if not canonical_pdb_str:
         out["dockq_failures"] = "no_canonical_pdb"
         return out

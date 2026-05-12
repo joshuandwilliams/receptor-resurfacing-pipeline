@@ -25,7 +25,7 @@ Plots produced
 
 orthogonal_af3_vs_boltz.png
     Scatter of af3_nomsa_best_ra_eff (x) vs Boltz
-    representative_ra_eff_vs_truth_median (y).  AF3 region failing
+    rep_ra_eff_vs_truth_median (y).  AF3 region failing
     the af3_ra_max threshold shaded pale red — but AF3 is
     INFORMATIONAL only (no longer gates passes_orthogonal_filters).
 
@@ -222,7 +222,7 @@ def plot_af3_vs_boltz(rows: List[Dict], out_path: str) -> bool:
     pts_missing_af3: List[Tuple[float, str]] = []   # only Boltz available
 
     for row in rows:
-        boltz_ra = _try_float(row.get("representative_ra_eff_vs_truth_median"))
+        boltz_ra = _try_float(row.get("rep_ra_eff_vs_truth_median"))
         af3_ra   = _try_float(row.get("af3_nomsa_best_ra_eff"))
         if boltz_ra is None and af3_ra is None:
             continue
@@ -371,7 +371,7 @@ ORTHOG_PRESENCE_COLS = (
     "bsa",
     "sc",
     "rosetta_ddg",
-    "representative_interface_plddt_median",
+    "rep_interface_plddt_median",
 )
 
 
@@ -523,7 +523,7 @@ METRIC_VS_COMPOSITE_PANELS = [
      ORTHOG_SC_MIN,    ">=", "",       "fixed01"),
     ("bsa",                                   "BSA (Å²)",
      ORTHOG_BSA_MIN,   ">=", "Å²",     "auto"),
-    ("representative_interface_plddt_median", "Interface pLDDT",
+    ("rep_interface_plddt_median", "Interface pLDDT",
      ORTHOG_PLDDT_MIN, ">=", "",       "fixed01"),
     ("rosetta_ddg",                           "Rosetta ΔΔG (REU)",
      DDG_BENNETT_REFERENCE, "<=", "REU", "auto"),
@@ -766,7 +766,7 @@ COMBINED_SUMMARY_COLUMNS = [
     ("cross_composite_score",                    "cross",
      "composite",       None,               None,  "0p3"),
     # Boltz pose — receptor-aligned effector RMSD vs truth.
-    ("representative_ra_eff_vs_truth_median",    "cross",
+    ("rep_ra_eff_vs_truth_median",    "cross",
      "Boltz ra_eff",    5.0,                "<=",  "0p2"),
     # Receptor's own fold quality.  Sits next to Boltz ra_eff because
     # the two are conceptually paired: ra_eff measures relative
@@ -776,22 +776,22 @@ COMBINED_SUMMARY_COLUMNS = [
     # boltz2_iterate_steering.py:1046 (≤5 Å).  See
     # boltz2_negative_steering.py:_compute_pose_metrics for the
     # underlying definition (whole-receptor Kabsch fit).
-    ("representative_independent_receptor_rmsd_median",  "cross",
+    ("rep_independent_receptor_rmsd_median",  "cross",
      "rec RMSD",        5.0,                "<=",  "0p2"),
-    ("representative_true_jaccard_median",       "cross",
+    ("rep_true_jaccard_median",       "cross",
      "true_jaccard",    None,               None,  "0p2"),
     # Boltz confidence (the six selected)
-    ("representative_complex_plddt_median",      "cross",
+    ("rep_complex_plddt_median",      "cross",
      "complex_plddt",   0.70,               ">=",  "0p2"),
-    ("representative_iptm_median",               "cross",
+    ("rep_iptm_median",               "cross",
      "iptm",            0.30,               ">=",  "0p2"),
-    ("representative_ipae_median",               "cross",
+    ("rep_ipae_median",               "cross",
      "ipae",            15.0,               "<=",  "0p2"),
-    ("representative_pae_pass_frac_median",      "cross",
+    ("rep_pae_pass_frac_median",      "cross",
      "pae_pass_frac",   0.10,               ">=",  "0p2"),
-    ("representative_interface_plddt_median",    "cross",
+    ("rep_interface_plddt_median",    "cross",
      "iface_plddt",     0.75,               ">=",  "0p2"),
-    ("representative_ipsae_min_15_median",       "cross",
+    ("rep_ipsae_min_15_median",       "cross",
      "ipsae_min_15",    None,               None,  "0p2"),
     # Mutations carried by the representative's final prediction.
     # Stage-aware: cold_start → 0; steering → steered count;
@@ -810,7 +810,7 @@ COMBINED_SUMMARY_COLUMNS = [
      "BSA",             ORTHOG_BSA_MIN,     ">=",  "0f"),
     ("rosetta_ddg",                               "survivor",
      "ΔΔG",             DDG_BENNETT_REFERENCE, "<=", "1f"),
-    ("representative_weighted_jaccard_median",   "cross",
+    ("rep_weighted_jaccard_median",   "cross",
      "weighted_jacc",   None,               None,  "0p2"),
 ]
 
@@ -837,23 +837,23 @@ def _format_cell(v: float, fmt: str) -> str:
     return f"{v:.3f}"
 
 
-def _representative_n_mutations(cross_row: Dict) -> Optional[float]:
+def _rep_n_mutations(cross_row: Dict) -> Optional[float]:
     """Stage-aware count of mutations carried by the representative
     sequence's FINAL prediction.
 
       cold_start → no reversion attempted AND steered_total_mutations==0
                  → 0
       steering   → no reversion attempted AND steered_total_mutations>0
-                 → steered count (representative_total_mutations_median)
+                 → steered count (rep_total_mutations_median)
       reversion  → reversion ran (any reverted_* populated)
-                 → post-reversion count (representative_reverted_total_mutations)
+                 → post-reversion count (rep_reverted_total_mutations)
 
     Mirrors the classify_seed stage detection used elsewhere in the
     plot scripts so n_mut here lines up with the stage-coloured
     dots in the negsteer per-seed plots."""
-    rev_verdict = (cross_row.get("representative_reversion_verdict") or "").strip()
-    rev_total = _try_int(cross_row.get("representative_reverted_total_mutations", ""))
-    steered_total = _try_int(cross_row.get("representative_total_mutations_median", ""))
+    rev_verdict = (cross_row.get("rep_reversion_verdict") or "").strip()
+    rev_total = _try_int(cross_row.get("rep_reverted_total_mutations", ""))
+    steered_total = _try_int(cross_row.get("rep_total_mutations_median", ""))
 
     # Reversion ran iff verdict is populated OR reverted_total_mutations
     # has a value.  If so, the representative's final prediction is
@@ -941,7 +941,7 @@ def plot_combined_cohort_orthogonal_summary(
 
             # Source the value.
             if src == "special" and col == "__rep_n_mutations__":
-                v = _representative_n_mutations(cross_row)
+                v = _rep_n_mutations(cross_row)
             elif src == "survivor":
                 v = (_try_float(survivor.get(col, "")) if survivor else None)
             else:  # 'cross'

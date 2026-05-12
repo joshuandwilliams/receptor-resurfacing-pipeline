@@ -1,5 +1,17 @@
 # 15 — Discovery run path coverage and fixture candidates
 
+> **Post-rename note (2026-05-12):** The schema was renamed in this commit:
+> `aggregated_verdict` → `outcome`; `representative_` column prefix → `rep_`;
+> the five `n_seeds_{pose_holds,pose_collapses,new_contamination,no_data,clean_steered}`
+> output columns were consolidated to a single `n_pass = pose_holds_count + clean_steered_count`.
+> The per-verdict counts still exist internally (in `_per_seed_verdict_breakdown`)
+> but are no longer emitted in CSVs. Diagnostic shell snippets later in this
+> file that still reference `n_seeds_pose_holds`, `n_seeds_pose_collapses`,
+> `n_seeds_new_contamination`, `n_seeds_no_data`, `n_seeds_clean_steered` were
+> valid against the pre-rename CSVs; today they would need to operate on
+> `n_pass` + `outcome` (and re-derive per-verdict from `runs/<seq>/raw_per_seed_results.csv`
+> if the per-verdict breakdown is wanted).
+
 Companion to `14_phase_2_revision_per_module_tests.md` §2.4 / §2.5. Inventories
 which designs and sequences from the discovery run (`params_full_test.yml`,
 results at `tests/full_test_run/results/` on HPC) cover which paths through
@@ -27,9 +39,9 @@ produced (120 steered + 2 controls), in the producer code's vocabulary:
 
 | Aggregated class (representative-row level) | Count | Tier dist | Sub-case |
 |---|---:|---|---|
-| `no_reversion` + `representative_design == "initial"` | 13 | 13 A | `cold_start_all_clean` (notes12 / patch b) |
-| `no_reversion` + `representative_design != "initial"` (tiered) | 5 | 5 A/B/C | `steered_clean`-tiered: at least one design had `steered_ra_eff < 5.0` AND intact, makes it into passing_summary |
-| `no_reversion` + `representative_design != "initial"` (tier-none, all_zeros) | 63 | 63 none | `steered_clean`-not-tiered: every design `no_reversion` but no design's steered ra_eff < 5.0 → empty passing_summary, tier-none fallback fires |
+| `no_reversion` + `rep_design == "initial"` | 13 | 13 A | `cold_start_all_clean` (notes12 / patch b) |
+| `no_reversion` + `rep_design != "initial"` (tiered) | 5 | 5 A/B/C | `steered_clean`-tiered: at least one design had `steered_ra_eff < 5.0` AND intact, makes it into passing_summary |
+| `no_reversion` + `rep_design != "initial"` (tier-none, all_zeros) | 63 | 63 none | `steered_clean`-not-tiered: every design `no_reversion` but no design's steered ra_eff < 5.0 → empty passing_summary, tier-none fallback fires |
 | `no_reversion` representative + sequence has ≥1 `pose_collapses` design | 6 | 6 none | mixed: most designs `no_reversion`-but-bad-pose; at least one design had reversion run that aggregated to `pose_collapses`. passing_summary still empty |
 | `pose_holds` | 9 | 3 A, 5 B, 1 C | reversion ran, aggregator passed |
 | `pose_collapses` representative | 26 | 26 none | reversion ran, aggregator failed for every design that had reversion |
@@ -315,7 +327,7 @@ path is verified against `modules/proteinmpnn.nf:315`.)
 Derived from `bin/boltz2_negative_steering.py::cmd_plan` (cold-start
 outcome), `bin/reversion.py::classify_reversion_verdict` (per-seed
 post-reversion verdict), `bin/boltz2_iterate_steering.py::_per_seed_verdict_breakdown`
-and `_classify_aggregated_verdict` (per-seed counts and aggregation rule),
+and `_classify_outcome` (per-seed counts and aggregation rule),
 and `bin/cross_sequence_summary.py::_tier_for_row` (cohort tier).
 Pre-`14`-era assistant prompts that talked about "P1 cold-start fail / P2
 clean steering / P3 reversion succeeds / P4 reversion fails" do not match
@@ -364,7 +376,7 @@ chain with one of five per-seed states (`bin/boltz2_iterate_steering.py:3689–3
   new_contamination (`bin/reversion.py:1062–1144`).
 - **`no_data`** — seed prediction errored or has no usable metrics.
 
-##### Axis 3 — Aggregated `aggregated_verdict` (per `_classify_aggregated_verdict`)
+##### Axis 3 — Aggregated `outcome` (per `_classify_outcome`)
 
 The per-(negsteer-design)-row aggregator in
 `boltz2_iterate_steering.py:3514–3686` re-derives a verdict from the
@@ -387,7 +399,7 @@ median + position-majority columns. Possible values:
   `boltz2_iterate_steering.py:4596–4604` for any per-design row whose
   `sequence_group` is blank (`""` or `None`). Such a row is treated as
   its own group of size 1 with no aggregation, gets `n_seeds=1`, and is
-  written into `aggregated_results.csv` with `aggregated_verdict =
+  written into `aggregated_results.csv` with `outcome =
   "singleton"`. **The cycle-0 cold-start baseline row written by
   `cmd_collect` has `sequence_group=""` by construction**, so every
   per-sequence `aggregated_results.csv` carries exactly one `singleton`
@@ -405,14 +417,14 @@ median + position-majority columns. Possible values:
 Per-seed columns (`n_seeds_pose_holds`, `n_seeds_pose_collapses`,
 `n_seeds_new_contamination`, `n_seeds_no_data`,
 `n_seeds_clean_steered`) are populated **only when reversion ran**
-for that design (i.e. `aggregated_verdict ∈ {pose_holds,
+for that design (i.e. `outcome ∈ {pose_holds,
 pose_collapses, new_contamination}`). For `no_reversion` and
 `singleton` rows the aggregator writes blank strings to all five
 columns (`boltz2_iterate_steering.py:4705–4709`). Numeric coercion
 of those blanks to integers yields 0; a row that reads as
 `n_seeds_clean_steered=0, n_seeds_no_data=0, …` after coercion is
 indistinguishable from one where steering ran with all-failing seeds.
-Discriminating the two requires reading the `aggregated_verdict`
+Discriminating the two requires reading the `outcome`
 column directly, not the per-seed counts.
 
 The "any-seed gate" (notes10 Bug-E fix) replaces an earlier
@@ -426,18 +438,19 @@ Computed downstream of the aggregator from the columns above; **not**
 written into per-sequence aggregated_results.csv but rather into
 `cross_sequence_summary.csv["cross_tier"]`:
 
-- `n_pass = n_seeds_pose_holds + n_seeds_clean_steered`
-- **A**: `aggregated_verdict == "no_reversion"` OR `n_pass == n_seeds`
-- **B**: `1 < n_pass < n_seeds`  (e.g. 2/3)
-- **C**: `n_pass == 1` (e.g. 1/3)
-- **none**: otherwise (zero pass-equivalent seeds, or pose_collapses /
-  new_contamination aggregated, or insufficient data).
+- `n_pass = pose_holds_count + clean_steered_count` (path-agnostic, emitted as a column in aggregated_results.csv post-rename).
+- **A**: `n_pass == n_seeds` (every seed pass-equivalent).
+- **B**: `1 < n_pass < n_seeds` (e.g. 2/3).
+- **C**: `n_pass == 1` (e.g. 1/3).
+- **none**: `n_pass == 0` (zero pass-equivalent seeds — includes wrong-placement-no-contamination groups whose `outcome=='no_reversion'` but whose seeds all classify as `no_data` / `pose_collapses`).
+
+Note (post-rename): the legacy `outcome=='no_reversion' → tier A` shortcut has been removed. Tier is derived purely from `n_pass / n_seeds`.
 
 ##### Per-MPNN-sequence outcome classes actually observable
 
 A representative is picked per MPNN sequence (best-non-empty-tier wins;
 within tier, lowest `rank_by_composite_score`). Cross-tabbing
-`(cross_tier, aggregated_verdict, representative_design)` over the
+`(cross_tier, outcome, rep_design)` over the
 helper file gives the classes the discovery run produced:
 
 | # | Class (producer vocabulary) | Predicate | Discovery count |
@@ -445,7 +458,7 @@ helper file gives the classes the discovery run produced:
 | 1 | `cold_start_all_clean` | tier=A, verdict=`no_reversion`, rep_design=`initial` | 13 |
 | 2 | `steered_clean` (tiered) | tier∈{A,B,C}, verdict=`no_reversion`, rep_design≠`initial` — at least one design hit `steered_ra_eff < 5.0` AND intact, made it into passing_summary | 5 |
 | 3a | `steered_clean` (tier-none, all-`no_reversion`) | tier=`none`, verdict=`no_reversion`, rep_design≠`initial` AND aggregated_results.csv contains zero `pose_collapses` / `pose_holds` / `new_contamination` rows | 63 |
-| 3b | `steered_clean` (tier-none, mixed with `pose_collapses`) | tier=`none`, verdict=`no_reversion` representative, but at least one design in aggregated_results.csv had `aggregated_verdict == "pose_collapses"` | 6 |
+| 3b | `steered_clean` (tier-none, mixed with `pose_collapses`) | tier=`none`, verdict=`no_reversion` representative, but at least one design in aggregated_results.csv had `outcome == "pose_collapses"` | 6 |
 | 4 | `pose_holds` aggregated, all-3-seed | tier=A, verdict=`pose_holds`, n_pass=3/3 | 3 |
 | 5 | `pose_holds` aggregated, majority | tier=B, verdict=`pose_holds`, n_pass=2/3 | 5 |
 | 6 | `pose_holds` aggregated, minority | tier=C, verdict=`pose_holds`, n_pass=1/3 | 1 |
@@ -492,24 +505,24 @@ and are **not curated as fixtures** — they will appear automatically when
 |---|---|---|
 | `cold_start_all_clean` | `runs/<seq>/cycle_0/plan.json` | `cold_start_all_clean == true` AND `skip_steering == true` |
 | `cold_start_all_clean` | same | `cold_start_n_clean == num_seeds` |
-| `cold_start_all_clean` | `cross_sequence_summary.csv` | `representative_design == "initial"` AND `representative_aggregated_verdict == "no_reversion"` AND `cross_tier == "A"` |
-| `steered_clean`, Class 2 / Class 3a (strict) | `runs/<seq>/aggregated_results.csv` | every non-singleton row has `aggregated_verdict == "no_reversion"`; no row has `reversion_verdict` populated |
-| `steered_clean`, Class 3b (mixed) | `runs/<seq>/aggregated_results.csv` | most non-singleton rows are `no_reversion`, but at least one row has `aggregated_verdict == "pose_collapses"`; cross_summary still picks a `no_reversion` row as the representative |
-| `steered_clean` (tiered) | `cross_sequence_summary.csv` | `representative_design != "initial"` AND `representative_aggregated_verdict == "no_reversion"` AND `cross_tier ∈ {A,B,C}` |
-| `pose_holds` | `runs/<seq>/aggregated_results.csv` | at least one row with `aggregated_verdict == "pose_holds"` |
+| `cold_start_all_clean` | `cross_sequence_summary.csv` | `rep_design == "initial"` AND `rep_outcome == "no_reversion"` AND `cross_tier == "A"` |
+| `steered_clean`, Class 2 / Class 3a (strict) | `runs/<seq>/aggregated_results.csv` | every non-singleton row has `outcome == "no_reversion"`; no row has `reversion_verdict` populated |
+| `steered_clean`, Class 3b (mixed) | `runs/<seq>/aggregated_results.csv` | most non-singleton rows are `no_reversion`, but at least one row has `outcome == "pose_collapses"`; cross_summary still picks a `no_reversion` row as the representative |
+| `steered_clean` (tiered) | `cross_sequence_summary.csv` | `rep_design != "initial"` AND `rep_outcome == "no_reversion"` AND `cross_tier ∈ {A,B,C}` |
+| `pose_holds` | `runs/<seq>/aggregated_results.csv` | at least one row with `outcome == "pose_holds"` |
 | `pose_holds` | same row | `n_seeds_pose_holds`, `n_seeds_pose_collapses`, `n_seeds_new_contamination`, `n_seeds_no_data`, `n_seeds_clean_steered` |
 | `pose_holds` | `runs/<seq>/cycle_0/reversion_results.json` | per-(steered-label) entries with `verdict == "pose_holds"` |
-| `pose_collapses` aggregated | `cross_sequence_summary.csv` | `representative_aggregated_verdict == "pose_collapses"` |
+| `pose_collapses` aggregated | `cross_sequence_summary.csv` | `rep_outcome == "pose_collapses"` |
 | `pose_collapses` aggregated | `runs/<seq>/cycle_0/reversion_results.json` | majority of entries `verdict == "pose_collapses"` |
 | reversion was attempted at all | `runs/<seq>/cycle_0/contaminated.json` | `n_contaminated > 0` |
 | reversion was attempted, what was reverted | `runs/<seq>/cycle_0/reversion_plan.json` | per-(label) `positions_to_revert` |
 | reversion per-seed outcomes | `runs/<seq>/cycle_0/reversion_results_per_seed.json` | `{label: {seed_idx: result}}` |
 | `new_contamination` | `runs/<seq>/cycle_0/reversion_results.json` | per-entry `verdict == "new_contamination"`, `reason` mentions "gated position(s)" |
-| Class 3a vs Class 3b | `runs/<seq>/aggregated_results.csv` | 3b: at least one row has `aggregated_verdict == "pose_collapses"`; 3a: every non-singleton row is `no_reversion` |
+| Class 3a vs Class 3b | `runs/<seq>/aggregated_results.csv` | 3b: at least one row has `outcome == "pose_collapses"`; 3a: every non-singleton row is `no_reversion` |
 | Class 3 vs Class 2 (passing_summary structural shape) | `runs/<seq>/passing_summary.csv` | Class 3: header-only CSV (zero data rows). Class 2: ≥1 data row. |
-| singleton row presence | `runs/<seq>/aggregated_results.csv` | exactly one row with `sequence_group == ""` AND `design == "initial"` AND `aggregated_verdict == "singleton"` |
+| singleton row presence | `runs/<seq>/aggregated_results.csv` | exactly one row with `sequence_group == ""` AND `design == "initial"` AND `outcome == "singleton"` |
 
-The `aggregated_verdict_reason` column on `aggregated_results.csv`
+The `outcome_reason` column on `aggregated_results.csv`
 records the exact rule that fired, which is the most direct human-readable
 signal for which downgrade path applied at the aggregator.
 
@@ -614,8 +627,8 @@ print("cold_start_n_clean=", p.get("cold_start_n_clean"), "of", p.get("num_seeds
 python3 -c '
 import csv
 for r in csv.DictReader(open("negative_steering/runs/design_42_seq_0/aggregated_results.csv")):
-    if r.get("aggregated_verdict")=="pose_holds":
-        print("verdict=", r["aggregated_verdict"],
+    if r.get("outcome")=="pose_holds":
+        print("verdict=", r["outcome"],
               "n_pose_holds=", r["n_seeds_pose_holds"],
               "n_pose_collapses=", r["n_seeds_pose_collapses"],
               "n_no_data=", r["n_seeds_no_data"],
@@ -626,7 +639,7 @@ for r in csv.DictReader(open("negative_steering/runs/design_42_seq_0/aggregated_
 python3 -c '
 import csv
 for r in csv.DictReader(open("negative_steering/runs/design_3_seq_1/aggregated_results.csv")):
-    if r.get("aggregated_verdict")=="pose_holds":
+    if r.get("outcome")=="pose_holds":
         print("design=", r.get("design"), "n_pose_holds=", r["n_seeds_pose_holds"],
               "n_pose_collapses=", r["n_seeds_pose_collapses"])'
 
@@ -635,7 +648,7 @@ python3 -c '
 import csv
 verdicts=set()
 for r in csv.DictReader(open("negative_steering/runs/design_27_seq_0/aggregated_results.csv")):
-    verdicts.add(r.get("aggregated_verdict",""))
+    verdicts.add(r.get("outcome",""))
 print("design_27_seq_0 verdicts:", sorted(verdicts))'
 
 # (e) Confirm reversion was actually attempted (n_contaminated>0) for the pose_holds and pose_collapses candidates
@@ -654,8 +667,8 @@ import csv, glob
 hits=[]
 for f in glob.glob("negative_steering/runs/*/aggregated_results.csv"):
     for r in csv.DictReader(open(f)):
-        if r.get("aggregated_verdict")=="new_contamination":
-            hits.append((f.split("/")[-2], r.get("design",""), r.get("aggregated_verdict_reason","")[:80]))
+        if r.get("outcome")=="new_contamination":
+            hits.append((f.split("/")[-2], r.get("design",""), r.get("outcome_reason","")[:80]))
 print("aggregated new_contamination occurrences:", len(hits))
 for h in hits[:5]: print(" ", h)'
 # Expect "0". A non-zero count means we have a missed candidate for class 8 — surface it.
@@ -666,8 +679,8 @@ import csv, glob, sys
 # Load cross_summary to get tier-none/no_reversion sequences
 cross=list(csv.DictReader(open("negative_steering/cross_sequence_summary.csv")))
 target=[r["mpnn_sequence"] for r in cross
-        if r["cross_tier"]=="none" and r["representative_aggregated_verdict"]=="no_reversion"
-        and r["representative_design"]!="initial"]
+        if r["cross_tier"]=="none" and r["rep_outcome"]=="no_reversion"
+        and r["rep_design"]!="initial"]
 print(f"tier=none/no_reversion/non-initial sequences: {len(target)}")
 print()
 print("Per-sequence: total_seeds_clean_steered vs total_seeds_no_data across all designs")
@@ -708,7 +721,7 @@ failed:
 - `af3_nomsa_missing` — AF3 stream had no rows for the survivor
 
 A "survivor" in the manifest sense (per `bin/extract_survivor_manifest.py`)
-is **any** cross_summary row with a non-empty `representative_canonical_pdb`
+is **any** cross_summary row with a non-empty `rep_canonical_pdb`
 and a workdir containing `plan.json` + a valid `ground_truth` PDB +
 effector_template_cif. **The manifest does NOT gate on `cross_tier`** — so
 tier-none rows are also fed into the orthogonal pipeline. In the discovery
@@ -810,7 +823,7 @@ for s in design_28_seq_1 design_62_seq_0; do
 import csv
 for r in csv.DictReader(open('negative_steering/cross_sequence_summary.csv')):
     if r['mpnn_sequence']=='$s':
-        print(r['representative_canonical_pdb']); break")
+        print(r['rep_canonical_pdb']); break")
   echo "$s -> $pdb"
   ls -la "$pdb" 2>&1 | head -1
 done
@@ -854,7 +867,7 @@ du -sh negative_steering/runs/design_28_seq_1/ negative_steering/runs/design_62_
    up tomorrow morning.** The eventual fix will likely be a small
    manufactured fixture or a targeted unit test against
    `bin/reversion.py::classify_reversion_verdict` and
-   `bin/boltz2_iterate_steering.py::_classify_aggregated_verdict`,
+   `bin/boltz2_iterate_steering.py::_classify_outcome`,
    not a re-run of the full discovery pipeline.
 
 3. **`passes_orthogonal_filters == 1` not produced** (0/122 survivors
@@ -890,10 +903,10 @@ du -sh negative_steering/runs/design_28_seq_1/ negative_steering/runs/design_62_
    for Class 7 + Class 3a together). **Status: addressed by adding
    `design_0_seq_0` to the candidate list.**
 
-5. **`representative_design == "initial"` only fires in the
+5. **`rep_design == "initial"` only fires in the
    `cold_start_all_clean` path** in this discovery run. The
    `_agg_row_is_clean_steered` function in `boltz2_iterate_steering.py:4749`
-   will admit a single-row "initial" baseline when `aggregated_verdict ==
+   will admit a single-row "initial" baseline when `outcome ==
    "no_reversion"` and the legacy ra_eff cap holds — but no row in the
    discovery run takes that path independently of `cold_start_all_clean`.
    Not a coverage gap for the fixtures (the path is exercised), just
@@ -912,7 +925,7 @@ du -sh negative_steering/runs/design_28_seq_1/ negative_steering/runs/design_62_
 
 1. **Tier rule disagreement: notes11 vs pipeline_notes3.**
    `notes/negsteer_notes/notes11.md` defines Tier A as
-   `aggregated_verdict == "no_reversion" OR n_seeds_pose_holds == n_seeds`
+   `outcome == "no_reversion" OR n_seeds_pose_holds == n_seeds`
    and the docstring at the top of `bin/cross_sequence_summary.py`
    reproduces that wording verbatim. But the **implementation** at
    `cross_sequence_summary.py::_tier_for_row` (line 200) uses
@@ -926,7 +939,7 @@ du -sh negative_steering/runs/design_28_seq_1/ negative_steering/runs/design_62_
    `clean_steered` is counted toward Tier A. This report uses the
    implementation's definition.
 
-2. **Notes11 on the `_classify_aggregated_verdict` "any-seed gate".**
+2. **Notes11 on the `_classify_outcome` "any-seed gate".**
    Notes 6–8 describe a strict majority-of-N gate; notes 10 documents
    the Bug-E relaxation to "any-seed-pass + failure-count guard"; notes
    11 confirms the gate as it currently stands. The producer
@@ -945,7 +958,7 @@ du -sh negative_steering/runs/design_28_seq_1/ negative_steering/runs/design_62_
    The representative pick (best non-empty tier; within tier, lowest
    composite-score rank) lands on `design_00` because it's the only
    tier-A row in the sequence. The helper file's
-   `representative_n_seeds_pose_holds=1` reflects design_00's value;
+   `rep_n_seeds_pose_holds=1` reflects design_00's value;
    `n_seeds_clean_steered=2` is the column it didn't show. Candidate
    stands.
 
@@ -955,7 +968,7 @@ du -sh negative_steering/runs/design_28_seq_1/ negative_steering/runs/design_62_
    true-interface positions has moved this from "rare" to "absent" on
    this scaffold. The human's plan: tackle this as a standalone task
    tomorrow (small manufactured fixture or unit test against
-   `classify_reversion_verdict` + `_classify_aggregated_verdict`),
+   `classify_reversion_verdict` + `_classify_outcome`),
    not by re-running the discovery pipeline. See Coverage gap 2.
 
 5. **Survivor manifest does not gate on `cross_tier`.** This means
@@ -967,7 +980,7 @@ du -sh negative_steering/runs/design_28_seq_1/ negative_steering/runs/design_62_
    manifest to filter on tier (saving GPU minutes) or wants to keep
    the diagnostic-completeness behaviour.
 
-6. **`representative_canonical_pdb` paths in `cross_sequence_summary.csv`
+6. **`rep_canonical_pdb` paths in `cross_sequence_summary.csv`
    were rewritten by `_rewrite_workdir_path_to_published`** to point at
    the publishDir path under `negative_steering/runs/<seq>/...`. This
    means the path values in the helper file refer to the HPC
@@ -999,5 +1012,5 @@ how. "VC=Verification command".
 | Negsteer VC (h): per-sequence workdir sizes 21M (cold-start), 142M (pose_collapses), 147M (pose_holds); total `negative_steering/` is 13G | No | candidate notes annotated with workdir sizes so the curation prompt can budget the tarball footprint |
 | Orthogonal VC (a): 122 survivors | No | none |
 | Orthogonal VC (b): 0/122 pass; flag dist `af3_ra_too_high:120, plddt_too_low:70, sc_too_low:4, af3_missing:2` | Yes — was treated as a coverage gap | Coverage gap 3 reframed: af3_nomsa_ra_eff is a warning-style gate, 0/122 is expected, gap removed |
-| Orthogonal VC (c): design_62_seq_0's representative_canonical_pdb is at `cycle_0/steered/design_02_s0/prediction.pdb` (not `initial_prediction.pdb`) | Useful — confirms a Class 2 fixture exists | New candidate `design_62_seq_0` added to the candidate list as both the Class 2 fixture and the orthogonal-metrics survivor (single workdir doubles for both tests) |
+| Orthogonal VC (c): design_62_seq_0's rep_canonical_pdb is at `cycle_0/steered/design_02_s0/prediction.pdb` (not `initial_prediction.pdb`) | Useful — confirms a Class 2 fixture exists | New candidate `design_62_seq_0` added to the candidate list as both the Class 2 fixture and the orthogonal-metrics survivor (single workdir doubles for both tests) |
 | Orthogonal VC (d): design_28_seq_1 flags = `af3_nomsa_ra_eff_too_high:32.86`, sc=0.732, bsa=913.64, iface_plddt blank | Useful (iface_plddt source col is named differently) | none — proceed; the `interface_plddt` column populated for the gate may have a different name; future verification can pin down |

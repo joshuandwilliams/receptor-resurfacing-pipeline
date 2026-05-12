@@ -43,7 +43,7 @@ For each per-sequence workdir under `--staged-runs-dir`:
          orthogonal_metrics test never reads.
 
   2. Inside cross_sequence_summary.csv (passed via --cross-csv):
-       - representative_canonical_pdb: rewrite the workdir prefix
+       - rep_canonical_pdb: rewrite the workdir prefix
          /hpc-home/.../runs/<seq>/  →  <staged-runs-dir>/<seq>/
 
 The rewriter is idempotent: paths already pointing at the local
@@ -160,7 +160,7 @@ def _rewrite_cross_csv(
     staged_runs_dir: Path,
     hpc_prefix: str,
 ) -> int:
-    """Rewrite representative_canonical_pdb in cross_sequence_summary.csv.
+    """Rewrite rep_canonical_pdb in cross_sequence_summary.csv.
     Returns the number of rows whose path was rewritten."""
     with csv_path.open(newline="") as f:
         rows = list(csv.DictReader(f))
@@ -171,13 +171,13 @@ def _rewrite_cross_csv(
         f"{hpc_prefix.rstrip('/')}/negative_steering/runs/"
     )
     for r in rows:
-        old = r.get("representative_canonical_pdb", "") or ""
+        old = r.get("rep_canonical_pdb", "") or ""
         if not old:
             continue
         if old.startswith(runs_hpc_root):
             tail = old[len(runs_hpc_root):]
             new = str((staged_runs_dir / tail).resolve())
-            r["representative_canonical_pdb"] = new
+            r["rep_canonical_pdb"] = new
             rewritten += 1
 
     if not fieldnames:
@@ -255,7 +255,7 @@ def main() -> int:
     # Cross-summary rewrite
     n_rewritten = _rewrite_cross_csv(cross_csv, staged, args.hpc_prefix)
     print(f"  cross_sequence_summary.csv: rewrote "
-          f"representative_canonical_pdb on {n_rewritten} row(s)")
+          f"rep_canonical_pdb on {n_rewritten} row(s)")
 
     print(f"Done.  {n_seqs} per-sequence plan.json file(s) updated.")
     return 0

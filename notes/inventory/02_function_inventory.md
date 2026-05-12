@@ -62,7 +62,7 @@ Multi-cycle negsteer orchestrator. Single argparse dispatch over 14 subcommands.
 - `_agg_continuous`, `_agg_majority_binary`, `_agg_majority_positions` — aggregators.
 - `_parse_position_csv(s)` — parse "/A:5,7,18" position-set strings.
 - `_aggregate_per_sequence(...)` — group + reduce per sequence.
-- `_classify_aggregated_verdict(...)` — derive verdict from aggregated reverted-* columns.
+- `_classify_outcome(agg, verdict_counts, ...)` — derive outcome (pose_holds/pose_collapses/new_contamination/no_reversion) from aggregated reverted-* columns and per-seed verdict counts.
 - `_per_seed_verdict_breakdown(...)` — per-seed verdict counts.
 - `_aggregate_csv_fieldnames(rows)` — final fieldname order.
 
@@ -250,7 +250,7 @@ Cohort aggregator run by `NEGSTEER_CROSS_SEQUENCE`. Imports `extract_passing.ext
 - `_infer_seq_name(path, mode)`.
 - `_parse_passing_summary_arg(arg, seq_name_mode)`.
 - `_pick_representative(rows)` — pick best tier-A/B/C row.
-- `_pick_representative_from_aggregated(...)` — Bug-3 fallback for tier-none sequences with empty passing_summary; reads aggregated_results.csv directly and uses `extract_passing.extract_row` to shape the output.
+- `_pick_rep_from_aggregated(...)` — Bug-3 fallback for tier-none sequences with empty passing_summary; reads aggregated_results.csv directly and uses `extract_passing.extract_row` to shape the output.
 - `aggregate(...)` — main aggregation.
 - `main()`.
 

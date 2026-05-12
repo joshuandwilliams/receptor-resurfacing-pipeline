@@ -237,9 +237,9 @@ PYEOF
  * ranked cross-sequence triage table using the tier-then-composite
  * policy from notes 11:
  *
- *   Tier A: aggregated_verdict == no_reversion OR 3/3 pose_holds
- *   Tier B: 2/3 pose_holds
- *   Tier C: 1/3 pose_holds
+ *   Tier A: n_pass == n_seeds (e.g. 3/3 pass-equivalent)
+ *   Tier B: 1 < n_pass < n_seeds (e.g. 2/3)
+ *   Tier C: n_pass == 1
  *
  * Within each tier, cross-rank by the composite score
  * (true_jaccard − 0.05 · ra_eff_vs_truth).  Sequences with an empty

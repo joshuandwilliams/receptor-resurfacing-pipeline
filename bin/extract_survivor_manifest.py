@@ -7,7 +7,7 @@ workdirs, emit a one-row-per-survivor manifest that NextFlow can
 splitCsv over to fan out the three orthogonal streams.
 
 "Survivor" here is any row with:
-  - a non-empty representative_canonical_pdb
+  - a non-empty rep_canonical_pdb
   - a workdir under the runs/ glob containing plan.json
 
 For each survivor, the manifest provides:
@@ -105,7 +105,7 @@ def main() -> int:
             skipped["no_mpnn_sequence"] = skipped.get("no_mpnn_sequence", 0) + 1
             continue
 
-        canonical_pdb = row.get("representative_canonical_pdb", "")
+        canonical_pdb = row.get("rep_canonical_pdb", "")
         if not canonical_pdb or not Path(canonical_pdb).is_file():
             skipped["canonical_pdb_missing"] = skipped.get("canonical_pdb_missing", 0) + 1
             continue

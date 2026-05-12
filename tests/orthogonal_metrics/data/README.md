@@ -49,7 +49,7 @@ that `bin/extract_survivor_manifest.py` resolves.
 The cohort table emitted by `NEGSTEER_CROSS_SEQUENCE`, **trimmed to
 the two curated sequences**. Drives `EXTRACT_SURVIVOR_MANIFEST`.
 
-The `representative_canonical_pdb` column has been **rewritten** to
+The `rep_canonical_pdb` column has been **rewritten** to
 point at the local staging:
 - HPC `/hpc-home/.../tests/full_test_run/results/negative_steering/runs/<seq>/...`
 - Local `<repo>/tests/orthogonal_metrics/data/negsteer_run/runs/<seq>/...`

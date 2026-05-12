@@ -2992,8 +2992,8 @@ def _populate_reverted_mutations(rows: List[Dict],
         # these columns for non-pose_holds rows (the pre-audit
         # behaviour) caused the aggregator to see empty contact sets
         # for seeds whose harvest actually flagged contamination,
-        # inflating n_seeds_pose_holds and misclassifying the
-        # aggregated verdict as pose_holds when some seeds actually
+        # inflating the pose_holds count and misclassifying the
+        # outcome as pose_holds when some seeds actually
         # said new_contamination.
         if verdict != "":
             rev_data = _load_rev_results(cycle, parent_pathway)
@@ -3497,28 +3497,29 @@ def _aggregate_per_sequence(
     return out
 
 
-def _classify_aggregated_verdict(
+def _classify_outcome(
     agg: Dict,
+    verdict_counts: Dict[str, int],
     structural_ra_eff_cutoff: float = 5.0,
     contamination_gating_positions: Optional[Set[int]] = None,
 ) -> Tuple[str, str]:
-    """Re-derive the reversion verdict from the AGGREGATED reverted
+    """Re-derive the reversion outcome from the AGGREGATED reverted
     metrics.  Mirrors classify_reversion_verdict but operates on the
     median / majority columns produced by _aggregate_per_sequence.
 
-    Returns (verdict, reason).  Verdict is one of pose_holds,
+    Returns (outcome, reason).  Outcome is one of pose_holds,
     pose_collapses, new_contamination, no_reversion.
 
     no_reversion is returned when the aggregated record carries no
-    reverted metrics at all (i.e. this design was not flagged as
-    contaminated by the steered aggregate, so reversion was never
-    triggered).
+    reverted metrics at all (i.e. no seed in this group needed
+    reversion: either cold-start skip_steering, or steering ran but
+    no seed had contamination on mutated positions).
 
-    The aggregated pose_holds verdict requires ALL of:
+    The aggregated pose_holds outcome requires ALL of:
       1. The aggregated structural filter passes (intact_majority = 1
          AND median ra_eff < cutoff AND no position-majority contamination)
       2. At least ONE individual per-seed verdict says pose_holds
-         (n_seeds_pose_holds >= 1)
+         (verdict_counts["pose_holds"] >= 1)
 
     Rationale for the any-seed gate (v8, replaces the earlier ceil(N/2)
     majority gate from Bug E): with `num_seeds = 3` and a per-seed
@@ -3527,7 +3528,7 @@ def _classify_aggregated_verdict(
     designs individually have one clean-pass seed.  The aggregated
     median/position-majority rules already exclude the "every seed
     failed differently" artefact that Bug E was originally aimed at:
-    if no seed individually passes, n_seeds_pose_holds == 0 and this
+    if no seed individually passes, pose_holds count == 0 and this
     gate short-circuits.  If exactly one seed passes and the other
     two fail in different ways, the aggregated position-majority
     check on `reverted_mutated_contact_positions_majority` only
@@ -3536,27 +3537,24 @@ def _classify_aggregated_verdict(
     positions does NOT trigger it, which is what Bug E was worried
     about.  That concern is now handled by also requiring the
     per-seed failure distribution not to be a majority-failure:
-    we additionally require n_seeds_pose_holds + n_seeds_no_data
-    > each of (n_seeds_pose_collapses, n_seeds_new_contamination).
+    we additionally require pose_holds + no_data
+    > each of (pose_collapses, new_contamination).
     In words: among seeds that produced a verdict, the "pass or no-op"
     count must exceed either of the failure counts.
+
+    `verdict_counts` is the {verdict: count} dict produced by
+    _per_seed_verdict_breakdown.  Keys: pose_holds, pose_collapses,
+    new_contamination, no_data, clean_steered.
     """
     n_used = int(agg.get("reverted_ra_eff_vs_truth_n_used", 0) or 0)
     if n_used == 0:
         return ("no_reversion", "no reverted prediction available")
 
-    # Read per-seed verdict counts (computed by _per_seed_verdict_breakdown).
-    # These are always populated when the row went through reversion.
-    def _int_or(k: str, default: int = 0) -> int:
-        try:
-            return int(agg.get(k) or 0)
-        except (TypeError, ValueError):
-            return default
-    nph = _int_or("n_seeds_pose_holds")
-    npc = _int_or("n_seeds_pose_collapses")
-    nnc = _int_or("n_seeds_new_contamination")
-    nnd = _int_or("n_seeds_no_data")
-    ncs = _int_or("n_seeds_clean_steered")
+    nph = int(verdict_counts.get("pose_holds", 0))
+    npc = int(verdict_counts.get("pose_collapses", 0))
+    nnc = int(verdict_counts.get("new_contamination", 0))
+    nnd = int(verdict_counts.get("no_data", 0))
+    ncs = int(verdict_counts.get("clean_steered", 0))
     n_total_verdicts = nph + npc + nnc + nnd + ncs
     # Pose-passing-equivalent count: explicit per-seed pose_holds
     # PLUS clean_steered (steered prediction was structurally fine
@@ -3677,10 +3675,10 @@ def _per_seed_verdict_breakdown(
     structural_ra_eff_cutoff: float = 5.0,
 ) -> Dict[str, int]:
     """Run the SINGLE-SEED verdict logic on each reverted per-seed row
-    and return {verdict: count}.  Provides the n_seeds_pose_holds /
-    n_seeds_pose_collapses / n_seeds_new_contamination / n_seeds_no_data /
-    n_seeds_clean_steered breakdown the user wants for tie-breaking
-    between similar designs.
+    and return {verdict: count}.  Counts seeds in five buckets:
+    pose_holds, pose_collapses, new_contamination, no_data,
+    clean_steered.  Feeds into n_pass (= pose_holds + clean_steered)
+    and into the aggregate outcome classifier.
 
     The authoritative per-seed verdict is the `reversion_verdict`
     column, which was set by `classify_reversion_verdict` in
@@ -3699,13 +3697,13 @@ def _per_seed_verdict_breakdown(
     bucket they were misclassified as no_data, which incorrectly
     demoted otherwise-strong designs in the per-sequence triage
     (notes12 / chat 'rank-1 issue').  clean_steered is treated as
-    pose-passing-equivalent in _classify_aggregated_verdict and in
+    pose-passing-equivalent in _classify_outcome and in
     the cross-sequence tier classifier.
 
     Without the verdict-column preference for the explicit-verdict
     cases, rows whose reverted_mutated_contact_positions column was
     blanked for display would be misclassified here as pose_holds,
-    inflating n_seeds_pose_holds.
+    inflating the pose_holds count.
     """
     counts = {
         "pose_holds": 0,
@@ -4665,36 +4663,35 @@ def cmd_aggregate_per_sequence(args: argparse.Namespace) -> int:
             (r.get("reversion_verdict") or "").strip() != ""
             for r in group
         )
+        # Per-seed verdict breakdown is always computed: it drives both
+        # the outcome classifier (when reversion ran) and n_pass (which
+        # is path-agnostic — pose_holds + clean_steered regardless of
+        # whether reversion was triggered).
+        verdict_counts = _per_seed_verdict_breakdown(group)
+
         if any_reverted:
             agg.update(_aggregate_per_sequence(group, prefix="reverted_"))
-            # Per-seed verdict breakdown using the SINGLE-SEED rule
-            # (not the aggregated rule) — gives the n_seeds_pose_holds
-            # / n_seeds_pose_collapses / n_seeds_new_contamination
-            # counts the user wants for tie-breaking.
-            verdict_counts = _per_seed_verdict_breakdown(group)
-            agg["n_seeds_pose_holds"] = verdict_counts["pose_holds"]
-            agg["n_seeds_pose_collapses"] = verdict_counts["pose_collapses"]
-            agg["n_seeds_new_contamination"] = verdict_counts["new_contamination"]
-            agg["n_seeds_no_data"] = verdict_counts["no_data"]
-            agg["n_seeds_clean_steered"] = verdict_counts["clean_steered"]
-            # Aggregated verdict (one verdict per unique sequence,
-            # derived from the median + majority columns).
-            verdict, reason = _classify_aggregated_verdict(
-                agg,
+            outcome, reason = _classify_outcome(
+                agg, verdict_counts,
                 contamination_gating_positions=gating_1b if gating_1b else None,
             )
-            agg["aggregated_verdict"] = verdict
-            agg["aggregated_verdict_reason"] = reason
+            agg["outcome"] = outcome
+            agg["outcome_reason"] = reason
         else:
-            # No reversion ran — leave reverted_* columns blank, set
-            # verdict to no_reversion for clarity.
-            agg["n_seeds_pose_holds"] = ""
-            agg["n_seeds_pose_collapses"] = ""
-            agg["n_seeds_new_contamination"] = ""
-            agg["n_seeds_no_data"] = ""
-            agg["n_seeds_clean_steered"] = ""
-            agg["aggregated_verdict"] = "no_reversion"
-            agg["aggregated_verdict_reason"] = ""
+            # No seed needed reversion (cold-start skip_steering, OR
+            # steering ran but no seed had contamination on mutated
+            # positions).  Outcome is no_reversion; n_pass is still
+            # derived from per-seed verdicts below — a wrong-placement
+            # no-contamination group will have all seeds = no_data and
+            # n_pass = 0 (NOT n_seeds), correctly landing in tier none.
+            agg["outcome"] = "no_reversion"
+            agg["outcome_reason"] = ""
+
+        # n_pass: how many seeds passed structural+contamination filters.
+        # Counted as pose_holds (reversion succeeded) + clean_steered
+        # (reversion correctly skipped because steered already passed).
+        agg["n_pass"] = (verdict_counts["pose_holds"]
+                        + verdict_counts["clean_steered"])
 
         aggregated_rows.append(agg)
 
@@ -4709,10 +4706,11 @@ def cmd_aggregate_per_sequence(args: argparse.Namespace) -> int:
         passthrough["canonical_seed_index"] = r.get("seed_index", "")
         passthrough["canonical_pdb"] = r.get("pdb", "")
         passthrough["canonical_seed_choice_warning"] = ""
-        passthrough["aggregated_verdict"] = "singleton"
-        passthrough["aggregated_verdict_reason"] = (
+        passthrough["outcome"] = "singleton"
+        passthrough["outcome_reason"] = (
             "no sequence_group — singleton row, no aggregation applied"
         )
+        passthrough["n_pass"] = ""
         aggregated_rows.append(passthrough)
 
     # ── Recompute composite ranks on the aggregated rows ──────────────
@@ -4734,7 +4732,7 @@ def cmd_aggregate_per_sequence(args: argparse.Namespace) -> int:
 
     def _agg_row_is_clean_steered(r: Dict) -> bool:
         # Cold-start all-clean aggregates (notes12) have
-        # design == "initial" AND aggregated_verdict == "no_reversion".
+        # design == "initial" AND outcome == "no_reversion".
         # They MUST be ranking-eligible — they're the final output
         # for cold-start binders.  We admit them via a slightly looser
         # ra_eff cap (matching the cold-start trigger threshold from
@@ -4742,16 +4740,16 @@ def cmd_aggregate_per_sequence(args: argparse.Namespace) -> int:
         # aggregates use the legacy 5.0 cap unchanged.
         is_cold_start = (
             r.get("design") == "initial"
-            and (r.get("aggregated_verdict") or "").strip() == "no_reversion"
+            and (r.get("outcome") or "").strip() == "no_reversion"
         )
         if r.get("design") == "initial" and not is_cold_start:
-            # design=="initial" without no_reversion verdict was the
+            # design=="initial" without no_reversion outcome was the
             # legacy single-row baseline used by extract_passing.py
             # to sanity-check; preserve that exclusion to avoid
             # promoting reconstructed initial rows from old workdirs.
             return False
-        verdict = (r.get("aggregated_verdict") or "").strip()
-        if verdict not in ("", "no_reversion"):
+        outcome = (r.get("outcome") or "").strip()
+        if outcome not in ("", "no_reversion"):
             return False
         if r.get("steered_receptor_intact_majority") != 1:
             return False
@@ -4764,7 +4762,7 @@ def cmd_aggregate_per_sequence(args: argparse.Namespace) -> int:
         return True
 
     def _agg_row_is_pose_holds(r: Dict) -> bool:
-        if r.get("aggregated_verdict") != "pose_holds":
+        if r.get("outcome") != "pose_holds":
             return False
         if r.get("reverted_receptor_intact_majority") != 1:
             return False
@@ -4869,15 +4867,11 @@ def cmd_aggregate_per_sequence(args: argparse.Namespace) -> int:
             f"reverted_{metric}_per_seed_counts",
             f"reverted_{metric}_n_used",
         ])
-    # Verdict + ranks
+    # Outcome + ranks
     preferred_cols.extend([
-        "aggregated_verdict",
-        "aggregated_verdict_reason",
-        "n_seeds_pose_holds",
-        "n_seeds_pose_collapses",
-        "n_seeds_new_contamination",
-        "n_seeds_no_data",
-        "n_seeds_clean_steered",
+        "outcome",
+        "outcome_reason",
+        "n_pass",
         "rank_by_ra_eff",
         "rank_by_composite_score",
     ])
@@ -4893,13 +4887,13 @@ def cmd_aggregate_per_sequence(args: argparse.Namespace) -> int:
             w.writerow(r)
     print(f"  wrote {out_csv.name} ({len(aggregated_rows)} rows)")
 
-    # Quick verdict tally for the log
+    # Quick outcome tally for the log
     from collections import Counter
-    verdicts = Counter(
-        r.get("aggregated_verdict", "") for r in aggregated_rows
+    outcomes = Counter(
+        r.get("outcome", "") for r in aggregated_rows
     )
-    print("  Aggregated verdict tally:")
-    for v, c in sorted(verdicts.items()):
+    print("  Outcome tally:")
+    for v, c in sorted(outcomes.items()):
         print(f"    {v:<22s} {c:>4d}")
 
     # Even-N warnings tally

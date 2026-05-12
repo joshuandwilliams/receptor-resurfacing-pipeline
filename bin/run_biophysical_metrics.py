@@ -292,7 +292,7 @@ def main() -> int:
 
     # interface_plddt is now computed per-prediction by
     # compute_metrics.py and reaches the cross_sequence_summary.csv via
-    # representative_interface_plddt_median.  This script no longer
+    # rep_interface_plddt_median.  This script no longer
     # computes it.
 
     bsa_val, bsa_err = _compute_bsa(args.canonical_pdb,

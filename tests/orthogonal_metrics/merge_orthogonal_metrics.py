@@ -120,14 +120,14 @@ def _apply_filters(
         flags.append(f"bsa_too_low:{bsa_val:.0f}")
 
     # Interface pLDDT — flag only.  Sourced from
-    # representative_interface_plddt_median, which comes from
+    # rep_interface_plddt_median, which comes from
     # cross_sequence_summary.csv (computed per-prediction by
     # compute_metrics.py and propagated through the aggregator).
     # Falls back to the legacy interface_plddt column if the row
     # came from an older biophysical_summary.csv (defensive — should
     # not happen post-migration).
     plddt_val = _as_float(
-        row.get("representative_interface_plddt_median", "")
+        row.get("rep_interface_plddt_median", "")
         or row.get("interface_plddt", "")
     )
     if plddt_val is None:

@@ -128,7 +128,7 @@ _REVERTED_CONFIDENCE_FIELDS = (
     # reverted_true_jaccard_median / reverted_wrong_jaccard_median /
     # reverted_n_shared_*_median /
     # reverted_n_design_interface_residues_median columns are blank,
-    # which in turn means cross_summary's representative_*_median
+    # which in turn means cross_summary's rep_*_median
     # values can't fall back to the reverted side for pose_holds rows
     # and the dispersion plots drop those seeds because tj is None.
     "reverted_true_jaccard",

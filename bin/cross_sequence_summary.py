@@ -15,16 +15,18 @@ within that experiment.
 
 For cross-sequence triage we want one representative row PER MPNN
 SEQUENCE, picked using the tier-then-composite policy documented in
-notes 11.  Define n_pass = n_seeds_pose_holds + n_seeds_clean_steered
-(a clean_steered seed is one whose steered prediction had zero
-contamination on mutated positions, so reversion was correctly
-skipped — the steered structure counts as pass-equivalent):
+notes 11.  The aggregator emits n_pass directly (= number of seeds
+classified as pose_holds or clean_steered — both pass-equivalent).
+Tiering is from n_pass / n_seeds only, with no outcome shortcut:
 
-    Tier A: aggregated_verdict == no_reversion
-            OR n_pass == n_seeds   (e.g. 3/3 pass-equivalent)
+    Tier A: n_pass == n_seeds   (e.g. 3/3 pass-equivalent)
     Tier B: 1 < n_pass < n_seeds   (e.g. 2/3)
     Tier C: n_pass == 1            (e.g. 1/3)
-    else:   "none"
+    else:   "none"                 (includes wrong-placement
+                                    no-contamination groups whose
+                                    outcome label is "no_reversion"
+                                    but whose seeds all sit in no_data
+                                    / pose_collapses — n_pass == 0)
 
 Within each sequence, the best non-empty tier wins and the top-
 ranked row from that tier (lowest ``rank_by_composite_score``) is
@@ -83,10 +85,10 @@ Columns:
                                  passing_summary had
   * n_pose_holds_sequences     — same, counting rows at tier A (3/3)
   * (then every column from passing_summary.csv, prefixed with
-    ``representative_``, for the picked row).
+    ``rep_``, for the picked row).
 
 Sequences whose passing_summary.csv is empty are still included in
-the output with ``cross_tier = none``, all representative_* columns
+the output with ``cross_tier = none``, all rep_* columns
 blank, and cross-rank columns blank.
 """
 
@@ -203,31 +205,31 @@ def _try_int(v) -> Optional[int]:
 def _tier_for_row(row: Dict) -> str:
     """Determine tier from a passing_summary.csv row.
 
-    "Pass-equivalent" seed count = n_seeds_pose_holds + n_seeds_clean_steered
-    (a clean_steered seed is one whose steered prediction had zero
-    contamination on mutated positions, so reversion was correctly
-    skipped — the steered structure is the final verdict for that seed).
+    Tier is derived from n_pass / n_seeds only.  n_pass is emitted by
+    the aggregator as (pose_holds + clean_steered) — both verdicts
+    count as pass-equivalent (a clean_steered seed had zero
+    contamination on mutated positions AND passed structural, so
+    reversion was correctly skipped and the steered structure is the
+    final verdict).
 
-    Tier A: aggregated_verdict == "no_reversion"
-            OR n_pass == n_seeds (e.g. 3/3 pass-equivalent)
+    Tier A: n_pass == n_seeds   (e.g. 3/3 pass-equivalent)
     Tier B: 1 < n_pass < n_seeds (e.g. 2/3)
     Tier C: n_pass == 1
     else:   "none"
+
+    Note: outcome=='no_reversion' is NOT a tier shortcut.  A group
+    whose seeds are all wrong-placement-no-contamination has
+    outcome=='no_reversion' but n_pass==0 (seeds are no_data /
+    pose_collapses, not clean_steered) and correctly lands in tier
+    none.  Cold-start groups where every seed passed have
+    outcome=='no_reversion' and n_pass==n_seeds → tier A.
     """
-    verdict = (row.get("aggregated_verdict") or "").strip()
-    if verdict == "no_reversion":
-        return "A"
-    n_holds = _try_int(row.get("n_seeds_pose_holds"))
-    n_clean = _try_int(row.get("n_seeds_clean_steered"))
+    n_pass = _try_int(row.get("n_pass"))
     n_seeds = _try_int(row.get("n_seeds"))
-    if n_holds is None or n_seeds is None or n_seeds <= 0:
-        # Insufficient data to place in any tier.  A pose_holds row
-        # with missing seed counts would be unusual — treat as "none"
+    if n_pass is None or n_seeds is None or n_seeds <= 0:
+        # Insufficient data to place in any tier.  Treat as "none"
         # so cross-ranking ignores it rather than guessing.
         return "none"
-    # n_seeds_clean_steered is allowed to be missing (older runs that
-    # predate the clean_steered column) — treat as 0 in that case.
-    n_pass = n_holds + (n_clean or 0)
     if n_pass == n_seeds:
         return "A"
     if 1 < n_pass < n_seeds:
@@ -349,7 +351,7 @@ def _pick_representative(rows: List[Dict]) -> Optional[Dict]:
     return out
 
 
-def _pick_representative_from_aggregated(
+def _pick_rep_from_aggregated(
     passing_summary_path: Path,
 ) -> Optional[Dict]:
     """Tier-none fallback: when ``passing_summary.csv`` has no rows
@@ -410,7 +412,7 @@ def _pick_representative_from_aggregated(
     best_row = None
     best_composite = None
     for r in rows:
-        is_pose_holds = (r.get("aggregated_verdict") == "pose_holds")
+        is_pose_holds = (r.get("outcome") == "pose_holds")
         ra_key = ("reverted_ra_eff_vs_truth_median"
                   if is_pose_holds
                   else "steered_ra_eff_vs_truth_median")
@@ -484,7 +486,7 @@ def _read_passing_summary_inputs(
         per_seq_rows[seq_name] = rows
         source_paths[seq_name] = path
         # Adopt the first non-empty fieldnames we see as the canonical
-        # list for representative_* columns.  Mismatches across files
+        # list for rep_* columns.  Mismatches across files
         # would indicate a pipeline version drift; warn but don't
         # abort.
         if fieldnames and not seen_fieldnames:
@@ -509,7 +511,7 @@ def _pick_or_fallback_representative(
     rep = _pick_representative(rows)
     if rep is not None:
         return rep, False
-    rep = _pick_representative_from_aggregated(source_path)
+    rep = _pick_rep_from_aggregated(source_path)
     return rep, rep is not None
 
 
@@ -557,9 +559,9 @@ def _assign_cross_ranks(records: List[Dict]) -> None:
             continue
         rep_cols = {
             "ra_eff_vs_truth_median":
-                rec.get("representative_ra_eff_vs_truth_median", ""),
+                rec.get("rep_ra_eff_vs_truth_median", ""),
             "true_jaccard_median":
-                rec.get("representative_true_jaccard_median", ""),
+                rec.get("rep_true_jaccard_median", ""),
         }
         # Only score sequences that have a placed tier AND both
         # components present.  This keeps the "none"-tier stubs out
@@ -638,7 +640,7 @@ def aggregate(
             stub row and continues.
     published_runs_dir: when provided, used by
             _rewrite_workdir_path_to_published to stamp stable
-            published-tree paths into representative_canonical_pdb
+            published-tree paths into rep_canonical_pdb
             in place of the work-dir absolute paths
             NEGSTEER_RUN_ONE writes.  See helper docstring.
     """
@@ -732,7 +734,7 @@ def aggregate(
             "cross_rank_by_ra_eff": "",
             # Top-level runtime column so triage can see sequence-level
             # throughput directly without having to unpack
-            # representative_*.  Blank when the sidecar + representative
+            # rep_*.  Blank when the sidecar + representative
             # row are both unavailable (e.g. very old workdirs).
             "run_one_runtime_sec": run_one_runtime_sec,
         }
@@ -747,10 +749,10 @@ def aggregate(
                 val = _rewrite_workdir_path_to_published(
                     val, seq_name, published_runs_dir,
                 )
-            rec[f"representative_{col}"] = val
+            rec[f"rep_{col}"] = val
 
         # Tier-none fallback: stamp the composite score we computed
-        # in _pick_representative_from_aggregated directly onto the
+        # in _pick_rep_from_aggregated directly onto the
         # rec.  The cross-rank pass below skips tier-none rows
         # (correctly — they shouldn't compete with tier A/B/C in
         # ranking), but the cohort summary plot reads
@@ -787,7 +789,7 @@ def aggregate(
     records.sort(key=_final_sort_key)
 
     # ─── Write CSV ─────────────────────────────────────────────────
-    # Column order: metadata first, then representative_* columns in
+    # Column order: metadata first, then rep_* columns in
     # the order they appeared in passing_summary.csv.
     meta_cols = [
         "mpnn_sequence",
@@ -804,7 +806,7 @@ def aggregate(
         "run_one_runtime_sec",
         "source_passing_summary",
     ]
-    rep_cols = [f"representative_{c}" for c in passing_summary_fieldnames]
+    rep_cols = [f"rep_{c}" for c in passing_summary_fieldnames]
     fieldnames = meta_cols + rep_cols
 
     output_path = output_path.resolve()
@@ -877,7 +879,7 @@ def main():
         metavar="DIR",
         help="Path to ${params.outdir}/negative_steering/runs (the "
              "published per-sequence workdir tree).  When provided, "
-             "every representative_canonical_pdb value (which is "
+             "every rep_canonical_pdb value (which is "
              "stamped by NEGSTEER_RUN_ONE as an in-work-dir absolute "
              "path) is rewritten to the published equivalent under "
              "<DIR>/<seq_name>/<…>.  Without this flag the canonical "
@@ -890,7 +892,7 @@ def main():
     args = parser.parse_args()
 
     # Defensive: resolve --published-runs-dir to absolute.  A relative
-    # path here would be stamped verbatim into representative_canonical_pdb,
+    # path here would be stamped verbatim into rep_canonical_pdb,
     # then resolve against the wrong CWD in downstream container tasks
     # (each runs in its own work dir, not the launch dir).  main.nf
     # also normalises params.outdir to absolute, so this is belt-and-

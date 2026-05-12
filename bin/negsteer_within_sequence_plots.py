@@ -262,12 +262,12 @@ def classify_seed(row: Dict) -> Tuple[str, str]:
     return stage, "poor_prediction"
 
 
-def _representative_sg(seq_dir: Path, cs_lookup: Dict[str, Dict]) -> Optional[str]:
+def _rep_sg(seq_dir: Path, cs_lookup: Dict[str, Dict]) -> Optional[str]:
     """Pick representative sg: cross_summary's pointer if set, else best
     composite among non-singleton agg rows."""
     cs_row = cs_lookup.get(seq_dir.name)
     if cs_row:
-        rep = (cs_row.get("representative_sequence_group") or "").strip()
+        rep = (cs_row.get("rep_sequence_group") or "").strip()
         if rep:
             return rep
     agg_path = seq_dir / "aggregated_results.csv"
@@ -277,12 +277,12 @@ def _representative_sg(seq_dir: Path, cs_lookup: Dict[str, Dict]) -> Optional[st
         agg_rows = list(csv.DictReader(f))
     candidates = [
         r for r in agg_rows
-        if (r.get("aggregated_verdict") or "").strip() != "singleton"
+        if (r.get("outcome") or "").strip() != "singleton"
     ] or agg_rows
     _VERDICTS_WITH_REV = {"pose_holds", "pose_collapses", "new_contamination"}
 
     def _comp(r: Dict) -> float:
-        verdict = (r.get("aggregated_verdict") or "").strip()
+        verdict = (r.get("outcome") or "").strip()
         if verdict in _VERDICTS_WITH_REV:
             ra_v = (r.get("reverted_ra_eff_vs_truth_median")
                     or r.get("steered_ra_eff_vs_truth_median"))
@@ -331,7 +331,7 @@ def load_cohort_seeds(
         if seq_dir_name.startswith("input_control"):
             continue
         seq_dir = runs_dir / seq_dir_name
-        rep_sg = _representative_sg(seq_dir, cs_lookup)
+        rep_sg = _rep_sg(seq_dir, cs_lookup)
         raw = seq_dir / "raw_per_seed_results.csv"
         if not raw.exists():
             continue
@@ -430,8 +430,8 @@ def load_cohort_seeds(
             # Composite for sorting (verdict-aware via cross_summary).
             comp = float("-inf")
             if cs is not None:
-                ra = _try_float(cs.get("representative_ra_eff_vs_truth_median"))
-                tj = _try_float(cs.get("representative_true_jaccard_median"))
+                ra = _try_float(cs.get("rep_ra_eff_vs_truth_median"))
+                tj = _try_float(cs.get("rep_true_jaccard_median"))
                 if ra is not None and tj is not None:
                     comp = tj - 0.05 * ra
             if comp == float("-inf"):
@@ -443,7 +443,7 @@ def load_cohort_seeds(
                     best = float("-inf")
                     _VR = {"pose_holds", "pose_collapses", "new_contamination"}
                     for r in agg_rows:
-                        v = (r.get("aggregated_verdict") or "").strip()
+                        v = (r.get("outcome") or "").strip()
                         if v == "singleton":
                             continue
                         if v in _VR:

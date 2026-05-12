@@ -34,7 +34,7 @@ params.outdir             = "${launchDir}/${params.project_name}_results"
 // a relative outdir via -params-file (e.g. "./results"), Nextflow stores
 // the literal string and downstream "${params.outdir}/foo" interpolation
 // produces a relative path.  Relative paths stamped into shared CSVs
-// (e.g. representative_canonical_pdb via cross_sequence_summary.py's
+// (e.g. rep_canonical_pdb via cross_sequence_summary.py's
 // --published-runs-dir) then resolve against the per-task container CWD
 // in downstream processes, not the launch dir — so files at the right
 // host path are reported missing.  Forcing absolute resolution here
@@ -1041,8 +1041,8 @@ workflow.onComplete {
             if (lines.size() >= 2) {
                 def header = lines[0].split(',') as List
                 def i_row_type = header.indexOf('row_type')
-                def i_ipsae    = header.indexOf('representative_ipsae_min_median')
-                def i_ra_eff   = header.indexOf('representative_ra_eff_vs_truth_median')
+                def i_ipsae    = header.indexOf('rep_ipsae_min_median')
+                def i_ra_eff   = header.indexOf('rep_ra_eff_vs_truth_median')
                 def i_seq      = header.indexOf('mpnn_sequence')
                 if (i_row_type < 0) {
                     log.warn "control miscalibration check skipped: no row_type column in ${summary_csv}"

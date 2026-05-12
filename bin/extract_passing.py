@@ -17,7 +17,7 @@ passing_summary.csv: one row per passing unique sequence, ranked by
 composite score = true_jaccard − 0.05 · ra_eff_vs_truth (P0.3).
 
 Filter chain (a row must pass ALL):
-  - aggregated_verdict in {"" / "no_reversion" / "pose_holds"}
+  - outcome in {"" / "no_reversion" / "pose_holds"}
     (i.e. the sequence is either clean steered or a passing
     pose_holds)
   - rank_by_composite_score is populated (i.e. the sequence has both
@@ -34,18 +34,17 @@ Schema notes (P0 audit — multi-seed):
   - canonical_pdb is the seed-of-median PDB; for even-N degraded
     cases (some seeds failed) it's the worse of the two middle
     seeds (see canonical_seed_choice_warning).
-  - n_seeds_pose_holds / _pose_collapses / _new_contamination /
-    _clean_steered give the per-seed verdict breakdown for
-    tie-breaking between similar-looking designs.  clean_steered
-    counts seeds whose steered prediction had zero contamination
-    on mutated positions (so reversion was correctly skipped) AND
-    whose cold-start prediction passes the structural filter.
+  - n_pass = number of seeds that passed structural+contamination
+    filters (pose_holds + clean_steered).  Tiered against n_seeds:
+    A = all pass, B = some pass, C = one, none = zero.  n_pass is
+    path-agnostic and authoritative — outcome=='no_reversion' with
+    n_pass<n_seeds correctly lands in a lower tier.
   - Cold-start binders (notes12 / patch b): when ALL N cold-start
     seeds pass the rmsd_threshold + intact filters, plan() skips
     negative steering entirely and writes one row per seed under
     sequence_group=0.  These aggregate as a single
-    aggregated_verdict="no_reversion" row, get a composite rank,
-    and appear in passing_summary as tier-A candidates.
+    outcome="no_reversion" row with n_pass=n_seeds, get a composite
+    rank, and appear in passing_summary as tier-A candidates.
 
 Usage
 -----
@@ -87,13 +86,9 @@ OUTPUT_FIELDS = [
     "canonical_seed_choice_warning",
     "n_seeds",
 
-    # Per-seed verdict breakdown (for tie-breaking and tiering)
-    "n_seeds_pose_holds",
-    "n_seeds_pose_collapses",
-    "n_seeds_new_contamination",
-    "n_seeds_no_data",
-    "n_seeds_clean_steered",
-    "aggregated_verdict",
+    # Per-seed pass count + aggregate outcome label
+    "n_pass",
+    "outcome",
 
     # Mutations on the sequence (median is meaningless here — the
     # mutation set is identical across seeds of one sequence; we just
@@ -413,11 +408,11 @@ def extract_row(r, per_seed_rows=None):
     `per_seed_rows` is the list of raw_per_seed_results rows for this
     sequence group, used to populate the mutation columns.
     """
-    verdict = r.get("aggregated_verdict") or ""
-    # Reversion was attempted iff the verdict is one the reversion
-    # classifier produces.  See _classify_aggregated_verdict in
-    # boltz2_iterate_steering.py:3514 for the canonical list.
-    reversion_attempted = verdict in (
+    outcome = r.get("outcome") or ""
+    # Reversion was attempted iff the outcome is one the reversion
+    # classifier produces.  See _classify_outcome in
+    # boltz2_iterate_steering.py for the canonical list.
+    reversion_attempted = outcome in (
         "pose_holds",
         "pose_collapses",
         "new_contamination",
@@ -440,14 +435,9 @@ def extract_row(r, per_seed_rows=None):
         "canonical_seed_choice_warning", "")
     out["n_seeds"] = r.get("n_seeds", "")
 
-    # Per-seed verdict breakdown
-    out["n_seeds_pose_holds"] = r.get("n_seeds_pose_holds", "")
-    out["n_seeds_pose_collapses"] = r.get("n_seeds_pose_collapses", "")
-    out["n_seeds_new_contamination"] = r.get(
-        "n_seeds_new_contamination", "")
-    out["n_seeds_no_data"] = r.get("n_seeds_no_data", "")
-    out["n_seeds_clean_steered"] = r.get("n_seeds_clean_steered", "")
-    out["aggregated_verdict"] = r.get("aggregated_verdict", "")
+    # Per-seed pass count + aggregate outcome
+    out["n_pass"] = r.get("n_pass", "")
+    out["outcome"] = r.get("outcome", "")
 
     # Mutations.  For clean steered, the mutation set lives on
     # steered_total_mutations_median.  For pose_holds, the
@@ -626,12 +616,12 @@ def main():
 
     # Filter: row must (a) be a clean steered or pose_holds aggregate,
     # and (b) have a populated rank_by_composite_score.  Singletons
-    # (initial baseline) and dropped verdicts (pose_collapses,
+    # (initial baseline) and dropped outcomes (pose_collapses,
     # new_contamination) are excluded.
-    PASSING_VERDICTS = {"", "no_reversion", "pose_holds"}
+    PASSING_OUTCOMES = {"", "no_reversion", "pose_holds"}
     passing = [
         r for r in rows
-        if (r.get("aggregated_verdict") or "") in PASSING_VERDICTS
+        if (r.get("outcome") or "") in PASSING_OUTCOMES
         and r.get("rank_by_composite_score")
     ]
 

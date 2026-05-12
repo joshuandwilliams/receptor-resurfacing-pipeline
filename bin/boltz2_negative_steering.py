@@ -1381,7 +1381,7 @@ def _write_initial_only_csv(
     # for that case.  The previous gate (and initial_wrong_idx) treated
     # empty-wrong as "couldn't compute" and emitted blanks, which
     # propagates as missing true_jaccard everywhere downstream
-    # (cross_summary representative_true_jaccard_median, composite
+    # (cross_summary rep_true_jaccard_median, composite
     # score, plots).  See docs note "P0 jaccard-empty-wrong fix".
     if true_idx:
         n_iface = len(initial_wrong_idx)
@@ -1473,7 +1473,7 @@ def _write_initial_multiseed_csv(
     rows here become one group.  Each row has 0 mutated contacts
     → _per_seed_verdict_breakdown classifies them as clean_steered
     (patch a).  No reversion runs (no contamination to revert) →
-    _classify_aggregated_verdict returns ("no_reversion", ...) →
+    _classify_outcome returns ("no_reversion", ...) →
     cross_sequence_summary places the row in tier A.
 
     Per-seed interface metrics (P0 fix, follow-up to jaccard-empty-
@@ -3100,7 +3100,7 @@ def cmd_collect(args: argparse.Namespace) -> int:
                 "sequence_group": sg,
                 "n_seeds": n_seeds_ok,
                 "total_mutations": first["total_mutations"],
-                "representative_design": first["design"],
+                "rep_design": first["design"],
             }
             # Aggregate numeric metrics
             for key in ("receptor_aligned_effector_rmsd",

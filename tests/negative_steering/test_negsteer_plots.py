@@ -34,8 +34,8 @@ negsteer_seed_outcomes_bars.png
     Shows the marginal distributions across the cohort.
 
 negsteer_ra_eff_vs_jaccard.png
-    Scatter of representative_ra_eff_vs_truth_median (x) vs
-    representative_true_jaccard_median (y), coloured by tier, with
+    Scatter of rep_ra_eff_vs_truth_median (x) vs
+    rep_true_jaccard_median (y), coloured by tier, with
     iso-composite contours overlaid.  Controls drawn as different
     markers.  The composite score made geometric.
 
@@ -55,7 +55,7 @@ negsteer_controls_diagnostic.png
 negsteer_mutation_impact.png
     Per-input-PDB-position summary of how steering mutations
     correlate with composite score.  For each position p that
-    appears in any sequence's representative_steered_mutations_chimerax,
+    appears in any sequence's rep_steered_mutations_chimerax,
     plot the median composite score of sequences mutating p vs the
     cohort median.  Bars sized by number of sequences mutating p.
     Faint background shading marks design-region positions for
@@ -153,55 +153,51 @@ COLOUR_WORSE_THAN    = "#D62728"   # red (mutation associated with below-cohort 
 # when its reverted prediction collapsed to ra=30.5 — exactly the
 # scenario negative steering exists to detect.
 
-# Mapping: how each representative_* field is derived from agg row.
+# Mapping: how each rep_* field is derived from agg row.
 # Each entry maps the destination field to a tuple of:
 #   (steered_column_name, reverted_column_name_or_None)
 # When reverted_col is None, the steered column is always used (e.g.
 # verdict-bucket counts that don't have a reverted equivalent).
 _AGG_FINAL_FIELD_MAP = {
-    # n_seeds and verdict counts — single source of truth (no reverted).
-    "representative_n_seeds":                       ("n_seeds", None),
-    "representative_n_seeds_pose_holds":            ("n_seeds_pose_holds", None),
-    "representative_n_seeds_pose_collapses":        ("n_seeds_pose_collapses", None),
-    "representative_n_seeds_new_contamination":     ("n_seeds_new_contamination", None),
-    "representative_n_seeds_no_data":               ("n_seeds_no_data", None),
-    "representative_n_seeds_clean_steered":         ("n_seeds_clean_steered", None),
-    "representative_aggregated_verdict":            ("aggregated_verdict", None),
+    # n_seeds, n_pass and outcome — single source of truth (no reverted).
+    "rep_n_seeds":                       ("n_seeds", None),
+    "rep_n_pass":                        ("n_pass", None),
+    "rep_outcome":                       ("outcome", None),
     # Steered/reverted metric pairs — picked per row by verdict.
-    "representative_ra_eff_vs_truth_median": (
+    "rep_ra_eff_vs_truth_median": (
         "steered_ra_eff_vs_truth_median", "reverted_ra_eff_vs_truth_median"),
-    "representative_true_jaccard_median": (
+    "rep_true_jaccard_median": (
         "steered_true_jaccard_median",    "reverted_true_jaccard_median"),
-    "representative_complex_plddt_median": (
+    "rep_complex_plddt_median": (
         "steered_complex_plddt_median",   "reverted_complex_plddt_median"),
-    "representative_ipae_median": (
+    "rep_ipae_median": (
         "steered_ipae_median",            "reverted_ipae_median"),
-    "representative_pae_pass_frac_median": (
+    "rep_pae_pass_frac_median": (
         "steered_pae_pass_frac_median",   "reverted_pae_pass_frac_median"),
-    "representative_iptm_median": (
+    "rep_iptm_median": (
         "steered_iptm_median",            "reverted_iptm_median"),
-    "representative_interface_plddt_median": (
+    "rep_interface_plddt_median": (
         "steered_interface_plddt_median", "reverted_interface_plddt_median"),
-    "representative_weighted_jaccard_median": (
+    "rep_weighted_jaccard_median": (
         "steered_weighted_jaccard_median","reverted_weighted_jaccard_median"),
     # Receptor-intact majority flag (used by the cascade's structural
     # filter step).  Verdict-aware: clean_steered uses steered side,
     # pose_holds/collapses/contamination use reverted side.
-    "representative_receptor_intact_majority": (
+    "rep_receptor_intact_majority": (
         "steered_receptor_intact_majority",
         "reverted_receptor_intact_majority"),
-    # Mutations: cross_summary has BOTH representative_steered_*
-    # and representative_reverted_mutations_majority_* populated.
+    # Mutations: cross_summary has BOTH rep_steered_*
+    # and rep_reverted_mutations_majority_* populated.
     # The aggregated_results.csv however only has the unpopulated
     # raw columns — they get filled in later by extract_passing when
     # building cross_summary.  So this mapping projects steered into
     # the steered slot only; the verdict-aware choice between
     # steered/reverted final mutations happens at the consumer end
     # (plot_mutation_impact reads the right cross_summary column
-    # directly based on representative_aggregated_verdict).
-    "representative_steered_mutations_chimerax":    ("steered_mutations_chimerax", None),
-    "representative_steered_mutations_aa":          ("steered_mutations_aa", None),
-    "representative_total_mutations_median":        ("steered_total_mutations_median", None),
+    # directly based on rep_outcome).
+    "rep_steered_mutations_chimerax":    ("steered_mutations_chimerax", None),
+    "rep_steered_mutations_aa":          ("steered_mutations_aa", None),
+    "rep_total_mutations_median":        ("steered_total_mutations_median", None),
 }
 
 # Verdicts that mean reversion ran → final = reverted prediction.
@@ -211,7 +207,7 @@ _VERDICTS_WITH_REVERSION = {"pose_holds", "pose_collapses", "new_contamination"}
 def _final_prediction_value(agg_row: Dict, dest_field: str) -> str:
     """Return the value of `dest_field` from `agg_row`, picking
     the steered or reverted column based on the row's
-    aggregated_verdict.  See _AGG_FINAL_FIELD_MAP and module docstring
+    outcome.  See _AGG_FINAL_FIELD_MAP and module docstring
     for the policy."""
     spec = _AGG_FINAL_FIELD_MAP.get(dest_field)
     if spec is None:
@@ -219,7 +215,7 @@ def _final_prediction_value(agg_row: Dict, dest_field: str) -> str:
     steered_col, reverted_col = spec
     if reverted_col is None:
         return agg_row.get(steered_col, "") or ""
-    verdict = (agg_row.get("aggregated_verdict") or "").strip()
+    verdict = (agg_row.get("outcome") or "").strip()
     if verdict in _VERDICTS_WITH_REVERSION:
         # Prefer reverted; fall back to steered if reverted is blank
         # (e.g. reversion failed to produce a prediction at all).
@@ -282,7 +278,7 @@ def _pick_best_agg_row(agg_rows: List[Dict],
 
     # Skip singleton fallback rows (no real seed counts).
     candidates = [r for r in agg_rows
-                  if (r.get("aggregated_verdict") or "").strip()
+                  if (r.get("outcome") or "").strip()
                      not in ("singleton",)]
     if not candidates:
         candidates = agg_rows
@@ -314,7 +310,7 @@ def load_unified_cohort(
     Returns a unified list of dicts in the cross_summary vocabulary.
     Sequences in cross_summary keep their identification + tier info;
     if their tier is 'none' (i.e. no passing rows, so the
-    representative_* columns are blank), the seed counts / ra_eff /
+    rep_* columns are blank), the seed counts / ra_eff /
     jaccard / mutation columns are backfilled from
     aggregated_results.csv when available.
 
@@ -336,7 +332,7 @@ def load_unified_cohort(
     if verbose:
         print(f"  cross_summary contains {len(cross_rows)} rows")
         # Show tier breakdown for visibility — tier-none rows often have
-        # blank representative_* and need backfill from aggregated_results.
+        # blank rep_* and need backfill from aggregated_results.
         from collections import Counter
         tier_counter = Counter(
             (r.get("cross_tier") or "none").strip() for r in cross_rows.values()
@@ -348,10 +344,10 @@ def load_unified_cohort(
         # is needed for them).
         n_blank_seedcounts = sum(
             1 for r in cross_rows.values()
-            if not (r.get("representative_n_seeds_pose_holds") or "").strip()
+            if not (r.get("rep_n_pass") or "").strip()
         )
         print(f"  cross_summary rows with blank "
-              f"representative_n_seeds_pose_holds: {n_blank_seedcounts}")
+              f"rep_n_pass: {n_blank_seedcounts}")
 
     if runs_dir is None or not runs_dir.exists():
         if verbose:
@@ -388,9 +384,9 @@ def load_unified_cohort(
         if cross is not None:
             best_agg = _pick_best_agg_row(
                 agg_rows,
-                prefer_cycle=cross.get("representative_cycle"),
-                prefer_pathway=cross.get("representative_pathway"),
-                prefer_sequence_group=cross.get("representative_sequence_group"),
+                prefer_cycle=cross.get("rep_cycle"),
+                prefer_pathway=cross.get("rep_pathway"),
+                prefer_sequence_group=cross.get("rep_sequence_group"),
             )
         else:
             best_agg = _pick_best_agg_row(agg_rows)
@@ -401,7 +397,7 @@ def load_unified_cohort(
             if best_agg is not None:
                 # Always OVERWRITE metric fields with verdict-aware
                 # final-prediction values.  cross_summary's
-                # representative_*_median values are computed from the
+                # rep_*_median values are computed from the
                 # steered side regardless of whether reversion ran;
                 # re-sourcing them here ensures pose_collapses /
                 # new_contamination sequences carry their reverted
@@ -508,11 +504,11 @@ def _parse_chimerax_positions(s: str) -> List[int]:
 
 
 def _composite_from_row(row: Dict) -> Optional[float]:
-    """Recompute composite from representative_* medians.
+    """Recompute composite from rep_* medians.
     composite = true_jaccard − 0.05·ra_eff.  Returns None if either
     component is missing."""
-    ra = _try_float(row.get("representative_ra_eff_vs_truth_median"))
-    tj = _try_float(row.get("representative_true_jaccard_median"))
+    ra = _try_float(row.get("rep_ra_eff_vs_truth_median"))
+    tj = _try_float(row.get("rep_true_jaccard_median"))
     if ra is None or tj is None:
         return None
     return tj - COMPOSITE_RA_EFF_WEIGHT * ra
@@ -672,7 +668,7 @@ def plot_tier_landscape(rows: List[Dict], out_path: str) -> bool:
 #   - outcome:  pass | off_target | poor_prediction | multiple_failures
 #               | new_contamination | no_data
 # Stage tells you which prediction was the FINAL one for that seed
-# (i.e. which one cross_summary's representative_* fields would have
+# (i.e. which one cross_summary's rep_* fields would have
 # pulled from).  Outcome combines structural (ra_eff, intact) and
 # confidence (plddt, ipae, paepf, iptm) checks.
 #
@@ -787,21 +783,21 @@ def classify_seed(row: Dict) -> Tuple[str, str]:
     return stage, "poor_prediction"
 
 
-def _representative_sg_for_outcomes(
+def _rep_sg_for_outcomes(
     seq_dir: Path,
     cs_lookup: Dict[str, Dict],
 ) -> Optional[str]:
     """Pick the representative sequence_group for one MPNN sequence.
 
     For tier A/B/C sequences cross_summary already names a representative
-    (representative_sequence_group); use that.  For tier-none sequences
+    (rep_sequence_group); use that.  For tier-none sequences
     cross_summary leaves it blank — pick the aggregated_results row
     with the best composite (true_jaccard − 0.05·ra_eff) among non-
     singleton rows."""
     seq_name = seq_dir.name
     cs_row = cs_lookup.get(seq_name)
     if cs_row:
-        rep = (cs_row.get("representative_sequence_group") or "").strip()
+        rep = (cs_row.get("rep_sequence_group") or "").strip()
         if rep:
             return rep
     agg_path = seq_dir / "aggregated_results.csv"
@@ -811,11 +807,11 @@ def _representative_sg_for_outcomes(
         agg_rows = list(csv.DictReader(f))
     candidates = [
         r for r in agg_rows
-        if (r.get("aggregated_verdict") or "").strip() != "singleton"
+        if (r.get("outcome") or "").strip() != "singleton"
     ] or agg_rows
 
     def _comp(r: Dict) -> float:
-        verdict = (r.get("aggregated_verdict") or "").strip()
+        verdict = (r.get("outcome") or "").strip()
         if verdict in _VERDICTS_WITH_REVERSION:
             ra_v = (r.get("reverted_ra_eff_vs_truth_median")
                     or r.get("steered_ra_eff_vs_truth_median"))
@@ -860,7 +856,7 @@ def load_seed_outcomes(
         seq_dir = runs_dir / seq_dir_name
         rep_sg = None
         if not all_sgs:
-            rep_sg = _representative_sg_for_outcomes(seq_dir, cs_lookup)
+            rep_sg = _rep_sg_for_outcomes(seq_dir, cs_lookup)
             if rep_sg is None:
                 continue
         raw = seq_dir / "raw_per_seed_results.csv"
@@ -884,13 +880,13 @@ def load_seed_outcomes(
             continue
         out[seq_dir_name] = seeds
         # Composite for ranking — uses cross_summary's verdict-aware
-        # representative_*_median when available, else falls back to
+        # rep_*_median when available, else falls back to
         # the best aggregate row's composite.
         cs = cs_lookup.get(seq_dir_name)
         comp_value = float("-inf")
         if cs is not None:
-            ra = _try_float(cs.get("representative_ra_eff_vs_truth_median"))
-            tj = _try_float(cs.get("representative_true_jaccard_median"))
+            ra = _try_float(cs.get("rep_ra_eff_vs_truth_median"))
+            tj = _try_float(cs.get("rep_true_jaccard_median"))
             if ra is not None and tj is not None:
                 comp_value = tj - 0.05 * ra
         if comp_value == float("-inf"):
@@ -900,12 +896,12 @@ def load_seed_outcomes(
                     agg_rows_local = list(csv.DictReader(f))
                 cands = [
                     r for r in agg_rows_local
-                    if (r.get("aggregated_verdict") or "").strip()
+                    if (r.get("outcome") or "").strip()
                        != "singleton"
                 ] or agg_rows_local
                 best_comp = float("-inf")
                 for r in cands:
-                    verdict = (r.get("aggregated_verdict") or "").strip()
+                    verdict = (r.get("outcome") or "").strip()
                     if verdict in _VERDICTS_WITH_REVERSION:
                         ra_v = (r.get("reverted_ra_eff_vs_truth_median")
                                 or r.get("steered_ra_eff_vs_truth_median"))
@@ -1105,8 +1101,8 @@ def plot_ra_eff_vs_jaccard(rows: List[Dict], out_path: str) -> bool:
     pts_ctrl_p: List[Tuple[float, float, str]] = []
 
     for row in rows:
-        ra = _try_float(row.get("representative_ra_eff_vs_truth_median"))
-        tj = _try_float(row.get("representative_true_jaccard_median"))
+        ra = _try_float(row.get("rep_ra_eff_vs_truth_median"))
+        tj = _try_float(row.get("rep_true_jaccard_median"))
         if ra is None or tj is None:
             continue
         name = row.get("mpnn_sequence", "?")
@@ -1290,11 +1286,11 @@ def plot_filter_cascade(rows: List[Dict], thresholds: Dict, out_path: str) -> bo
     pass_plddt, pass_ipae, pass_paepf, pass_iptm, pass_ra = (
         [], [], [], [], [])
     for row in steered:
-        pl   = _try_float(row.get("representative_complex_plddt_median"))
-        ip   = _try_float(row.get("representative_ipae_median"))
-        ppf  = _try_float(row.get("representative_pae_pass_frac_median"))
-        iptm = _try_float(row.get("representative_iptm_median"))
-        ra   = _try_float(row.get("representative_ra_eff_vs_truth_median"))
+        pl   = _try_float(row.get("rep_complex_plddt_median"))
+        ip   = _try_float(row.get("rep_ipae_median"))
+        ppf  = _try_float(row.get("rep_pae_pass_frac_median"))
+        iptm = _try_float(row.get("rep_iptm_median"))
+        ra   = _try_float(row.get("rep_ra_eff_vs_truth_median"))
         pass_plddt.append(pl is not None and pl >= plddt_min)
         pass_ipae.append(ip is not None and ip <= ipae_max)
         pass_paepf.append(ppf is not None and ppf >= paepf_min)
@@ -1394,8 +1390,8 @@ def plot_controls_diagnostic(rows: List[Dict], thresholds: Dict, out_path: str) 
     }
     for row in rows:
         rt = _row_type(row)
-        ra = _try_float(row.get("representative_ra_eff_vs_truth_median"))
-        tj = _try_float(row.get("representative_true_jaccard_median"))
+        ra = _try_float(row.get("rep_ra_eff_vs_truth_median"))
+        tj = _try_float(row.get("rep_true_jaccard_median"))
         if rt == "steered":
             tier = (row.get("cross_tier") or "none").strip()
             bucket = "steered_passing" if tier in ("A", "B", "C") else "steered_failing"
@@ -1544,12 +1540,12 @@ def plot_mutation_impact(
         # Pick the final mutation set based on verdict.  When reversion
         # ran, the reverted_majority set is what survived.  Otherwise
         # the steered set is the final.
-        verdict = (row.get("representative_aggregated_verdict") or "").strip()
+        verdict = (row.get("rep_outcome") or "").strip()
         if verdict in _VERDICTS_WITH_REVERSION:
-            mut_str = (row.get("representative_reverted_mutations_majority_chimerax")
-                       or row.get("representative_steered_mutations_chimerax", ""))
+            mut_str = (row.get("rep_reverted_mutations_majority_chimerax")
+                       or row.get("rep_steered_mutations_chimerax", ""))
         else:
-            mut_str = row.get("representative_steered_mutations_chimerax", "")
+            mut_str = row.get("rep_steered_mutations_chimerax", "")
         positions = _parse_chimerax_positions(mut_str)
         name = row.get("mpnn_sequence", "?")
         for p in positions:

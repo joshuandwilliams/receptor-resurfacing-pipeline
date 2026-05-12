@@ -337,7 +337,7 @@ One MPNN-designed sequence for one RFDiffusion design — the unit one row of `c
 ### Representative seed
 The single seed chosen to represent a (sequence, sg) pair in cohort plots and the cross-sequence CSV — typically the seed with the best composite score.
 
-- **Variants in code**: `rep_sg`, `representative_*`, `_representative_sg_for_outcomes`
+- **Variants in code**: `rep_sg`, `rep_*` column prefix, `_rep_sg_for_outcomes`
 
 ### Cohort
 The full set of MPNN sequences (plus the two negative controls) processed together in one pipeline run — the rows of `cross_sequence_summary.csv`.
@@ -368,7 +368,7 @@ The union of mutated positions accumulated across all ancestors in a pathway —
 
 ## 5. Verdicts, tiers, and outcomes
 
-The pipeline applies three layered classifiers: a **per-seed reversion verdict** (after the reversion pass), a **per-sequence aggregated verdict**, and a **cohort tier**. All three feed into the final ranking.
+The pipeline applies three layered classifiers: a **per-seed reversion verdict** (after the reversion pass), a **per-sequence outcome**, and a **cohort tier**. All three feed into the final ranking.
 
 ### Reversion verdict (per-seed)
 The classification produced by `classify_reversion_verdict` for one seed's reverted prediction.
@@ -381,29 +381,34 @@ The classification produced by `classify_reversion_verdict` for one seed's rever
 - **Variants in code**: `verdict`, `reversion_verdict`, `classify_reversion_verdict`
 
 ### `clean_steered` (per-seed)
-A seed whose **steered** prediction had zero mutated-position contamination AND was structurally OK. Reversion was correctly skipped for this seed because there was nothing to revert. Counts as pass-equivalent in tier classification.
+A seed whose **steered** prediction had zero mutated-position contamination AND was structurally OK (intact + ra_eff < 5Å). Reversion was correctly skipped for this seed because there was nothing to revert. Counts as pass-equivalent in tier classification.
 
-- **Variants in code**: `clean_steered`, `n_seeds_clean_steered`, `_row_is_clean_steered`
-- **See also**: `no_reversion` (the per-sequence aggregate of the same state)
+- **Variants in code**: `clean_steered`, `_row_is_clean_steered`; contributes to `n_pass`
+- **See also**: `no_reversion` (the per-sequence outcome label that fires when every seed in the group was clean_steered or cold-start-skipped — same underlying state at different granularities; outcome=`no_reversion` is NOT a tier proxy)
 
-### Aggregated verdict (per-sequence)
-The sequence-level verdict computed from per-seed reversion verdicts. Possible values include the four reversion-verdict classes above plus:
+### Outcome (per-sequence, renamed from `aggregated_verdict`)
+The sequence-level label computed from per-seed reversion verdicts. Possible values include the four reversion-verdict classes above plus:
 
-- **`no_reversion`** — reversion was never triggered for this sequence (typically because every seed was `clean_steered`, so there was nothing to revert at the design level). The steered prediction IS the final design for these sequences.
+- **`no_reversion`** — no seed in this group needed reversion. Fires either when (a) all seeds passed cold-start `skip_steering`, or (b) steering ran but every seed's steered prediction had zero contamination. Note: **outcome `no_reversion` does NOT imply n_pass == n_seeds.** A wrong-placement-no-contamination group is `no_reversion` with n_pass == 0 → tier none. Use `n_pass / n_seeds` for tiering.
+- **`singleton`** — passthrough row (cycle-0 initial baseline); not aggregated.
 
-- **Variants in code**: `aggregated_verdict`, `_classify_aggregated_verdict`
-- **Note**: `no_reversion` (per-sequence) and `clean_steered` (per-seed) describe the same underlying state — pose passes filters, no contaminating steering mutations — at different granularities.
+- **Variants in code**: `outcome`, `outcome_reason`, `_classify_outcome` (formerly `aggregated_verdict` / `_classify_aggregated_verdict`)
 
-### `PASSING_VERDICTS`
-The set of aggregated verdicts allowed to populate `passing_summary.csv`: `{pose_holds, no_reversion, ""}`. The empty string covers cohort rows that haven't been verdict-classified at all (cold-start-only paths).
+### `n_pass` (per-sequence)
+The number of seeds in a sequence-group that passed the structural+contamination filters: `n_pass = (# pose_holds seeds) + (# clean_steered seeds)`. **Path-agnostic** — computed the same way regardless of whether reversion ran. Drives cohort tier directly. Replaces the five `n_seeds_*` per-verdict count columns from the pre-rename schema.
+
+### `PASSING_OUTCOMES`
+The set of outcome labels allowed to populate `passing_summary.csv`: `{pose_holds, no_reversion, ""}`. The empty string covers rows that haven't been outcome-classified.
 
 ### Tier (cohort A/B/C/none)
-The cohort-level promotion class for one MPNN sequence, derived from the per-seed pass count (`n_seeds_pose_holds + n_seeds_clean_steered`):
+The cohort-level promotion class for one MPNN sequence, derived **only** from `n_pass / n_seeds`:
 
-- **Tier A** — every seed passes (e.g. 3/3) OR the aggregated verdict is `no_reversion`.
-- **Tier B** — strict majority pass but not all (e.g. 2/3).
-- **Tier C** — exactly one seed passes.
-- **Tier none** — no seed passes.
+- **Tier A** — every seed passes: `n_pass == n_seeds`.
+- **Tier B** — strict majority but not all: `1 < n_pass < n_seeds`.
+- **Tier C** — exactly one seed passes: `n_pass == 1`.
+- **Tier none** — `n_pass == 0`.
+
+The outcome label is informational only for tier assignment.
 
 - **Variants in code**: `tier`, `cross_tier`, `_tier_for_row`, `_TIER_ORDER`
 
@@ -579,7 +584,7 @@ ProteinMPNN input file specifying which residues are NOT to be redesigned (i.e. 
 Sequence-format files consumed by Boltz. A single-sequence A3M is used as the "MSA" when no real MSA is available.
 
 ### Canonical PDB
-The single PDB chosen as the published representative for one cohort row. Path is stored in `representative_canonical_pdb` and is rewritten from work-dir form to published-tree form by `_rewrite_workdir_path_to_published`.
+The single PDB chosen as the published representative for one cohort row. Path is stored in `rep_canonical_pdb` and is rewritten from work-dir form to published-tree form by `_rewrite_workdir_path_to_published`.
 
 ### Sidecar
 A companion file accompanying a prediction (e.g. the canonical PDB next to a Boltz CIF output).
@@ -615,7 +620,7 @@ These are terms whose current code usage is ambiguous, contradictory, or non-sta
 
 **Domain expectation**: "a cohort row that passed a quality threshold."
 
-**Code reality**: any cohort row whose `representative_canonical_pdb` is a file on disk, with no metric/tier check (`extract_survivor_manifest.py:9-11, :110`).
+**Code reality**: any cohort row whose `rep_canonical_pdb` is a file on disk, with no metric/tier check (`extract_survivor_manifest.py:9-11, :110`).
 
 A failed-metric row with an output PDB on disk is a "survivor" under the current definition. Pre-2026-04-29 the term effectively did imply tier-passage (because tier-none rows had no representative populated), but Bug 3's tier-none-fallback fix in pipeline_notes14 means tier-none rows now also acquire representatives for display, and so also become survivors. A bad prediction with a parseable PDB is now a survivor.
 
