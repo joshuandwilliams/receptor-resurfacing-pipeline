@@ -626,11 +626,41 @@ def _emit_aggregate_summary(records: List[Dict], output_path: Path) -> None:
         print(f"  row_type breakdown: {rt_summary}", file=sys.stderr)
 
 
+def _load_scored_metadata(path: Optional[Path]) -> Dict[str, Dict]:
+    """Load scored_metadata.csv into a {mpnn_sequence: row} lookup.
+
+    The join key is f"design_{row['design']}_seq_{row['seq']}", matching
+    the mpnn_sequence convention used elsewhere in the pipeline (FASTA
+    headers, per-sequence workdir names).  Returns an empty dict if
+    `path` is None or the file is missing — the columns then come out
+    blank in the output, which is the desired no-op behaviour.
+    """
+    if path is None:
+        return {}
+    if not path.is_file():
+        print(f"WARNING: --scored-metadata file not found: {path} "
+              f"(corrected_receptor / designed_residues / native_residues "
+              f"columns will be blank)", file=sys.stderr)
+        return {}
+    lookup: Dict[str, Dict] = {}
+    with open(path) as f:
+        for row in csv.DictReader(f):
+            design = row.get("design", "").strip()
+            seq = row.get("seq", "").strip()
+            if not design or not seq:
+                continue
+            key = f"design_{design}_seq_{seq}"
+            lookup[key] = row
+    print(f"  loaded {len(lookup)} scored_metadata rows from {path.name}")
+    return lookup
+
+
 def aggregate(
     sequences: List[Tuple[str, Path]],
     output_path: Path,
     strict: bool,
     published_runs_dir: Optional[Path] = None,
+    scored_metadata_path: Optional[Path] = None,
 ) -> int:
     """Read every (seq_name, passing_summary.csv) pair, pick a
     representative, and write a ranked cross-sequence CSV.
@@ -643,6 +673,10 @@ def aggregate(
             published-tree paths into rep_canonical_pdb
             in place of the work-dir absolute paths
             NEGSTEER_RUN_ONE writes.  See helper docstring.
+    scored_metadata_path: when provided, three columns joined onto
+            every output row by mpnn_sequence:
+            corrected_receptor, designed_residues, native_residues.
+            See _load_scored_metadata.
     """
     if not sequences:
         print("ERROR: no inputs supplied", file=sys.stderr)
@@ -657,6 +691,10 @@ def aggregate(
     except _AggregateInputError as e:
         print(f"ERROR: {e}", file=sys.stderr)
         return 2
+
+    # Optional MPNN-sequence join (corrected_receptor / designed_residues /
+    # native_residues).  Empty dict when --scored-metadata wasn't supplied.
+    scored_metadata = _load_scored_metadata(scored_metadata_path)
 
     # Build per-sequence records.
     records = []
@@ -765,6 +803,21 @@ def aggregate(
             if comp is not None:
                 rec["cross_composite_score"] = f"{comp:.6f}"
 
+        # MPNN-sequence join.  When --scored-metadata is supplied,
+        # surface the receptor sequence the MPNN designed for this
+        # mpnn_sequence (and the native residues it replaced at the
+        # design positions) directly in cross_sequence_summary.csv so
+        # downstream consumers don't need to re-parse mpnn_corrected.fasta.
+        meta = scored_metadata.get(seq_name)
+        if meta is not None:
+            rec["corrected_receptor"] = meta.get("corrected_receptor", "")
+            rec["designed_residues"] = meta.get("designed_residues", "")
+            rec["native_residues"] = meta.get("native_residues", "")
+        else:
+            rec["corrected_receptor"] = ""
+            rec["designed_residues"] = ""
+            rec["native_residues"] = ""
+
         records.append(rec)
 
     # Score + cross-rank.  Score comes from the representative row's
@@ -805,6 +858,15 @@ def aggregate(
         "n_tier_C_in_sequence",
         "run_one_runtime_sec",
         "source_passing_summary",
+        # MPNN-sequence join (blank when --scored-metadata not supplied).
+        # corrected_receptor: full receptor sequence (native at fixed +
+        #                     MPNN at design positions)
+        # designed_residues:  MPNN AA slice at design positions only
+        #                     (pipe-joined per de novo segment)
+        # native_residues:    native AA slice at the same positions
+        "corrected_receptor",
+        "designed_residues",
+        "native_residues",
     ]
     rep_cols = [f"rep_{c}" for c in passing_summary_fieldnames]
     fieldnames = meta_cols + rep_cols
@@ -888,6 +950,19 @@ def main():
              "container tasks — leaving the rewrite off is the legacy "
              "behaviour, kept for non-Nextflow callers."
     )
+    parser.add_argument(
+        "--scored-metadata", type=Path, default=None,
+        metavar="CSV",
+        help="Optional path to scored_metadata.csv (emitted by "
+             "MPNN_DESIGN_REGION_SCORE).  When provided, three extra "
+             "columns are joined onto every output row by mpnn_sequence "
+             "(= design_<design>_seq_<seq>): corrected_receptor (full "
+             "receptor sequence with native at fixed + MPNN at design "
+             "positions), designed_residues (pipe-joined MPNN AA slice "
+             "at design positions only), and native_residues (the same "
+             "slice on the native receptor — what each MPNN residue is "
+             "replacing).  Blank columns when the join key is missing."
+    )
 
     args = parser.parse_args()
 
@@ -948,7 +1023,8 @@ def main():
         return 2
 
     return aggregate(sequences, args.output, args.strict,
-                     published_runs_dir=args.published_runs_dir)
+                     published_runs_dir=args.published_runs_dir,
+                     scored_metadata_path=args.scored_metadata)
 
 
 if __name__ == "__main__":

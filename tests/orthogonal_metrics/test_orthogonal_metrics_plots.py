@@ -750,12 +750,24 @@ def plot_metrics_vs_composite(
 # - source 'special'  → handled in code (e.g. n_mutations is stage-aware)
 # - threshold=None means no pass/fail colouring; cell uses light-blue fill
 # - formatter is one of 'auto' (3-sig-fig-ish), 'int', '0p2', '0p3', '0f', '1f'
+#
+# Column ordering follows the three-axis framework (audit § three-axis):
+# descriptive (composite, n_mut) → Boltz-2 structure → Boltz-2 confidence →
+# Orthogonal.  COMBINED_SUMMARY_GROUPS below names the contiguous ranges
+# so a group header is drawn above each block of columns.
 
 COMBINED_SUMMARY_COLUMNS = [
+    # ── Descriptive (no group header) ──────────────────────────────────
     # Composite is the sort key — first numerical column.
     ("cross_composite_score",                    "cross",
      "composite",       None,               None,  "0p3"),
-    # Boltz pose — receptor-aligned effector RMSD vs truth.
+    # Mutations carried by the representative's final prediction.
+    # Stage-aware: cold_start → 0; steering → steered count;
+    # reversion → post-reversion surviving count.  Handled in code.
+    ("__rep_n_mutations__",                       "special",
+     "n_mut",           None,               None,  "int"),
+    # ── Boltz-2 structure ───────────────────────────────────────────────
+    # Receptor-aligned effector RMSD vs truth — the headline pose metric.
     ("rep_ra_eff_vs_truth_median",    "cross",
      "Boltz ra_eff",    5.0,                "<=",  "0p2"),
     # Receptor's own fold quality.  Sits next to Boltz ra_eff because
@@ -770,7 +782,7 @@ COMBINED_SUMMARY_COLUMNS = [
      "rec RMSD",        5.0,                "<=",  "0p2"),
     ("rep_true_jaccard_median",       "cross",
      "true_jaccard",    None,               None,  "0p2"),
-    # Boltz confidence (the six selected)
+    # ── Boltz-2 confidence ──────────────────────────────────────────────
     ("rep_complex_plddt_median",      "cross",
      "complex_plddt",   0.70,               ">=",  "0p2"),
     ("rep_iptm_median",               "cross",
@@ -783,25 +795,31 @@ COMBINED_SUMMARY_COLUMNS = [
      "iface_plddt",     0.75,               ">=",  "0p2"),
     ("rep_ipsae_min_15_median",       "cross",
      "ipsae_min_15",    None,               None,  "0p2"),
-    # Mutations carried by the representative's final prediction.
-    # Stage-aware: cold_start → 0; steering → steered count;
-    # reversion → post-reversion surviving count.  Handled in code.
-    ("__rep_n_mutations__",                       "special",
-     "n_mut",           None,               None,  "int"),
-    # Orthogonal block — these are missing for sequences that didn't
-    # reach the orthogonal stage; rendered as grey-hatched cells.
-    # AF3 iptm column dropped 2026-04-29 (informational-only and
-    # redundant with AF3 ra_eff for triage).
+    ("rep_weighted_jaccard_median",   "cross",
+     "weighted_jacc",   None,               None,  "0p2"),
+    # ── Orthogonal ──────────────────────────────────────────────────────
+    # These are missing for sequences that didn't reach the orthogonal
+    # stage; rendered as grey-hatched cells.  AF3 ra_eff is the BEST of
+    # 5 AF3 seeds (label suffix "(best)") and is INFORMATIONAL ONLY in
+    # the gate (see passes_orthogonal_filters — Sc+BSA+ΔΔG only).
     ("af3_nomsa_best_ra_eff",                    "survivor",
-     "AF3 ra_eff",      ORTHOG_AF3_RA_MAX,  "<=",  "0p2"),
+     "AF3 ra_eff (best)", ORTHOG_AF3_RA_MAX, "<=",  "0p2"),
     ("sc",                                        "survivor",
      "Sc",              ORTHOG_SC_MIN,      ">=",  "0p3"),
     ("bsa",                                       "survivor",
      "BSA",             ORTHOG_BSA_MIN,     ">=",  "0f"),
     ("rosetta_ddg",                               "survivor",
      "ΔΔG",             DDG_BENNETT_REFERENCE, "<=", "1f"),
-    ("rep_weighted_jaccard_median",   "cross",
-     "weighted_jacc",   None,               None,  "0p2"),
+]
+
+# Column-group spans for the header band.  Each entry is
+# (group_label, [start_idx, end_idx_inclusive] into COMBINED_SUMMARY_COLUMNS).
+# A None group_label suppresses the header for the descriptive columns.
+COMBINED_SUMMARY_GROUPS = [
+    (None,                  0,  1),   # descriptive (composite, n_mut)
+    ("Boltz-2 structure",   2,  4),
+    ("Boltz-2 confidence",  5, 11),
+    ("Orthogonal",         12, 15),
 ]
 
 # Light-blue neutral fill for no-threshold numeric cells.
@@ -1001,25 +1019,59 @@ def plot_combined_cohort_orthogonal_summary(
     ax.text(stripe_w / 2, n_seq + 0.15, "tier",
             ha="center", va="bottom", fontsize=7.5, style="italic")
 
-    ax.set_xlim(0, stripe_w + n_metr * cell_w)
-    ax.set_ylim(0, n_seq + 0.6)
+    # Three-axis column-group headers, drawn above the metric labels.
+    # Each header spans the contiguous range of its block; descriptive
+    # columns (composite, n_mut) get no header.
+    group_band_y = n_seq + 1.05
+    group_band_h = 0.45
+    for group_label, start_idx, end_idx in COMBINED_SUMMARY_GROUPS:
+        if group_label is None:
+            continue
+        x0 = stripe_w + start_idx * cell_w
+        x1 = stripe_w + (end_idx + 1) * cell_w
+        ax.add_patch(mpatches.Rectangle(
+            (x0, group_band_y), x1 - x0, group_band_h,
+            facecolor="#E8E8E8", edgecolor="black", linewidth=0.5, alpha=0.8,
+        ))
+        ax.text((x0 + x1) / 2, group_band_y + group_band_h / 2, group_label,
+                ha="center", va="center", fontsize=8.5, fontweight="bold")
 
-    # Legend below.
-    legend_handles = [
-        mpatches.Patch(color=COLOUR_PASS, alpha=0.55, label="Passes threshold"),
-        mpatches.Patch(color=COLOUR_FAIL, alpha=0.55, label="Fails threshold"),
+    ax.set_xlim(0, stripe_w + n_metr * cell_w)
+    ax.set_ylim(0, group_band_y + group_band_h + 0.3)
+
+    # Legend below.  Tier stripe legend is separated visually from the
+    # cell-fill legend so it's clear that the left-edge stripe encodes
+    # the per-sequence negsteer cohort outcome (tier A/B/C/none, derived
+    # from n_pass / n_seeds) and is INDEPENDENT of the red/green cell
+    # colours, which mark individual-metric threshold pass/fail.
+    cell_handles = [
+        mpatches.Patch(color=COLOUR_PASS, alpha=0.55, label="Cell — passes threshold"),
+        mpatches.Patch(color=COLOUR_FAIL, alpha=0.55, label="Cell — fails threshold"),
         mpatches.Patch(color=COLOUR_NEUTRAL, alpha=0.85,
-                       label="No threshold (informational)"),
+                       label="Cell — no threshold (informational)"),
         mpatches.Patch(facecolor="white", edgecolor="grey", hatch="///",
-                       label="Metric missing"),
-        mpatches.Patch(color=COLOUR_TIER["A"], alpha=0.85, label="Tier A"),
-        mpatches.Patch(color=COLOUR_TIER["B"], alpha=0.85, label="Tier B"),
-        mpatches.Patch(color=COLOUR_TIER["C"], alpha=0.85, label="Tier C"),
-        mpatches.Patch(color=COLOUR_TIER["none"], alpha=0.85, label="No tier"),
+                       label="Cell — metric missing"),
     ]
-    ax.legend(handles=legend_handles, loc="upper center",
-              bbox_to_anchor=(0.5, -0.04), ncol=4,
-              fontsize=8, framealpha=0.95)
+    stripe_handles = [
+        mpatches.Patch(color=COLOUR_TIER["A"], alpha=0.85, label="Stripe — tier A"),
+        mpatches.Patch(color=COLOUR_TIER["B"], alpha=0.85, label="Stripe — tier B"),
+        mpatches.Patch(color=COLOUR_TIER["C"], alpha=0.85, label="Stripe — tier C"),
+        mpatches.Patch(color=COLOUR_TIER["none"], alpha=0.85, label="Stripe — no tier"),
+    ]
+    legend_cells = ax.legend(
+        handles=cell_handles, loc="upper center",
+        bbox_to_anchor=(0.5, -0.04), ncol=4,
+        fontsize=8, framealpha=0.95, title="Cell colours: individual-metric pass/fail",
+        title_fontsize=8.5,
+    )
+    ax.add_artist(legend_cells)
+    ax.legend(
+        handles=stripe_handles, loc="upper center",
+        bbox_to_anchor=(0.5, -0.13), ncol=4,
+        fontsize=8, framealpha=0.95,
+        title="Left stripe: per-sequence negsteer cohort outcome (independent of cell colours)",
+        title_fontsize=8.5,
+    )
 
     plt.tight_layout()
     plt.savefig(out_path, dpi=150, bbox_inches="tight")

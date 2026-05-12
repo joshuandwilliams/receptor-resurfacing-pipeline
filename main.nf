@@ -22,6 +22,8 @@
 
 nextflow.enable.dsl = 2
 
+import groovy.json.JsonOutput
+
 // ---------------------------------------------------------------------------
 // Parameter defaults
 // ---------------------------------------------------------------------------
@@ -335,6 +337,26 @@ include { ORTHOG_PLOTS                          } from './modules/negsteer_ortho
 // ---------------------------------------------------------------------------
 
 workflow {
+
+    // ── Parameter validation ─────────────────────────────────────────────
+    // Fail fast before any compute is dispatched.  bin/validate_params.py
+    // applies all PARAM_SPECS (range/choice/regex/custom) and prints every
+    // error before exiting non-zero; if it returns non-zero we abort the
+    // entire workflow.  Coverage report: `python3 bin/validate_params.py --report`.
+    def _params_dump = file("${workflow.workDir}/.params_validation.json")
+    _params_dump.parent.mkdirs()
+    _params_dump.text = JsonOutput.toJson(params)
+    def _validator = "${projectDir}/bin/validate_params.py"
+    def _proc = ["python3", _validator, "--params-json", _params_dump.toString()]
+        .execute()
+    _proc.waitFor()
+    def _stderr = _proc.err.text
+    def _stdout = _proc.in.text
+    if (_proc.exitValue() != 0) {
+        error("Parameter validation failed (see bin/validate_params.py PARAM_SPECS):\n" +
+              _stderr + _stdout)
+    }
+    log.info(_stderr.trim())
 
     // =====================================================================
     // BRANCH A: Separate receptor + effector PDBs → HADDOCK3 docking
@@ -854,7 +876,8 @@ workflow {
 
     NEGSTEER_CROSS_SEQUENCE(
         per_sequence_workdirs_ch,
-        Channel.value(file("${projectDir}/bin/cross_sequence_summary.py"))
+        Channel.value(file("${projectDir}/bin/cross_sequence_summary.py")),
+        MPNN_DESIGN_REGION_SCORE.out.scored_metadata
     )
 
     // ── Step 4b: Diagnostic plots from cross_summary + per-sequence

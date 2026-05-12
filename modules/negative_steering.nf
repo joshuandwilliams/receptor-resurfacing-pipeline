@@ -258,11 +258,20 @@ process NEGSTEER_CROSS_SEQUENCE {
     // aggregator infers the sequence name from the directory name.
     path per_sequence_workdirs
     path summary_script
+    // Optional MPNN scored_metadata.csv (from MPNN_DESIGN_REGION_SCORE).
+    // Surfaces corrected_receptor / designed_residues / native_residues
+    // in cross_sequence_summary.csv.  Pass `file('NO_FILE')` (or any
+    // missing path) to skip the join — the script tolerates a missing
+    // file and emits blank columns.
+    path scored_metadata
 
     output:
     path "cross_sequence_summary.csv", emit: cross_summary
 
     script:
+    def metadata_arg = (scored_metadata.name == 'NO_FILE')
+        ? ''
+        : "--scored-metadata ${scored_metadata}"
     """
     set -euo pipefail
 
@@ -291,6 +300,7 @@ process NEGSTEER_CROSS_SEQUENCE {
         python ${summary_script} \\
             --passing-summary-dir aggregator \\
             --published-runs-dir  ${params.outdir}/negative_steering/runs \\
+            ${metadata_arg} \\
             --output cross_sequence_summary.csv
     # NOTE: summary_script is now content-hashed via the path input
     # above, so direct edits to cross_sequence_summary.py invalidate

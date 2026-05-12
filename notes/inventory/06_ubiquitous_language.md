@@ -381,10 +381,15 @@ The classification produced by `classify_reversion_verdict` for one seed's rever
 - **Variants in code**: `verdict`, `reversion_verdict`, `classify_reversion_verdict`
 
 ### `clean_steered` (per-seed)
-A seed whose **steered** prediction had zero mutated-position contamination AND was structurally OK (intact + ra_eff < 5Å). Reversion was correctly skipped for this seed because there was nothing to revert. Counts as pass-equivalent in tier classification.
+A seed whose **steered** prediction had zero mutated-position contamination AND was structurally OK (intact + ra_eff < 5Å). Reversion was correctly skipped for this seed because there was nothing to revert. Counts as pass-equivalent in tier classification (`n_pass += 1`).
 
 - **Variants in code**: `clean_steered`, `_row_is_clean_steered`; contributes to `n_pass`
 - **See also**: `no_reversion` (the per-sequence outcome label that fires when every seed in the group was clean_steered or cold-start-skipped — same underlying state at different granularities; outcome=`no_reversion` is NOT a tier proxy)
+
+### `no_data` (per-seed)
+A seed whose reverted prediction is missing, unparseable, or incomplete enough that the classifier cannot place it in any of the other four buckets. Operationally fires when the reverted-* fields can't be read AND the clean_steered heuristic also fails (e.g. steered ra_eff ≥ 5Å with zero contamination → wrong placement, no reversion attempted, classifier can't decide). Does NOT count as pass-equivalent — `n_pass` ignores `no_data` seeds.
+
+- **Variants in code**: `no_data`; contributes to neither `n_pass` numerator nor failure modes (treated as "abstain")
 
 ### Outcome (per-sequence, renamed from `aggregated_verdict`)
 The sequence-level label computed from per-seed reversion verdicts. Possible values include the four reversion-verdict classes above plus:
@@ -428,9 +433,26 @@ The per-seed pass/fail decomposition along two axes: **structural pass** (intact
 - **Variants in code**: `composite`, `composite_score`, `_composite_score`, `COMPOSITE_RA_EFF_WEIGHT=0.05`
 
 ### `passes_orthogonal_filters`
-The final gate after the orthogonal-metrics merge. True iff biophysical and Rosetta orthogonal metrics are above their thresholds. AF3 is computed but **demoted to flag-only** in the merge step (production code in `bin/merge_orthogonal_metrics.py` had not been updated to match `tests/orthogonal_metrics/merge_orthogonal_metrics.py` as of this writing — see `05_findings.md` A4).
+The final gate after the orthogonal-metrics merge. True iff **all three** of these orthogonal metrics pass their thresholds:
+
+- **Sc** (Rosetta shape complementarity) ≥ threshold
+- **BSA** (Rosetta `dSASA_int`, buried surface area) ≥ threshold
+- **ΔΔG** (Rosetta `dG_separated`, binding energy) ≤ threshold
+
+`interface_plddt` is NOT in the orthogonal cascade — it is a Boltz-derived confidence metric and was removed from `bin/merge_orthogonal_metrics.py` in commit `47cb9f2`. AF3 (ra_eff disagreement against Boltz) is computed but **demoted to flag-only** in the merge step (does not gate, only informs).
 
 - **Variants in code**: `passes_orthogonal_filters`, `_apply_filters`, `orthogonal_flags`
+
+### Three-axis framework (cohort-summary framing)
+The audit-confirmed mental model for reading cohort survivor rows: each design is evaluated along three orthogonal axes that gate independently.
+
+1. **Boltz-2 structure** — `ra_eff_vs_truth_median`, `independent_receptor_rmsd_median`, `independent_effector_rmsd_median`, `true_jaccard_median`. Drives the negsteer outcome and the tier.
+2. **Boltz-2 confidence** — `complex_plddt`, `iptm`, `ipae`, `pae_pass_frac_median`, `interface_plddt_median`, `weighted_jaccard_median`. Diagnostic — feeds `confidence_flag` but does not gate on its own in production.
+3. **Orthogonal** — Rosetta Sc + BSA + ΔΔG (gating, see `passes_orthogonal_filters` above), plus AF3-no-MSA ra_eff (informational flag only). Computed only on cohort survivors (tier-A/B/C rows whose representatives have a `rep_canonical_pdb`).
+
+Cohort summary plots (`bin/orthogonal_metrics_plots.py`) lay out the columns into these three visual groups so the reader can scan a single row across the three axes at once. The AF3 disagreement column is suffixed `(best)` because it reports the best of 5 AF3 seeds.
+
+- **Variants in code**: not a single identifier — read across the column families above.
 
 ---
 
@@ -671,3 +693,7 @@ In `build_contigs.py`, `boltz2_negative_steering.py` (twice — `THREE_TO_ONE` p
 ### F10. Construct (plasmid) vs `construct_reliance_flag`
 
 The root `construct` is overloaded: a domain noun (the wet-lab plasmid) vs the prefix on a flag predicate (`construct_reliance_flag`). The flag's name comes from "the wet-lab construct's predicted pose"; readability suffers because the plasmid sense is rarely surfaced in code while the flag is. Recommend keeping the flag name but adding a glossary cross-reference (already present here) and ensuring any new "construct"-named symbol is the flag, never the plasmid.
+
+### F11. `outcome` overloaded — per-sequence column vs per-seed plot label
+
+After the 2026-05-12 rename, `outcome` is the per-sequence column name in `aggregated_results.csv` / `passing_summary.csv` (values: `pose_holds`, `pose_collapses`, `new_contamination`, `no_reversion`, `singleton`). The negsteer per-seed plots (`negsteer_within_sequence_plots.py`, `negsteer_plots.py`) use the same word `outcome` for a separate per-seed pass/fail decomposition (`pass`, `off_target`, `poor_prediction`, `multiple_failures`, `new_contamination`, `no_data`). The two sets overlap on `new_contamination` and `no_data` but mean different things at different aggregation levels. Consider renaming the per-seed plot concept (e.g. `seed_class` or `per_seed_outcome`) in a future cleanup pass.
