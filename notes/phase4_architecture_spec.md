@@ -469,6 +469,13 @@ StageResult(
     seed_indices,       # list[int] — the RNG seeds used (parallel to predictions)
     mutated_positions,  # PositionSet | None — only for steered/reversion;
                         #   the receptor positions that differ from cold-start
+    applies_to_designs, # list[str] | None — REVERSION ONLY (per Step 4.3):
+                        #   the steered design_ids whose contamination
+                        #   produced this unique reverted sequence.  Used by
+                        #   NegativeSteeringRun._reversion_for_design() to
+                        #   map a steered design to its reversion attempt,
+                        #   accounting for the dedup-by-reverted-sequence
+                        #   that write_reversion_plan does today.
 )
 ```
 
@@ -551,6 +558,11 @@ NegativeSteeringRun(
 **Methods — representative selection (for cohort plots).**
 
 - `canonical_prediction(thresholds) -> ProteinStructurePrediction | None` — the "best" single prediction across all stages, used as the representative in `DesignCohort` and orthogonal-stage processing.  Selected per current tier-then-composite policy.
+
+**Methods — workdir-cached state (added per Step 4.1).**
+
+- `contamination_positions() -> PositionSet` — cached load of `design_region ∪ true_interface` from `cycle_0/plan.json`.  Required as input to per-seed verdict and CL-3 majority-rule checks.
+- `_reversion_for_design(design_id: str) -> StageResult | None` — private helper (added per Step 4.3); walks `self.reversion.values()` looking for the stage whose `applies_to_designs` includes `design_id`.  Returns the matching reversion StageResult, or `None` if this design didn't trigger reversion.
 
 **Boundary.**
 
@@ -755,13 +767,284 @@ Filter values:
 
 ---
 
-## Step 3 — Type relationships (TODO)
+## Step 3 — Type relationships
 
-Once Step 2 is fully reviewed by the user, this section captures how the types fit together: which types compose which, the dependency graph, the data flow through one pipeline run.  Stub for the next grill-me batch.
+Three views: composition (who contains what), dependency (who needs to be implemented before what), and data flow (how a pipeline run threads through the types).
 
-## Step 4 — Code-fit validation (TODO)
+### Composition tree
 
-3–4 representative pieces of existing code rewritten on paper against the new types, to confirm the spec survives contact with reality.  Stub for the next grill-me batch.
+```
+DesignCohort
+└── NegativeSteeringRun  [one per MPNN sequence + per control]
+    ├── DesignedSequence  [the MPNN sequence being negsteered]
+    │   └── DesignedBackbone
+    │       ├── ProteinStructurePrediction  [composed — backbone-only PDB]
+    │       └── ContigSpec
+    ├── StageResult  [cold_start]
+    │   ├── list[ProteinStructurePrediction]
+    │   └── list[BoltzConfidenceMetrics]
+    ├── dict[design_id → StageResult]  [steered]
+    │   └── list[ProteinStructurePrediction] + list[BoltzConfidenceMetrics]
+    └── dict[reverted_seq_id → StageResult]  [reversion — only when CL-3 majority rule fires]
+        └── list[ProteinStructurePrediction] + list[BoltzConfidenceMetrics]
+
+OrthogonalMetrics  [one per DesignCohort survivor; sibling of NegativeSteeringRun, not contained]
+├── ProteinStructurePrediction  [the canonical prediction being validated]
+└── AF3ConfidenceAggregate
+    └── list[ProteinStructurePrediction]  [internal — the seed×sample mmCIFs]
+
+PositionSet  [embedded wherever a position-set is returned/passed; carries
+              optional ContigSpec reference for frame conversion]
+
+PipelineParams              [singleton per pipeline run; passed top-down]
+PipelineInternalThresholds  [singleton per pipeline run; passed to every method
+                             that does a threshold check]
+```
+
+### Dependency-order table (drives migration order)
+
+Each row lists what each type DEPENDS ON (must exist first).  Tier 0 = no deps; migrate first.
+
+| Type | Depends on | Tier |
+|---|---|---|
+| `ContigSpec` | — | 0 |
+| `BoltzConfidenceMetrics` | — | 0 |
+| `AF3ConfidenceAggregate` | (uses `ProteinStructurePrediction` internally — forward reference; OK to implement in parallel with PSP) | 0 |
+| `PipelineParams` | — | 0 |
+| `PipelineInternalThresholds` | — | 0 |
+| `PositionSet` | `ContigSpec` (optional) | 1 |
+| `ProteinStructurePrediction` | `PositionSet` (return type for contact methods) | 2 |
+| `DesignedBackbone` | `ProteinStructurePrediction`, `ContigSpec`, `PositionSet` | 3 |
+| `DesignedSequence` | `DesignedBackbone`, `PositionSet` | 4 |
+| `StageResult` | `ProteinStructurePrediction`, `BoltzConfidenceMetrics`, `PositionSet`, `PipelineInternalThresholds` | 4 |
+| `OrthogonalMetrics` | `ProteinStructurePrediction`, `AF3ConfidenceAggregate`, `PipelineInternalThresholds` | 4 |
+| `NegativeSteeringRun` | `StageResult`, `DesignedSequence`, `PipelineInternalThresholds` | 5 |
+| `DesignCohort` | `NegativeSteeringRun`, `OrthogonalMetrics`, `PipelineInternalThresholds` | 6 |
+
+**Migration tier order:** 0 → 1 → 2 → 3 → 4 → 5 → 6.  Within a tier, types are independent and can land in any order.
+
+### Data flow through one pipeline run
+
+1. **Entry.**  `PipelineParams.from_nextflow_json(...)` validates user input; pipeline aborts on error before any compute.  `PipelineInternalThresholds.default()` loaded alongside.
+2. **Branch A (HADDOCK) or Branch B (pre-docked).**  Input PDB(s) become a `ProteinStructurePrediction` (the input complex).
+3. **RFDiffusion.**  Produces N `DesignedBackbone`s (each carrying its `ContigSpec`).  Rosetta filter populates `sc_score` and culls those below threshold.
+4. **ProteinMPNN.**  For each surviving `DesignedBackbone`, produces M `DesignedSequence`s.  QC + cluster + top-N pick.
+5. **Negative steering — per `DesignedSequence`.**  Driven by `bin/negative_steering_run_one.sh` (orchestration unchanged per Q10; the read-side types just consume its workdir at the end).
+   - Cold-start: predict the wild-type baseline `num_seeds` times → `StageResult` (cold_start).
+   - Check `cold_start.triggers_next_stage(thresholds)` (existing majority-clean rule).  If False (= majority clean): skip steering; the run is `outcome="no_reversion"` with `n_pass = n_seeds`.
+   - Else: for each steered design slot, predict `num_seeds` times → `StageResult` (steered).
+   - For each steered `StageResult`, check `triggers_next_stage(thresholds, contamination_positions)` (the NEW CL-3 majority rule).  If True: queue reversion for this design.
+   - Reversion: for each unique reverted sequence, predict `num_seeds` times → `StageResult` (reversion).
+   - Construct `NegativeSteeringRun.from_workdir(workdir)` once all stages are done.
+6. **Cohort aggregation.**  `DesignCohort.from_runs_directory(runs_dir)` builds the cohort.  Tier-ranking, composite-score ranking, survivor selection.  `cross_sequence_summary.csv` emitted.
+7. **Orthogonal validation — per survivor.**  For each `survivor` in `cohort.survivors(thresholds)`: run AF3, biophysical, Rosetta against `survivor.canonical_prediction(thresholds)`.  Build `OrthogonalMetrics.from_orthogonal_outputs(workdir, survivor.mpnn_sequence_id)`.
+8. **Cohort summary plot.**  Reads `DesignCohort` + per-survivor `OrthogonalMetrics`; renders the cohort-summary table with the three-axis column groups.
+
+The whole pipeline is linear — no loops, no shared mutable state between stages.  Each type is constructed once from already-produced outputs and is read-only thereafter.
+
+## Step 4 — Code-fit validation
+
+Four representative pieces of current code rewritten on paper against the new types.  The point is to surface gaps in the spec BEFORE migration starts, not to ship the rewrites here.
+
+### 4.1 Contamination check + reversion gating (the CL-3 fix)
+
+**Current code.**  `bin/boltz2_iterate_steering.py:cmd_build_contaminated` walks each prefilter-passing (design, seed) candidate; for each candidate that's intact AND ra_eff < threshold AND has at least one mutated position contacting effector, it appends a contaminated entry.  Result: per-(design, seed) gating — even one contaminated seed triggers reversion for the design.  This is the bug CL-3 fixes.
+
+**Rewrite using the new types.**
+
+```python
+# After Phase 4 migration, this becomes a method on NegativeSteeringRun
+# during construction, OR a CLI subcommand that takes a workdir and
+# produces contaminated.json the same way as today.
+
+def designs_needing_reversion(
+    self: NegativeSteeringRun,
+    thresholds: PipelineInternalThresholds,
+    contamination_positions: PositionSet,  # design_region ∪ true_interface
+) -> list[str]:
+    """Returns the design IDs (steered slots) that should have reversion run.
+    Applies CL-3: per-design majority rule, not per-seed."""
+    needing = []
+    for design_id, steered_stage in self.steered.items():
+        if steered_stage.triggers_next_stage(thresholds, contamination_positions):
+            needing.append(design_id)
+    return needing
+
+# StageResult.triggers_next_stage for stage_type == "steered" is:
+def triggers_next_stage(self, thresholds, contamination_positions):
+    if self.stage_type == "steered":
+        n_correctly_placed = self.n_correctly_placed(thresholds)
+        n_contaminated = self.n_contaminated(thresholds, contamination_positions)
+        if n_correctly_placed == 0:
+            return False  # nothing to revert
+        return n_contaminated >= math.ceil(n_correctly_placed / 2)
+    ...
+```
+
+**Discoveries (gaps surfaced).**
+- ✅ `contamination_positions` is a `PositionSet` — needs to come from somewhere.  In current code it's built from `cycle_0/plan.json` (`design_region ∪ true_interface`).  Means: `NegativeSteeringRun` needs a `contamination_positions(self)` method that loads + caches this from the workdir.  Add to §2.9.
+- ✅ `StageResult.n_correctly_placed` and `n_contaminated` need to access the per-seed metrics — those live in the `confidences` list and the `predictions` list (heavy-atom-contacts come from `ProteinStructurePrediction.receptor_contact_residues(cutoff)`).  Cutoff comes from `thresholds.contact_cutoff`.  Spec already supports this.
+- ⚠ The "mutated positions" needed by `n_contaminated` come from `DesignedSequence.mutations_vs_native()` — but the StageResult doesn't directly know its DesignedSequence.  Fix: `NegativeSteeringRun.designs_needing_reversion(...)` knows both, and either passes mutated_positions into `triggers_next_stage`, or `StageResult` carries a `mutated_positions: PositionSet | None` field at construction (per current §2.8 spec).
+
+**Conclusion.**  Spec covers this with one tiny addition (loading `contamination_positions` once from the workdir into `NegativeSteeringRun`).  CL-3 rule implementable cleanly.
+
+### 4.2 Cross-sequence aggregation (`cross_sequence_summary.aggregate` rewrite)
+
+**Current code.**  `bin/cross_sequence_summary.py:aggregate` reads every per-sequence `passing_summary.csv`, picks a representative row per sequence (tier-then-composite), cross-ranks across sequences, writes `cross_sequence_summary.csv` with `rep_*` columns.  ~200 LOC.
+
+**Rewrite using the new types.**
+
+```python
+def write_cross_summary(
+    runs_dir: Path,
+    output: Path,
+    thresholds: PipelineInternalThresholds,
+    scored_metadata: dict | None = None,
+):
+    cohort = DesignCohort.from_runs_directory(runs_dir)
+    if scored_metadata:
+        cohort.attach_designed_sequences(scored_metadata)
+    cohort.to_cross_summary_csv(output, thresholds)
+
+# DesignCohort.to_cross_summary_csv is:
+def to_cross_summary_csv(self, path, thresholds):
+    ranked = self.ranked_by_composite(thresholds)
+    rows = []
+    for cross_rank, run in enumerate(ranked, start=1):
+        row = {
+            "mpnn_sequence": run.mpnn_sequence_id,
+            "row_type": run.row_type,
+            "cross_rank_by_composite": cross_rank,
+            "cross_tier": run.tier(thresholds),
+            "cross_composite_score": run.composite_score(thresholds),
+            ...
+            "rep_canonical_pdb": str(run.canonical_prediction(thresholds).path),
+            "rep_ra_eff_vs_truth_median": run.median_ra_eff(thresholds),
+            ...
+        }
+        if run.designed_sequence is not None:
+            row["corrected_receptor"] = run.designed_sequence.corrected_receptor
+            row["designed_residues"] = run.designed_sequence.designed_residues
+            row["native_residues"] = run.designed_sequence.native_residues
+        rows.append(row)
+    csv.DictWriter(...).writerows(rows)
+```
+
+**Discoveries.**
+- ✅ The `rep_*` column names map cleanly to method calls on `NegativeSteeringRun` (`run.canonical_prediction(...)`, `run.median_ra_eff(...)`, etc.).  Spec covers it.
+- ⚠ `NegativeSteeringRun` needs convenience methods like `median_ra_eff`, `median_iptm`, etc. for every column that ends up in the rep_* group.  Either: (a) a wide explicit set of methods, (b) a single `aggregated_metric(name, thresholds)` method that takes a metric name.  Option (a) is more discoverable but verbose; (b) is dynamic but less safe.  Defer to first migration commit.
+- ✅ The tier-none fallback (`_pick_rep_from_aggregated` in current code) becomes part of `NegativeSteeringRun.canonical_prediction(thresholds)` — it knows what to do when passing_summary.csv is empty.
+- ✅ Sort by `(tier_order, -composite)` is `DesignCohort.ranked_by_composite(thresholds)`.
+
+**Conclusion.**  Spec covers this.  One implementation choice (wide methods vs metric-name method) to make at migration time.
+
+### 4.3 Per-seed cross-stage verdict aggregation
+
+**Current code.**  `bin/boltz2_iterate_steering.py:_per_seed_verdict_breakdown` + `_classify_outcome` together produce the final per-seed verdict tally for one MPNN sequence (used to compute `n_pass` and the aggregate `outcome` label).  Branches on whether the reversion verdict column is populated for each seed.
+
+**Rewrite using the new types.**
+
+```python
+# Method on NegativeSteeringRun:
+def per_seed_final_verdicts(
+    self, thresholds, contamination_positions
+) -> list[dict]:
+    """Returns one entry per (design, seed). If reversion ran for that
+    design, use the reversion verdict; otherwise use the steered verdict."""
+    entries = []
+
+    # Special case: cold-start path (no steering)
+    if not self.steered:  # cold-start was sufficient
+        cold_verdicts = self.cold_start.per_seed_verdicts(thresholds)
+        for seed_idx, verdict in zip(self.cold_start.seed_indices, cold_verdicts):
+            entries.append({
+                "design_id": "initial",
+                "seed_index": seed_idx,
+                "stage_run": "cold_start",
+                "verdict": verdict,  # "clean" or "fail_structural"
+            })
+        return entries
+
+    # Normal case: steered + maybe reversion
+    for design_id, steered_stage in self.steered.items():
+        steered_verdicts = steered_stage.per_seed_verdicts(
+            thresholds, contamination_positions
+        )
+        # Does this design's reversion exist?
+        rev_stage = self._reversion_for_design(design_id)  # may be None
+        if rev_stage is None:
+            # No reversion for this design — steered verdicts stand
+            for seed_idx, sv in zip(steered_stage.seed_indices, steered_verdicts):
+                entries.append({"design_id": design_id, "seed_index": seed_idx,
+                                "stage_run": "steered", "verdict": sv})
+        else:
+            rev_verdicts = rev_stage.per_seed_verdicts(
+                thresholds, contamination_positions
+            )
+            # Reverted verdicts override steered for matching seed_index
+            for seed_idx, rv in zip(rev_stage.seed_indices, rev_verdicts):
+                entries.append({"design_id": design_id, "seed_index": seed_idx,
+                                "stage_run": "reverted", "verdict": rv})
+    return entries
+
+def n_pass(self, thresholds, contamination_positions) -> int:
+    return sum(1 for e in self.per_seed_final_verdicts(thresholds, contamination_positions)
+               if e["verdict"] in ("clean_steered", "pose_holds", "clean"))
+```
+
+**Discoveries.**
+- ⚠ The mapping from a steered design to its reversion is not obvious.  Current code uses a label hash to dedupe by reverted sequence.  Need a `NegativeSteeringRun._reversion_for_design(design_id)` helper that walks the reversion stages and finds the one whose `mutated_positions` corresponds to this design's reversions.  Tracked: add this private method to §2.9.
+- ⚠ When a design's reversion deduplicates with another design (same reverted sequence), the same reversion stage is referenced by multiple designs.  The current code maps via `all_label_seeds` in reversion_metadata.json — needs to carry through to the rewritten type.  Spec needs: `StageResult` for reversion carries `applies_to_designs: list[str]`.  Add to §2.8.
+- ✅ The "verdict overrides steered" logic is clean once the dedup mapping is right.
+
+**Conclusion.**  Two small spec additions: `_reversion_for_design` on NegativeSteeringRun and `applies_to_designs` field on reversion-typed StageResult.
+
+### 4.4 Orthogonal filter check (`merge_orthogonal_metrics._apply_filters` rewrite)
+
+**Current code.**  `bin/merge_orthogonal_metrics.py:_apply_filters` reads a survivor's row, checks `sc >= 0.55 AND bsa >= 600 AND ddg <= reference`, returns flags list.  AF3 demoted to flag-only (post Phase 5 Q118 fix).
+
+**Rewrite using the new types.**
+
+```python
+def write_survivor_orthogonal_metrics(
+    survivors: list[NegativeSteeringRun],
+    runs_dir: Path,
+    output_csv: Path,
+    thresholds: PipelineInternalThresholds,
+):
+    rows = []
+    for survivor in survivors:
+        om = OrthogonalMetrics.from_orthogonal_outputs(
+            runs_dir / survivor.mpnn_sequence_id, survivor.mpnn_sequence_id
+        )
+        passes = om.passes_orthogonal_filters(thresholds)
+        failed = om.failed_filter_names(thresholds)
+        af3_disagree = om.af3_disagrees(thresholds)
+        rows.append({
+            "mpnn_sequence": survivor.mpnn_sequence_id,
+            "passes_orthogonal_filters": passes,
+            "failed_filters": ",".join(failed),
+            "af3_disagrees": af3_disagree,
+            **om.to_summary_row(),
+        })
+    csv.DictWriter(...).writerows(rows)
+```
+
+**Discoveries.**
+- ✅ Clean.  `OrthogonalMetrics` already owns the gate; the caller just iterates over survivors.
+- ✅ The test/production divergence (the long-standing `merge_orthogonal_metrics.py` problem) disappears because there's only one home for the gate logic — it's a method on `OrthogonalMetrics`, not a script that two copies of can drift.
+
+**Conclusion.**  Cleanest rewrite of the four.  Spec covers this without modification.
+
+### Step 4 summary — spec additions needed
+
+The four code-fit validations surfaced three small spec additions:
+
+1. **§2.8 `StageResult`** — for stage_type=`reversion`, carry an `applies_to_designs: list[str]` field that records which steered design_ids' contamination produced this unique reverted sequence.
+2. **§2.9 `NegativeSteeringRun`** — add `contamination_positions(self) -> PositionSet` (cached load of design_region ∪ true_interface from the workdir's plan.json).
+3. **§2.9 `NegativeSteeringRun`** — add private `_reversion_for_design(design_id) -> StageResult | None` helper that uses `applies_to_designs` to find the right reversion stage for a given design.
+
+No major structural changes needed.  Spec survives contact with reality.
 
 ---
 

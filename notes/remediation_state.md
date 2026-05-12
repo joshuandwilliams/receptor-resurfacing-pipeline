@@ -10,15 +10,30 @@ A living document tracking where the codebase remediation effort currently stand
 
 If a regression surfaces in the rfdiffusion or negsteer module test after this commit (those two were queued on GPU at the time and could not be verified in-session), bisect against `1f735c0` to pinpoint when the divergence was introduced.  The four CPU-only module tests (proteinmpnn, rosetta_filtering, orthogonal_metrics, and rfdiffusion's CPU portion) all reported `Success: true` against this commit; only negsteer needed a follow-up fix (`1cdefd6`, NO_FILE sentinel for the new `scored_metadata` input) before its first successful run.
 
-## Phase 4 architecture spec — Session 6 (in progress)
+## Phase 4 architecture spec — Session 6 (COMPLETE)
 
 Architecture grill-me Session 6 produced `notes/phase4_architecture_spec.md` — the written specification for the Phase 4 codebase rebuild under Strategy B (deep modules).  Spec covers 13 domain types: `ProteinStructurePrediction`, `ContigSpec`, `PositionSet`, `BoltzConfidenceMetrics`, `AF3ConfidenceAggregate`, `DesignedBackbone`, `DesignedSequence`, `StageResult`, `NegativeSteeringRun`, `DesignCohort`, `OrthogonalMetrics`, `PipelineParams`, `PipelineInternalThresholds`.
 
-**Step 1 (candidate type list) and Step 2 (per-type interfaces) are populated.**  Step 3 (type relationships) and Step 4 (code-fit validation against 3-4 representative current-code samples) are TODO — next grill-me batch.
+**All four steps populated:**
+- Step 1: candidate type list (13 types, triaged from initial 10 against the user's domain corrections).
+- Step 2: per-type interface specs — domain meaning, construction, methods, boundary, consolidation targets from current code.
+- Step 3: composition tree, dependency-order table (migration tiers 0→6), data flow through one pipeline run.
+- Step 4: four code-fit validations rewriting current code against the new types (contamination check + CL-3 fix; cross_sequence_summary aggregate; per-seed cross-stage verdict aggregation; orthogonal filter check).  Three small spec additions surfaced and back-fitted into §2.8 and §2.9.
 
-**CL-3 captured as the most significant behaviour-change to land during Phase 4 migration**: the reversion-gating rule moves from per-(design, seed) to per-design majority-of-correctly-placed.  This is the only intentional behaviour change in the Phase 4 plan; everything else is structural.
+**CL-3 captured as the only intentional behaviour change Phase 4 will make**: the reversion-gating rule moves from per-(design, seed) to per-design majority-of-correctly-placed.  Everything else is structural.
+
+**Migration tier order** (each tier's types are independent and can land in any order; tiers themselves are sequential):
+- T0: `ContigSpec`, `BoltzConfidenceMetrics`, `AF3ConfidenceAggregate`, `PipelineParams`, `PipelineInternalThresholds`.
+- T1: `PositionSet`.
+- T2: `ProteinStructurePrediction`.
+- T3: `DesignedBackbone`.
+- T4: `DesignedSequence`, `StageResult`, `OrthogonalMetrics`.
+- T5: `NegativeSteeringRun`.
+- T6: `DesignCohort`.
 
 Two new memory files added (recurring Claude failure modes): `project_no_reversion_semantics.md` and `project_contig_string_format.md`.  Both indexed in `MEMORY.md`.
+
+Next: implementation phase per the spec.  Each tier's types lands as its own commit, characterization tests re-run between commits using the workflow established in `tests/run_tests.sh` + `tests/update_example_dataset.slurm.sh`.
 
 ---
 
