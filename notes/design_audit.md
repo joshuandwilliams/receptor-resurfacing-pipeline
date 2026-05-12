@@ -2752,4 +2752,197 @@ is the primary result view. Known issues documented across the audit:
 
 ---
 
-*Session 5 continues — Q121 onwards below.*
+---
+
+### Batch 2 — Cohort summary, audit close (Q121–Q128)
+
+---
+
+**Q121 [VERIFY]** — Cohort summary: three column groups instead of two?
+
+**A121:** I think you could go one step further from that: 1) Boltz-2 structure
+2) Boltz-2 confidence and 3) Orthogonal. This is a good idea.
+
+**Decision**: Three visual column groups in the cohort summary:
+1. **Boltz-2 structure** — composite, Boltz ra_eff, rec RMSD, true_jaccard, n_mut
+2. **Boltz-2 confidence** — complex_plddt, iptm, ipae, pae_pass_frac, iface_plddt, ipsae_min_15
+3. **Orthogonal** — AF3 ra_eff, Sc, BSA, ΔΔG, weighted_jaccard
+
+→ Phase 4: add group header row to `plot_combined_cohort_orthogonal_summary`.
+
+---
+
+**Q122 [VERIFY]** — AF3 `best_ra_eff`: add `(best)` label only.
+
+**A122:** It's only AF3 that uses the best one right? That's a single column.
+You can just add (best) in small text for that column. Otherwise median can
+be assumed. I don't want to overcrowd the plot.
+
+**Decision**: Add `(best)` suffix to the AF3 ra_eff column label only. All Boltz
+columns are implicitly median and need no label change. Confirmed code: the column
+is `af3_nomsa_best_ra_eff` (best of 15 predictions) in `COMBINED_SUMMARY_COLUMNS`.
+
+---
+
+**Q123 [VERIFY + INVESTIGATION]** — Tier A design with ipae=17.58, pae_pass_frac=0.0.
+Is the thresholding on best or median values?
+
+**A123:** This may have brought up a really important point about thresholding.
+[...] I wonder if the thresholding is conducted on the best or median values -
+it should be on the median values, as it is in the plot. It shouldn't be possible
+for a 17.58 ipae median to be tier A, because at least 2 of the 3 seeds must have
+had ipae values greater than the threshold.
+
+**Code check and investigation**:
+
+The specific case is `design_42_seq_0` (full_test_run): cross_tier=A,
+n_seeds_pose_holds=3, ra_eff_median=2.897Å, ipae_median=17.58, pae_pass_frac=0.0.
+
+**Finding 1 — Thresholding is correctly on median values**: The plot uses
+`representative_ipae_median` and `representative_pae_pass_frac_median` (confirmed
+from `COMBINED_SUMMARY_COLUMNS`). Tier A is assigned from `n_pass = n_seeds_pose_holds
++ n_seeds_clean_steered = n_seeds = 3` — based purely on structural placement (ra_eff
+< 5Å AND intact), NOT on confidence metrics. A Tier A design can have any ipae value.
+This is expected and intentional — the pipeline explicitly documents that Boltz can
+produce structurally correct placements with poor confidence (documented throughout
+the negsteer notes as the central finding for these novel interfaces).
+
+**Finding 2 — This specific case is from a pre-fix run**: The full_test_run was
+submitted 2026-04-30; the chain-param bug fix (commit a4ef1f7) was 2026-05-03.
+Confidence metrics (`ipae`, `pae_pass_frac`) were computed using the wrong effector
+chain in that run. The `pae_pass_frac=0.0` for a design with ra_eff=2.897Å is
+almost certainly an artifact of that historical bug (documented in Q98/remediation_state.md),
+not a genuine pipeline behaviour. The structural metric (ra_eff) was computed
+correctly in that run.
+
+**Conclusion**: No code bug. The user's concern is valid as a conceptual question
+("can a Tier A design have poor confidence?") — and the answer is yes, it can,
+and this is expected. The specific numbers in the screenshot are from a buggy
+historical run and should not be used as the canonical example.
+
+**UX fix needed**: The three column groups from Q121 will make the independence
+of tier (structure) and confidence clearly visible. The label "Tier A design with
+red confidence cells" should read as "found the correct interface but Boltz is
+uncertain about it" — a meaningful finding, not an error.
+
+---
+
+**Q124 [UNKNOWN]** — What should be implemented before the Phase 4 architecture
+session?
+
+**A124:** I think all should be added before the Phase 4 architecture session,
+since then we have all our content there and it's just a matter of redesigning it.
+
+**Items queued for pre-architecture implementation**:
+1. ~~`interface_plddt` removal from orthogonal cascade~~ — DONE (Q118)
+2. Cohort summary table fixes (three groups, AF3 label, legend) — Q121-Q123
+3. `num_seeds` odd validation — Q46
+4. MPNN sequence columns in cross_sequence_summary — Q116
+5. Input validation script (`bin/validate_params.py`) — Q117
+
+All five items complete before starting Phase 4 architecture design session.
+
+---
+
+**Q125 [VERIFY]** — Six F-rated cmd_* functions: any untouchable?
+
+**A125:** I don't consider any of them untouchable.
+
+**Synthesis note**: All six are eligible for Phase 4 decomposition.
+`cmd_compute_final_metrics` (CC 72→31 already, 6 remaining F-rated helpers
+still deferred), `cmd_kickoff`, `cmd_kickoff_finalize`, `cmd_aggregate`,
+`cmd_aggregate_per_sequence`, `cmd_collect`. Normal per-commit safety net applies.
+
+---
+
+**Q126 [VERIFY]** — Merge `derive_design_region.py` and `derive_true_interface.py`?
+
+**A126:** No reason to keep them separate.
+
+**Decision**: Merge into `derive_indices.py --mode design-region|true-interface`.
+The four shared functions are verbatim identical; only `derive_positional_indices`
+body differs. Phase 4 implementation.
+
+---
+
+**Q127 [UNKNOWN]** — Continue formal sessions or move to Phase 4?
+
+**A127:** I think the audit has covered enough to move into the Phase 4
+implementation. It wouldn't be meaningful to talk about things in tiny detail and
+then change them hugely. The rest of the questions can follow or occur during the
+restructuring process.
+
+**Decision**: Formal grill-me audit ends here at 128 questions. The remaining
+~190 questions in the original plan will be addressed organically during Phase 4
+implementation — each code change will surface the specific questions that matter.
+The audit document serves as the architectural spec.
+
+---
+
+**Q128 [UNKNOWN]** — What single issue caused the most friction day-to-day?
+
+**A128:** The terminology confusion. There are so many terms in this pipeline,
+which is fine, but we just have to be super clear about what each of them mean.
+I think from our questions I understand now, but it will be important when I
+come to write up this work to have a reference to work off of. I think we created
+a shared glossary of terms at some point in the notes/inventory/ folder, and this
+may need updating with some of the discussions we've had today.
+
+**Synthesis note**: The ubiquitous language document (`notes/inventory/06_ubiquitous_language.md`)
+exists and needs updating with key decisions from this audit:
+- `clean_steered` definition (structural correct + no contamination)
+- `no_data` definition (failed ra_eff or intact before contamination check)
+- `no_reversion` ambiguity (two meanings — disambiguated by tier)
+- `n_pass` formula and denominator
+- The three-axis framework (Boltz structure / Boltz confidence / Orthogonal)
+- `passes_orthogonal_filters` semantics (only Sc, BSA, ΔΔG — not pLDDT)
+- `outcome` (renamed from `aggregated_verdict`)
+
+→ Update the glossary before starting Phase 4 to lock in the terminology for
+the restructuring work.
+
+---
+
+## Audit close — Summary of decisions and action items
+
+### Immediate actions (pre-Phase 4 architecture session)
+
+| Item | Status |
+|---|---|
+| `interface_plddt` removed from orthogonal cascade | ✅ DONE |
+| params_example.yml defaults updated to production values | ✅ DONE |
+| `stop_after_rosetta` documented prominently | ✅ DONE |
+| Cohort summary: three column groups + AF3 (best) label + legend | → implement |
+| `num_seeds` odd validation in `negative_steering_run_one.sh` | → implement |
+| MPNN sequences added to `cross_sequence_summary.csv` | → implement |
+| Input validation script `bin/validate_params.py` | → implement |
+| Ubiquitous language glossary updated | → implement |
+
+### Phase 4 architecture — scope confirmed
+
+**boltz_lib.py**: `get_chain_sequence`, `find_contact_residues_heavy` (negsteer version),
+`jaccard`, weighted_jaccard primitives, `binding_rmsds`, `write_boltz_yaml`,
+Cα/Kabsch helpers, residue dataclasses.
+
+**plot_lib.py**: `make_empty_plot`, `save_fallback_plots`, `COLOUR_TIER`,
+`_TIER_SORT_ORDER`, `COMPOSITE_RA_EFF_WEIGHT`, shared utilities.
+
+**derive_indices.py**: merge `derive_design_region.py` + `derive_true_interface.py`.
+
+**terminology**: `aggregated_verdict` → `outcome`; `representative_` → `rep_`;
+n_seeds_* consolidated to `n_pass` + `n_seeds`.
+
+**contig parsers**: `_parse_contigs` and `parse_contig_segments` rewritten to
+use `parse_block_segments` as backend.
+
+### Multi-cycle — first post-remediation feature
+
+Extend `negative_steering_run_one.sh` to loop over cycles inline (no sbatch).
+Continue while novel incorrect placements are found; stop if correct interface found
+or novelty exhausted. Gate implemented using existing `cmd_kickoff_distances` logic.
+
+### Threshold audit (Task 47) — methodology confirmed
+
+1. Research and document reasoning for each threshold
+2. Run all five campaigns with corrected code
+3. Assess per-campaign; update thresholds accordingly
