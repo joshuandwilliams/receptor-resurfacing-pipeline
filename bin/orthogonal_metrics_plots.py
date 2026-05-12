@@ -83,16 +83,29 @@ import matplotlib.lines as mlines
 from matplotlib.ticker import MaxNLocator
 
 
-# ── Threshold defaults (must match params_example.yml) ───────────────────
-ORTHOG_AF3_RA_MAX  = 5.0       # mandatory hard drop
-ORTHOG_SC_MIN      = 0.55      # Lawrence-Colman shape complementarity
-ORTHOG_BSA_MIN     = 600.0     # Å² (Overath et al. 2025)
-ORTHOG_PLDDT_MIN   = 0.75      # mean interface pLDDT
-
-# Bennett 2023 reference for ΔΔG_binding on de novo binders.
-DDG_BENNETT_REFERENCE = -30.0
-
-COMPOSITE_RA_EFF_WEIGHT = 0.05    # negsteer composite for cross-context
+# ── Threshold defaults ───────────────────────────────────────────────────
+# Sourced from PipelineInternalThresholds (Phase 4 §2.13).  Falls back to
+# literals if pipeline_thresholds isn't importable so the script stays
+# usable standalone.  ORTHOG_PLDDT_MIN is informational only — NOT in the
+# orthogonal_filters gate (see Phase 4 spec §2.11 + commit 47cb9f2).
+try:
+    import sys as _sys
+    _sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from pipeline_thresholds import PipelineInternalThresholds as _PIT  # noqa: E402
+    _T = _PIT.default()
+    ORTHOG_AF3_RA_MAX  = _T.orthogonal_af3_ra_max
+    ORTHOG_SC_MIN      = _T.orthogonal_sc_min
+    ORTHOG_BSA_MIN     = _T.orthogonal_bsa_min
+    ORTHOG_PLDDT_MIN   = _T.orthogonal_plddt_min_informational
+    DDG_BENNETT_REFERENCE   = _T.orthogonal_ddg_max
+    COMPOSITE_RA_EFF_WEIGHT = _T.composite_ra_eff_weight
+except Exception:
+    ORTHOG_AF3_RA_MAX  = 5.0
+    ORTHOG_SC_MIN      = 0.55
+    ORTHOG_BSA_MIN     = 600.0
+    ORTHOG_PLDDT_MIN   = 0.75
+    DDG_BENNETT_REFERENCE   = -30.0
+    COMPOSITE_RA_EFF_WEIGHT = 0.05
 
 
 # ── Styling ──────────────────────────────────────────────────────────────

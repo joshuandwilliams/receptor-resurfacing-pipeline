@@ -29,52 +29,42 @@ from contig_utils import THREE_TO_ONE
 def parse_contig_segments(contigs, receptor_chain="A"):
     """Parse the contig string into an ordered list of segments for the receptor.
 
+    Thin adapter around :class:`contig_spec.ContigSpec` (Phase 4 Tier 0).
     Returns a list of dicts, each with:
       type:  'fixed' or 'denovo'
       start: PDB start residue (fixed only)
       end:   PDB end residue (fixed only)
       min_len: minimum de novo length (denovo only)
       max_len: maximum de novo length (denovo only)
-
-    Example for "A1-400/20-30/A426-435":
-      [{'type':'fixed', 'start':1, 'end':400},
-       {'type':'denovo', 'min_len':20, 'max_len':30},
-       {'type':'fixed', 'start':426, 'end':435}]
     """
-    parts = contigs.split()
-    receptor_part = None
-    for part in parts:
-        # Find block that contains receptor chain segments
-        if receptor_chain.upper() in part.upper():
-            receptor_part = part
-            break
-    if not receptor_part:
+    import sys as _sys
+    from pathlib import Path as _Path
+    _sys.path.insert(0, str(_Path(__file__).resolve().parent))
+    from contig_spec import ContigSpec, FixedSegment, DeNovoSegment  # noqa: E402
+
+    try:
+        spec = ContigSpec.from_string(contigs)
+    except ValueError:
+        return []
+
+    chain_id_upper = receptor_chain.upper()
+    chain = next(
+        (c for c in spec.chains if c.chain_id.upper() == chain_id_upper),
+        None,
+    )
+    if chain is None:
         return []
 
     segments = []
-    for seg in receptor_part.split("/"):
-        seg = seg.strip()
-        if not seg or seg == "0":
-            continue
-
-        if seg[0].isalpha() and seg[0].upper() == receptor_chain.upper():
-            # Fixed receptor segment: A1-400, A403, A426-435
-            rest = seg[1:]
-            if "-" in rest:
-                parts_r = rest.split("-")
-                start, end = int(parts_r[0]), int(parts_r[1])
-            else:
-                start = end = int(rest)
-            segments.append({'type': 'fixed', 'start': start, 'end': end})
-        elif seg[0].isdigit():
-            # De novo segment: 1-1, 20-30, 5-5
-            if "-" in seg:
-                parts_r = seg.split("-")
-                min_len, max_len = int(parts_r[0]), int(parts_r[1])
-            else:
-                min_len = max_len = int(seg)
-            segments.append({'type': 'denovo', 'min_len': min_len, 'max_len': max_len})
-
+    for seg in chain.segments:
+        if isinstance(seg, FixedSegment):
+            segments.append({'type': 'fixed', 'start': seg.start, 'end': seg.end})
+        elif isinstance(seg, DeNovoSegment):
+            segments.append({
+                'type': 'denovo',
+                'min_len': seg.min_len,
+                'max_len': seg.max_len,
+            })
     return segments
 
 
@@ -130,21 +120,6 @@ def get_pdb_chain_residues(pdb_path):
                     seen.add(key)
                     chains.setdefault(chain, []).append(resnum)
     return chains
-
-
-def get_pdb_sequence(pdb_path, chain_id):
-    """Extract amino acid sequence from a PDB file for a given chain."""
-    residues = {}
-    with open(pdb_path) as f:
-        for line in f:
-            if line.startswith("ATOM") and line[21] == chain_id:
-                resnum = int(line[22:26].strip())
-                resname = line[17:20].strip()
-                if resnum not in residues:
-                    residues[resnum] = resname
-    resnums = sorted(residues.keys())
-    seq = ''.join(THREE_TO_ONE.get(residues[r], 'X') for r in resnums)
-    return seq, resnums
 
 
 # ---------------------------------------------------------------------------

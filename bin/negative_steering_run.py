@@ -92,6 +92,41 @@ class NegativeSteeringRun:
     def num_seeds(self) -> int:
         return self.cold_start.num_seeds
 
+    # ── Construction from a per-sequence workdir ──────────────────
+
+    @classmethod
+    def from_workdir(
+        cls,
+        workdir,
+        mpnn_sequence_id: str,
+        num_seeds: int = 3,
+        truth_psp=None,
+        contamination_positions=None,
+    ):
+        """Build a NegativeSteeringRun by reading a per-MPNN workdir.
+
+        STATUS: deep form NOT IMPLEMENTED.  Faithfully reconstructing
+        the StageResult / PSP chain from a workdir requires walking
+        every cold_start / steered / reversion subdir, identifying the
+        per-seed PDBs and confidence sidecars, and resolving the
+        applies_to_designs mapping for each reverted sequence.  That
+        work is scoped to a dedicated session after CL-3 has been
+        validated against real cohort data.
+
+        For cohort-level queries that only need tier / n_pass /
+        outcome / composite score, use
+        :meth:`design_cohort.DesignCohort.from_cross_summary_csv`
+        which returns a CrossSummarySnapshot — a shallow typed view
+        over the already-emitted cross_sequence_summary.csv with the
+        same survivors / tier_breakdown / ranked_by_composite query
+        interface.
+
+        Returns None to signal "deep form not buildable from this
+        workdir" so that batch factories (DesignCohort.from_runs_
+        directory) can skip and continue rather than crash.
+        """
+        return None
+
     # ── Reversion mapping (per spec §2.9 + Step 4.3 addition) ──────
 
     def _reversion_for_design(self, design_id: str) -> Optional[StageResult]:

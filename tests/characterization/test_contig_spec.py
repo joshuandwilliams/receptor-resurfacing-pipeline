@@ -81,9 +81,10 @@ class TestParseErrors:
         with pytest.raises(ValueError, match="empty"):
             cs.ContigSpec.from_resolved_string("")
 
-    def test_range_denovo_rejected(self):
-        """Constraint-form (e.g. ``5-7``) must be resolved upstream."""
-        with pytest.raises(ValueError, match="resolved contigs only"):
+    def test_range_denovo_rejected_by_from_resolved_string(self):
+        """Constraint-form (e.g. ``5-7``) must be resolved upstream when
+        the caller asks for the strict form."""
+        with pytest.raises(ValueError, match="unresolved"):
             cs.ContigSpec.from_resolved_string("A1-10/5-7/A15-20")
 
     def test_invalid_fixed_range(self):
@@ -227,12 +228,54 @@ class TestFixedSegment:
 class TestDeNovoSegment:
     def test_negative_length_raises(self):
         with pytest.raises(ValueError):
-            cs.DeNovoSegment(length=-1)
+            cs.DeNovoSegment(min_len=-1, max_len=-1)
 
     def test_zero_length_allowed(self):
         # Edge case: a 0-length de novo segment is degenerate but allowed
-        s = cs.DeNovoSegment(length=0)
+        s = cs.DeNovoSegment.resolved(0)
         assert s.length == 0
+        assert s.is_resolved
+
+    def test_range_form(self):
+        s = cs.DeNovoSegment(min_len=5, max_len=7)
+        assert not s.is_resolved
+        with pytest.raises(ValueError):
+            _ = s.length
+
+    def test_max_lt_min_raises(self):
+        with pytest.raises(ValueError):
+            cs.DeNovoSegment(min_len=7, max_len=5)
+
+    def test_to_string(self):
+        assert cs.DeNovoSegment.resolved(5).to_string() == "5"
+        assert cs.DeNovoSegment(min_len=5, max_len=7).to_string() == "5-7"
+
+
+@pytest.mark.local_unit
+class TestConstraintForm:
+    def test_from_string_accepts_ranges(self):
+        spec = cs.ContigSpec.from_string("A1-10/5-7/A15-20 B")
+        assert not spec.is_resolved
+        denovos = spec.denovo_segments("A")
+        assert denovos[0].min_len == 5 and denovos[0].max_len == 7
+
+    def test_from_resolved_string_rejects_ranges(self):
+        with pytest.raises(ValueError):
+            cs.ContigSpec.from_resolved_string("A1-10/5-7/A15-20 B")
+
+    def test_resolved_round_trip_via_from_string(self):
+        spec = cs.ContigSpec.from_string("A1-10/5/A15-20 B")
+        assert spec.is_resolved
+        denovos = spec.denovo_segments("A")
+        assert denovos[0].length == 5
+
+    def test_min_max_total_length(self):
+        spec = cs.ContigSpec.from_string("A1-10/5-7/A15-20")
+        chain = spec.chain("A")
+        assert chain.min_total_length == 10 + 5 + 6
+        assert chain.max_total_length == 10 + 7 + 6
+        with pytest.raises(ValueError):
+            _ = chain.total_length
 
 
 @pytest.mark.local_unit

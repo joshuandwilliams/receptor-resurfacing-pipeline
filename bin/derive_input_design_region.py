@@ -79,58 +79,44 @@ def _parse_contigs(
     effector_chain: str,
 ) -> List[Tuple[str, int, int, bool]]:
     """
-    Parse an RFDiffusion contigs string into a flat sequence of segments.
+    Parse an RFDiffusion contigs string into the legacy flat-tuple form.
 
-    Returns a list of (chain_id, start, end, is_denovo) tuples in the
-    order they appear in the contigs.  is_denovo is True for numeric-only
-    segments (design region — positions TO BE built, not positions IN
-    the input), False for chain-letter-prefixed anchor segments.
+    Thin adapter around :class:`contig_spec.ContigSpec` (Phase 4 Tier 0).
+    Accepts the canonical slash/space form (``A1-10/5/A15-20 B``) and
+    re-shapes the structured ContigSpec back into the legacy tuple list
+    that the receptor-positions walker downstream expects.
 
-    The ``start`` and ``end`` are:
-      - for anchor segments: the receptor/effector position RANGE that
-        must be present in the input PDB (inclusive);
-      - for de novo segments: the min/max of the length sampling range
-        (these are NOT positions — they're lengths that RFDiffusion
-        samples from).
+    Comma-separated tokens are tolerated for back-compat but discouraged
+    — the canonical form is ``/``-within-chain, space-between-chains
+    (see memory project_contig_string_format.md).
+
+    Returns a list of (chain_id, start, end, is_denovo) tuples:
+      - anchor segments: chain prefix, native residue range;
+      - de novo segments: chain_id = ``"_denovo"``, start = min_len,
+        end = max_len.
+      - bare effector chain (e.g. ``B``): single tuple
+        (effector_chain, 0, 0, False).
     """
-    # Strip slashes — contigs blocks can be grouped with "/" but for our
-    # purposes every segment is independent.
-    normalised = contigs_str.replace(",", " ").replace("/", " ")
-    tokens = [t.strip() for t in normalised.split() if t.strip()]
+    import sys as _sys
+    _sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from contig_spec import ContigSpec, FixedSegment, DeNovoSegment  # noqa: E402
+
+    # Tolerate commas by mapping them to spaces.  ContigSpec.from_string
+    # is canonical-form-only.
+    normalised = contigs_str.replace(",", " ")
+    spec = ContigSpec.from_string(normalised)
 
     out: List[Tuple[str, int, int, bool]] = []
-    for tok in tokens:
-        # Pure effector-chain tokens: "B" alone.
-        if tok.upper() == effector_chain.upper():
-            out.append((effector_chain, 0, 0, False))
+    for chain in spec.chains:
+        if not chain.segments:
+            # Bare-chain block (typically the effector).
+            out.append((chain.chain_id, 0, 0, False))
             continue
-        # Chain-letter-prefixed anchor segment, e.g. "A1-50" or "A5".
-        if tok[0].isalpha():
-            chain = tok[0]
-            rest = tok[1:]
-            if not rest:
-                raise ValueError(f"Malformed contig token: {tok!r}")
-            if "-" in rest:
-                try:
-                    s, e = [int(x) for x in rest.split("-")]
-                except ValueError:
-                    raise ValueError(f"Malformed contig token: {tok!r}")
-            else:
-                s = e = int(rest)
-            out.append((chain, s, e, False))
-            continue
-        # Numeric-only de novo / flexible segment, e.g. "5-15" or "10".
-        if "-" in tok:
-            try:
-                s, e = [int(x) for x in tok.split("-")]
-            except ValueError:
-                raise ValueError(f"Malformed contig token: {tok!r}")
-        else:
-            try:
-                s = e = int(tok)
-            except ValueError:
-                raise ValueError(f"Malformed contig token: {tok!r}")
-        out.append(("_denovo", s, e, True))
+        for seg in chain.segments:
+            if isinstance(seg, FixedSegment):
+                out.append((chain.chain_id, seg.start, seg.end, False))
+            elif isinstance(seg, DeNovoSegment):
+                out.append(("_denovo", seg.min_len, seg.max_len, True))
     return out
 
 

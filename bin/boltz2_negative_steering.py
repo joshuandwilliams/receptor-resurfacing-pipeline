@@ -880,6 +880,11 @@ def read_ca_atoms(pdb_path: Path) -> List[CAEntry]:
     """Single-pass Cα reader.  First altloc per residue wins; seq_index
     is per-chain file order, which matches what Boltz emits.
 
+    See also ``rfdiffusion_filter.read_ca_atoms`` — same name, different
+    shape: that one returns plain coord dicts and a chain= filter.  This
+    one is the structurally-correct reader for arbitrary PDBs (altlocs,
+    insertion codes).
+
     Insertion codes (PDB column 26) are part of the residue identity:
     residues 100, 100A, 100B are three distinct residues and must each
     get their own seq_index.  Reference PDBs from the wwPDB routinely
@@ -1013,6 +1018,16 @@ def find_contact_residues_heavy(
     expected_rec_seq: str = None,
 ) -> List[Tuple[int, float]]:
     """Closest-heavy-atom contact detection.
+
+    See also ``compute_metrics.find_contact_residues_heavy`` — a second
+    implementation with an identical signature, used by
+    ``derive_input_design_region.py``.  Both now do icode-aware
+    bucketing and produce the same (per-chain 0-based positional
+    index, distance) pairs; this copy additionally sorts by distance
+    ascending and uses ``read_residue_heavy_atoms`` (which atom-keys
+    each residue, useful for the per-residue weighting calls
+    downstream of contamination detection).  Future refactor: collapse
+    both behind a shared pdb_atom_io helper.
 
     Returns a list of (receptor_seq_index, min_distance) for every
     receptor residue whose closest heavy atom is within `cutoff` Å of

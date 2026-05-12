@@ -64,7 +64,14 @@ def parse_args():
 # ═══════════════════════════════════════════════════════════════════════════
 
 def read_ca_atoms(pdb_path, chain=None):
-    """Extract Cα atoms as list of dicts: [{chain, resnum, x, y, z}, ...]."""
+    """Extract Cα atoms as list of dicts: [{chain, resnum, x, y, z}, ...].
+
+    See also ``boltz2_negative_steering.read_ca_atoms`` — same name,
+    different shape: that one returns ``List[CAEntry]`` with numpy xyz
+    plus per-chain seq_index and is altloc/icode aware.  This one is
+    a plain coord-dict reader optimised for RFDiffusion output PDBs
+    (clean, no altlocs, no insertion codes).
+    """
     atoms = []
     with open(pdb_path) as f:
         for line in f:

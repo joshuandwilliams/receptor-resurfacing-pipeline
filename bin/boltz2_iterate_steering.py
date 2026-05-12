@@ -92,6 +92,15 @@ if str(SCRIPT_DIR) not in sys.path:
 # stay in sync with.  See that file for the field-by-field rationale.
 from reversion import _REVERTED_CONFIDENCE_FIELDS  # noqa: E402
 
+# Receptor-fold "intact" threshold — sourced from PipelineInternalThresholds
+# (Phase 4 §2.13) with literal fallback so this module stays importable in
+# environments without the thresholds catalogue (Phase 2 entry points).
+try:
+    from pipeline_thresholds import PipelineInternalThresholds as _PIT  # noqa: E402
+    _INTACT_THRESHOLD = _PIT.default().intact_threshold
+except Exception:
+    _INTACT_THRESHOLD = 5.0
+
 # Lazy import of boltz2_negative_steering — it transitively imports
 # numpy and Bio.Align which are only present inside the singularity
 # container.  Phase-2 entry points (iterate-collect, kickoff,
@@ -1059,8 +1068,8 @@ def cmd_iterate_collect(args: argparse.Namespace) -> int:
     candidates = []
     for c in distances.get("candidates", []):
         intact = (
-            c["independent_receptor_rmsd"] <= 5.0
-            and c["independent_effector_rmsd"] <= 5.0
+            c["independent_receptor_rmsd"] <= _INTACT_THRESHOLD
+            and c["independent_effector_rmsd"] <= _INTACT_THRESHOLD
         )
         c2 = dict(c)
         c2["receptor_intact"] = intact
@@ -1197,8 +1206,8 @@ def cmd_iterate_collect_prefilter(args: argparse.Namespace) -> int:
     intact_candidates: List[Dict] = []
     for c in distances.get("candidates", []):
         intact = (
-            c["independent_receptor_rmsd"] <= 5.0
-            and c["independent_effector_rmsd"] <= 5.0
+            c["independent_receptor_rmsd"] <= _INTACT_THRESHOLD
+            and c["independent_effector_rmsd"] <= _INTACT_THRESHOLD
         )
         c2 = dict(c)
         c2["receptor_intact"] = intact
@@ -2081,8 +2090,8 @@ def cmd_kickoff(args: argparse.Namespace) -> int:
     candidates = []
     for c in distances.get("candidates", []):
         intact = (
-            c["independent_receptor_rmsd"] <= 5.0
-            and c["independent_effector_rmsd"] <= 5.0
+            c["independent_receptor_rmsd"] <= _INTACT_THRESHOLD
+            and c["independent_effector_rmsd"] <= _INTACT_THRESHOLD
         )
         c2 = dict(c)
         c2["receptor_intact"] = intact
@@ -2196,8 +2205,8 @@ def cmd_kickoff_prefilter(args: argparse.Namespace) -> int:
     intact_candidates: List[Dict] = []
     for c in distances.get("candidates", []):
         intact = (
-            c["independent_receptor_rmsd"] <= 5.0
-            and c["independent_effector_rmsd"] <= 5.0
+            c["independent_receptor_rmsd"] <= _INTACT_THRESHOLD
+            and c["independent_effector_rmsd"] <= _INTACT_THRESHOLD
         )
         c2 = dict(c)
         c2["receptor_intact"] = intact

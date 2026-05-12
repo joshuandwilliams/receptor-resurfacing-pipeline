@@ -602,6 +602,13 @@ def find_contact_residues_heavy(
 ):
     """Per-residue heavy-atom contact analysis on the receptor chain.
 
+    See also ``boltz2_negative_steering.find_contact_residues_heavy``
+    — a second implementation with the same signature that returns
+    identical positional indices (both icode-aware as of Phase 4) but
+    additionally sorts by distance and uses richer per-residue atom
+    bookkeeping.  Future refactor: collapse both behind a shared
+    pdb_atom_io helper.
+
     Walks receptor residues in PDB order, computes the closest heavy-
     atom distance to any effector heavy atom, and returns a list of
     (positional_index_0b, closest_distance_angstroms) tuples for the
@@ -623,25 +630,53 @@ def find_contact_residues_heavy(
     Hydrogens are excluded.  Only ATOM records are read.  Returns an
     empty list if either chain is missing.
     """
-    by_chain = _parse_heavy_atoms_by_chain(pdb_path)
-    if receptor_chain not in by_chain or effector_chain not in by_chain:
-        return []
+    # Inline icode-aware parser.  Unlike _parse_heavy_atoms_by_chain
+    # (which keys by resseq only), this preserves the (resseq, icode)
+    # tuple so that residues with the same number but different
+    # insertion codes — common in wwPDB structures — get distinct
+    # positional indices.  Matches read_residue_heavy_atoms in
+    # bin/boltz2_negative_steering.py.
+    rec_residue_order = []   # list of (resseq, icode) in PDB walk order
+    rec_residue_atoms = {}   # (resseq, icode) -> list of (x, y, z)
+    eff_atoms_xyz = []
+    with open(pdb_path) as f:
+        for line in f:
+            if not line.startswith("ATOM"):
+                continue
+            altloc = line[16:17]
+            if altloc not in (" ", "", "A"):
+                continue
+            element = line[76:78].strip() if len(line) >= 78 else ""
+            if element == "H":
+                continue
+            if not element:
+                atom_name = line[12:16].strip()
+                if atom_name.startswith("H") or (
+                    len(atom_name) >= 2
+                    and atom_name[0].isdigit()
+                    and atom_name[1] == "H"
+                ):
+                    continue
+            chain_id = line[21:22].strip() or " "
+            try:
+                resseq = int(line[22:26])
+                icode = line[26:27]
+                x = float(line[30:38])
+                y = float(line[38:46])
+                z = float(line[46:54])
+            except (ValueError, IndexError):
+                continue
+            if chain_id == receptor_chain:
+                key = (resseq, icode)
+                if key not in rec_residue_atoms:
+                    rec_residue_order.append(key)
+                    rec_residue_atoms[key] = []
+                rec_residue_atoms[key].append((x, y, z))
+            elif chain_id == effector_chain:
+                eff_atoms_xyz.append((x, y, z))
 
-    # Group receptor heavy atoms by residue, preserving PDB walk order.
-    # The flat list from _parse_heavy_atoms_by_chain is already in
-    # ATOM-record order, so we walk it once and bucket by resseq while
-    # maintaining first-seen order via an ordered list of resseqs.
-    rec_atoms_flat = by_chain[receptor_chain]
-    if not rec_atoms_flat:
+    if not rec_residue_order or not eff_atoms_xyz:
         return []
-
-    rec_residue_order = []        # list of resseq, in PDB walk order
-    rec_residue_atoms = {}        # resseq -> list of (x, y, z)
-    for (resseq, x, y, z) in rec_atoms_flat:
-        if resseq not in rec_residue_atoms:
-            rec_residue_order.append(resseq)
-            rec_residue_atoms[resseq] = []
-        rec_residue_atoms[resseq].append((x, y, z))
 
     if expected_rec_seq is not None and len(rec_residue_order) != len(expected_rec_seq):
         raise ValueError(
@@ -650,17 +685,11 @@ def find_contact_residues_heavy(
             f"match expected_rec_seq length ({len(expected_rec_seq)})."
         )
 
-    eff_atoms = by_chain[effector_chain]
-    if not eff_atoms:
-        return []
-    eff_xyz = np.array([(x, y, z) for (_r, x, y, z) in eff_atoms],
-                       dtype=np.float64)
-
+    eff_xyz = np.array(eff_atoms_xyz, dtype=np.float64)
     out = []
     cutoff_f = float(cutoff)
-    for pos_idx, resseq in enumerate(rec_residue_order):
-        rec_xyz = np.array(rec_residue_atoms[resseq], dtype=np.float64)
-        # Pairwise distances: (n_rec_atoms_in_residue, n_eff_atoms)
+    for pos_idx, key in enumerate(rec_residue_order):
+        rec_xyz = np.array(rec_residue_atoms[key], dtype=np.float64)
         diff = rec_xyz[:, None, :] - eff_xyz[None, :, :]
         d2 = np.einsum("ijk,ijk->ij", diff, diff)
         min_d = float(np.sqrt(d2.min()))
@@ -854,13 +883,22 @@ def _finalize_entry(entry, pae_matrix, chain_lengths, pae_cutoff=10.0):
 # alongside the PAE-derived metrics, rather than as a post-hoc pass.
 # ═══════════════════════════════════════════════════════════════════════════
 
-# Gaussian weight parameters for weighted Jaccard (P0-38).  Hard-coded
-# to keep cross-cohort comparisons valid — see the original docstring
-# in compute_interface_metrics.py for the full rationale.  If a future
-# cohort needs different parameters, emit a NEW column rather than
-# re-tuning these.
-_WJ_MU = 4.0
-_WJ_TWO_SIGMA_SQ = 2.25
+# Gaussian weight parameters for weighted Jaccard (P0-38).  Sourced from
+# PipelineInternalThresholds (Phase 4 §2.13) with literal fallback.
+# Values are kept stable across cohorts — see the original docstring in
+# compute_interface_metrics.py.  If a future cohort needs different
+# parameters, emit a NEW column rather than re-tuning these.
+try:
+    import sys as _sys
+    from pathlib import Path as _Path
+    _sys.path.insert(0, str(_Path(__file__).resolve().parent))
+    from pipeline_thresholds import PipelineInternalThresholds as _PIT  # noqa: E402
+    _T = _PIT.default()
+    _WJ_MU = _T.weighted_jaccard_mu
+    _WJ_TWO_SIGMA_SQ = _T.weighted_jaccard_two_sigma_sq
+except Exception:
+    _WJ_MU = 4.0
+    _WJ_TWO_SIGMA_SQ = 2.25
 
 
 def _gaussian_contact_weight(distance_angstroms):

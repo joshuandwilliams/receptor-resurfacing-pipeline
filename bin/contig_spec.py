@@ -58,15 +58,53 @@ class FixedSegment:
 
 @dataclass(frozen=True)
 class DeNovoSegment:
-    """A de novo (design) segment: specific resolved length, no chain
-    prefix (RFDiffusion fills these in).  Carries no native residue
-    references — these positions have no native counterpart by
-    definition."""
-    length: int
+    """A de novo (design) segment.  Carries a length RANGE (min_len,
+    max_len) for both the constraint form (``5-7``) and the resolved
+    form (``5`` is stored as ``min_len == max_len == 5``).  Single
+    representation; no separate types for resolved vs constraint.
+
+    Most downstream code only sees resolved segments (RFDiffusion has
+    already sampled a concrete length).  ``length`` returns that
+    integer when ``is_resolved`` is True and raises otherwise.
+    """
+    min_len: int
+    max_len: int
 
     def __post_init__(self) -> None:
-        if self.length < 0:
-            raise ValueError(f"DeNovoSegment length={self.length} must be >= 0")
+        if self.min_len < 0:
+            raise ValueError(f"DeNovoSegment min_len={self.min_len} must be >= 0")
+        if self.max_len < self.min_len:
+            raise ValueError(
+                f"DeNovoSegment max_len={self.max_len} < min_len={self.min_len}"
+            )
+
+    @property
+    def is_resolved(self) -> bool:
+        """True iff the segment has a single concrete length (min == max)."""
+        return self.min_len == self.max_len
+
+    @property
+    def length(self) -> int:
+        """Resolved length.  Raises ValueError if the segment is still a
+        range (callers wanting the bounds should read min_len/max_len)."""
+        if not self.is_resolved:
+            raise ValueError(
+                f"DeNovoSegment is unresolved ({self.min_len}-{self.max_len}); "
+                f"no single length.  Use min_len / max_len explicitly."
+            )
+        return self.min_len
+
+    @classmethod
+    def resolved(cls, length: int) -> "DeNovoSegment":
+        """Convenience: a fixed-length de novo segment.  Equivalent to
+        ``DeNovoSegment(length, length)``."""
+        return cls(min_len=length, max_len=length)
+
+    def to_string(self) -> str:
+        """Serialize: ``5`` if resolved, else ``5-7``."""
+        if self.is_resolved:
+            return str(self.min_len)
+        return f"{self.min_len}-{self.max_len}"
 
 
 # ═════════════════════════════════════════════════════════════════════════
@@ -86,10 +124,46 @@ class ContigChain:
             object.__setattr__(self, "segments", tuple(self.segments))
 
     @property
+    def is_resolved(self) -> bool:
+        """True iff every de novo segment in this chain has a single
+        concrete length."""
+        return all(
+            (not isinstance(s, DeNovoSegment)) or s.is_resolved
+            for s in self.segments
+        )
+
+    @property
     def total_length(self) -> int:
-        """Total residues in the resolved chain
-        (sum of fixed and de novo lengths)."""
-        return sum(s.length for s in self.segments)
+        """Total residues in the resolved chain (sum of fixed and de
+        novo lengths).  Raises ValueError if any de novo segment is
+        still a range — use min_total_length / max_total_length
+        explicitly for the constraint form."""
+        if not self.is_resolved:
+            raise ValueError(
+                "ContigChain is unresolved; total_length is undefined.  "
+                "Resolve de novo segment lengths or use min_total_length / "
+                "max_total_length."
+            )
+        return sum(
+            s.length if isinstance(s, FixedSegment) else s.length
+            for s in self.segments
+        )
+
+    @property
+    def min_total_length(self) -> int:
+        """Minimum total residues across the chain (constraint form)."""
+        return sum(
+            s.length if isinstance(s, FixedSegment) else s.min_len
+            for s in self.segments
+        )
+
+    @property
+    def max_total_length(self) -> int:
+        """Maximum total residues across the chain (constraint form)."""
+        return sum(
+            s.length if isinstance(s, FixedSegment) else s.max_len
+            for s in self.segments
+        )
 
     @property
     def fixed_segments(self) -> List[FixedSegment]:
@@ -208,31 +282,51 @@ class ContigSpec:
     # ── Construction ─────────────────────────────────────────────────
 
     @classmethod
-    def from_resolved_string(cls, s: str) -> "ContigSpec":
-        """Parse a resolved contig string (specific de novo lengths).
+    def from_string(cls, s: str) -> "ContigSpec":
+        """Parse a contig string in either form.
 
         Format (see memory project_contig_string_format.md):
         - Space-separated chain blocks.
         - Within a block, segments are slash-separated.
         - Fixed segments are chain-prefixed native residue ranges:
           ``A1-10`` = chain A residues 1..10.
-        - De novo segments are bare length integers: ``5`` = a de novo
-          region of length 5.  Ranges (``5-7``) are NOT accepted here —
-          ContigSpec is the resolved form.  Use the upstream
-          length-resolver if you have an unresolved contig.
+        - De novo segments are bare lengths.  ``5`` is resolved
+          (min_len == max_len == 5).  ``5-7`` is constraint form
+          (RFDiffusion samples a length in [5, 7]).  Both round-trip
+          through DeNovoSegment(min_len, max_len).
         - A bare chain identifier (e.g. ``B`` alone) = entire chain
           included with no design regions; encoded as a ContigChain with
           no segments (length-unknown until PDB lookup).
         """
         raw = s.strip()
         if not raw:
-            raise ValueError("ContigSpec.from_resolved_string: empty input")
+            raise ValueError("ContigSpec.from_string: empty input")
         blocks = raw.split()
         chains: List[ContigChain] = []
         for block in blocks:
             chain = _parse_block(block)
             chains.append(chain)
         return cls(chains=tuple(chains), contig_string=raw)
+
+    @classmethod
+    def from_resolved_string(cls, s: str) -> "ContigSpec":
+        """Parse a contig string and assert every de novo segment is
+        resolved.  Raises ValueError if any segment is a range — use
+        ``from_string`` for the constraint-form-tolerant version."""
+        spec = cls.from_string(s)
+        if not spec.is_resolved:
+            raise ValueError(
+                f"ContigSpec.from_resolved_string({s!r}): contains "
+                f"unresolved de novo segment(s).  Resolve lengths upstream "
+                f"or call from_string instead."
+            )
+        return spec
+
+    @property
+    def is_resolved(self) -> bool:
+        """True iff every de novo segment across every chain is a single
+        concrete length (min_len == max_len)."""
+        return all(c.is_resolved for c in self.chains)
 
     # ── Per-chain accessors ──────────────────────────────────────────
 
@@ -354,21 +448,26 @@ def _parse_block(block: str) -> ContigChain:
                 )
             segments.append(FixedSegment(start=lo, end=hi))
         elif seg[0].isdigit():
-            # De novo segment: must be a single resolved length, not a range
+            # De novo segment: bare length `5` (resolved) or range `5-7`
+            # (constraint).  Both are stored as (min_len, max_len) with
+            # min == max for the resolved case.
             if "-" in seg:
-                raise ValueError(
-                    f"de novo segment {seg!r}: ContigSpec accepts resolved "
-                    f"contigs only (length must be a single integer, not a "
-                    f"range).  Resolve the range upstream before constructing "
-                    f"the ContigSpec."
-                )
-            try:
-                length = int(seg)
-            except ValueError:
-                raise ValueError(
-                    f"de novo segment {seg!r}: length must be an integer"
-                )
-            segments.append(DeNovoSegment(length=length))
+                lo_s, hi_s = seg.split("-", 1)
+                try:
+                    lo_n, hi_n = int(lo_s), int(hi_s)
+                except ValueError:
+                    raise ValueError(
+                        f"de novo segment {seg!r}: range must be int-int"
+                    )
+                segments.append(DeNovoSegment(min_len=lo_n, max_len=hi_n))
+            else:
+                try:
+                    length = int(seg)
+                except ValueError:
+                    raise ValueError(
+                        f"de novo segment {seg!r}: length must be an integer"
+                    )
+                segments.append(DeNovoSegment(min_len=length, max_len=length))
         else:
             raise ValueError(
                 f"segment {seg!r}: unrecognised first character"

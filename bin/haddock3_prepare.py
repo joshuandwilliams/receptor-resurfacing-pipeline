@@ -39,45 +39,30 @@ def parse_contig_segments(contigs, rec_chain):
     Parse the receptor block from a contig string into an ordered list of
     (type, start, end) tuples where type is 'fixed' or 'denovo'.
 
+    Thin adapter around :class:`contig_spec.ContigSpec` (Phase 4 Tier 0).
     Fixed segments start with the receptor chain letter (e.g. A1-400).
     De novo segments are bare numbers (e.g. 20-30) representing lengths.
+    Commas are tolerated for back-compat.
     """
-    blocks = contigs.replace(",", " ").split()
-    rec_block = None
-    for block in blocks:
-        # Match by checking whether any segment in this block starts with
-        # the receptor chain letter, rather than substring matching the
-        # whole block (which gives false positives for multi-letter chain
-        # IDs or chain letters that happen to appear elsewhere in the block).
-        for seg in block.split("/"):
-            seg = seg.strip()
-            if seg and seg[0].upper() == rec_chain.upper():
-                rec_block = block
-                break
-        if rec_block is not None:
-            break
-    if rec_block is None:
+    import sys as _sys
+    from pathlib import Path as _Path
+    _sys.path.insert(0, str(_Path(__file__).resolve().parent))
+    from contig_spec import ContigSpec, FixedSegment, DeNovoSegment  # noqa: E402
+
+    normalised = contigs.replace(",", " ")
+    spec = ContigSpec.from_string(normalised)
+
+    if rec_chain.upper() not in (c.upper() for c in spec.chain_ids):
         sys.exit(f"ERROR: receptor chain '{rec_chain}' not found in contig "
                  f"string '{contigs}'")
 
     parsed = []
-    for seg in rec_block.split("/"):
-        seg = seg.strip()
-        if not seg or seg == "0":
-            continue
-        if seg[0].isalpha() and seg[0].upper() == rec_chain.upper():
-            rest = seg[1:]
-            if "-" in rest:
-                parts = rest.split("-")
-                parsed.append(("fixed", int(parts[0]), int(parts[1])))
-            else:
-                parsed.append(("fixed", int(rest), int(rest)))
-        elif seg[0].isdigit():
-            if "-" in seg:
-                parts = seg.split("-")
-                parsed.append(("denovo", int(parts[0]), int(parts[1])))
-            else:
-                parsed.append(("denovo", int(seg), int(seg)))
+    chain = next(c for c in spec.chains if c.chain_id.upper() == rec_chain.upper())
+    for seg in chain.segments:
+        if isinstance(seg, FixedSegment):
+            parsed.append(("fixed", seg.start, seg.end))
+        elif isinstance(seg, DeNovoSegment):
+            parsed.append(("denovo", seg.min_len, seg.max_len))
     return parsed
 
 
