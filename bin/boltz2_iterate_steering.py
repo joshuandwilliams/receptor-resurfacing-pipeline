@@ -1303,6 +1303,12 @@ def cmd_build_contaminated(args: argparse.Namespace) -> int:
     scratch_dir = workdir / "contamination_scratch"
     scratch_dir.mkdir(parents=True, exist_ok=True)
 
+    # Per-seed evaluations: populated below, one entry per
+    # passing_candidate (whether or not it's contaminated).  After the
+    # loop we group these by design and apply the CL-3 majority rule
+    # (see CL-3 in notes/phase4_architecture_spec.md): reversion runs
+    # only when n_contaminated >= ceil(n_correctly_placed / 2).
+    per_seed_evaluations: List[Dict] = []
     contaminated_entries: List[Dict] = []
     n_checked = 0
     intact_candidates = prefilter.get("intact_candidates", [])
@@ -1489,32 +1495,72 @@ def cmd_build_contaminated(args: argparse.Namespace) -> int:
         contact_set = set(steered_contact_residues)
         positions_to_revert = sorted(mutated_positions_set & contact_set)
 
-        if not positions_to_revert:
-            # No mutated residue is contacting the effector → pose does
-            # not depend on any steering mutation → no reversion needed.
-            continue
-
-        contaminated_entries.append({
-            "label": label,
-            "design_idx": design_idx,
-            # P0 audit (multi-seed): seed_index is needed by
-            # write_reversion_plan to align each contaminated steered
-            # seed with the matching reverted seed.  Pulled from the
-            # candidate (which carries it from the plan).
-            "seed_index": cand.get("seed_index", 0),
-            "design_workdir": str(design_workdir),
-            "cumulative_mutations": [
-                [p, w, m] for p, w, m in cumulative
-            ],
-            "positions_to_revert": positions_to_revert,
-            "steered_ra_eff_vs_truth": cand.get(
-                "receptor_aligned_effector_rmsd_vs_truth"
-            ),
-            "steered_contact_residues": steered_contact_residues,
+        # CL-3 (Phase 4): collect every per-seed evaluation here, even
+        # the uncontaminated ones, so we can compute
+        # n_correctly_placed and n_contaminated per design after the
+        # loop and apply the majority gating rule.
+        per_seed_evaluations.append({
+            "design_slot": cand.get("design"),  # cycle-0 slot name,
+                                                # e.g. "design_03" — the
+                                                # CL-3 grouping key
+            "is_contaminated": bool(positions_to_revert),
+            "entry": {
+                "label": label,
+                "design_idx": design_idx,
+                "seed_index": cand.get("seed_index", 0),
+                "design_workdir": str(design_workdir),
+                "cumulative_mutations": [
+                    [p, w, m] for p, w, m in cumulative
+                ],
+                "positions_to_revert": positions_to_revert,
+                "steered_ra_eff_vs_truth": cand.get(
+                    "receptor_aligned_effector_rmsd_vs_truth"
+                ),
+                "steered_contact_residues": steered_contact_residues,
+            },
         })
 
-    print(f"[build-contaminated] {len(contaminated_entries)} / {n_checked} "
-          f"intact designs flagged contaminated")
+    # ── CL-3 majority gating ────────────────────────────────────────
+    # Group per-seed evaluations by design_slot, then for each design:
+    #   n_correctly_placed = total seeds of this design that reached
+    #     this point (already filtered to intact + ra_eff < threshold
+    #     upstream).
+    #   n_contaminated     = subset that have positions_to_revert.
+    # Reversion runs IFF n_correctly_placed > 0 AND n_contaminated >=
+    # ceil(n_correctly_placed / 2).  See notes/phase4_architecture_
+    # spec.md §CL-3 for the rationale.  Replaces the pre-Phase-4 per-
+    # (design, seed) gate that triggered reversion on any single
+    # contaminated seed and was driving Tier-B-shaped results into
+    # unnecessary reversion attempts.
+    from collections import defaultdict
+    by_design: Dict[str, List[Dict]] = defaultdict(list)
+    for ev in per_seed_evaluations:
+        by_design[ev["design_slot"]].append(ev)
+    n_designs_evaluated = len(by_design)
+    n_designs_triggering = 0
+    for design_slot, evals in by_design.items():
+        n_correctly_placed = len(evals)
+        n_contaminated = sum(1 for e in evals if e["is_contaminated"])
+        if n_correctly_placed == 0:
+            continue
+        majority_threshold = math.ceil(n_correctly_placed / 2)
+        if n_contaminated < majority_threshold:
+            # Below-majority contamination — leave the steered result
+            # alone.  Contaminated seeds count as failures in n_pass
+            # at the aggregate level (they're not pass-equivalent), but
+            # we don't try to revert them.
+            continue
+        n_designs_triggering += 1
+        # Emit only the genuinely-contaminated entries — these are the
+        # seeds whose reverted sequence the reversion stage will
+        # predict (after dedup-by-sequence in write_reversion_plan).
+        contaminated_entries.extend(
+            e["entry"] for e in evals if e["is_contaminated"]
+        )
+
+    print(f"[build-contaminated] CL-3 gating: {n_designs_triggering} / "
+          f"{n_designs_evaluated} designs trigger reversion "
+          f"({len(contaminated_entries)} contaminated entries queued)")
 
     (workdir / "contaminated.json").write_text(json.dumps({
         "cycle": prefilter.get("cycle"),
