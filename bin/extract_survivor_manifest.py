@@ -27,15 +27,10 @@ import json
 from pathlib import Path
 from typing import Dict, List, Optional
 
-# Standard 3-letter → 1-letter amino-acid lookup.  Including common
-# X/Y-class codes just in case.
-_AA3TO1 = {
-    "ALA": "A", "ARG": "R", "ASN": "N", "ASP": "D", "CYS": "C",
-    "GLU": "E", "GLN": "Q", "GLY": "G", "HIS": "H", "ILE": "I",
-    "LEU": "L", "LYS": "K", "MET": "M", "PHE": "F", "PRO": "P",
-    "SER": "S", "THR": "T", "TRP": "W", "TYR": "Y", "VAL": "V",
-    "MSE": "M", "SEC": "U", "PYL": "O",
-}
+# _AA3TO1 dict removed in Phase 4 free-function consolidation —
+# extract_chain_seq below now delegates to the canonical
+# boltz2_negative_steering.get_chain_sequence (which uses the
+# THREE_TO_ONE map in contig_utils.py).
 
 
 def _extract_chain_seq(pdb_path: Path, chain_id: str) -> Optional[str]:

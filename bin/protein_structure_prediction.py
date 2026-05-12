@@ -44,18 +44,11 @@ if str(_SCRIPT_DIR) not in sys.path:
 from position_set import PositionSet  # noqa: E402
 
 
-# Three-letter → one-letter AA map.  Covers the 20 standard residues
-# plus common non-standard codes (MSE/SEC/PYL/HYP/TPO/SEP/PTR).
-# Centralised here; older copies in contig_utils.py and
-# boltz2_negative_steering.py to be removed as those callers migrate.
-THREE_TO_ONE: Dict[str, str] = {
-    "ALA": "A", "ARG": "R", "ASN": "N", "ASP": "D", "CYS": "C",
-    "GLN": "Q", "GLU": "E", "GLY": "G", "HIS": "H", "ILE": "I",
-    "LEU": "L", "LYS": "K", "MET": "M", "PHE": "F", "PRO": "P",
-    "SER": "S", "THR": "T", "TRP": "W", "TYR": "Y", "VAL": "V",
-    "SEC": "U", "PYL": "O",
-    "MSE": "M", "HYP": "P", "TPO": "T", "SEP": "S", "PTR": "Y",
-}
+# Three-letter → one-letter AA map.  Single canonical home in
+# contig_utils.py (post-Phase-3); re-exported here for the
+# tests/characterization tests that reach in for it.  All other
+# callers should import from contig_utils directly.
+from contig_utils import THREE_TO_ONE  # noqa: E402, F401
 
 
 class ProteinStructurePrediction:
