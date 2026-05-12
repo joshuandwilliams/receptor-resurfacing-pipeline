@@ -1,0 +1,101 @@
+# tests/negative_steering/reference_manifest.txt
+# See header in tests/rfdiffusion/reference_manifest.txt for format.
+#
+# Negsteer is the biggest fixture: ~2500 files spread over 9 per-sequence
+# subtrees (7 steered + 2 controls) plus indices and plots.  Globs handle
+# the per-sequence repetition; explicit paths surface fixture-curated
+# top-level artefacts (cross_summary, indices, controls inputs).
+
+# ── Top-level Nextflow run artefacts ──────────────────────────────
+dag.html
+timeline.html
+trace.txt
+pipeline_report.html
+
+# ── Cross-sequence summary (cohort-level output) ──────────────────
+negative_steering/cross_sequence_summary.csv
+
+# ── Per-design indices (true interface + design region) ───────────
+negative_steering/indices/*_design_region.txt
+negative_steering/indices/*_true_interface.txt
+
+# ── Negative-control inputs ───────────────────────────────────────
+negative_steering/controls_inputs/*.txt
+
+# ── Per-sequence top-level artefacts (steered + controls) ─────────
+negative_steering/runs/*/aggregated_results.csv
+negative_steering/runs/*/passing_summary.csv
+negative_steering/runs/*/raw_per_seed_results.csv
+negative_steering/runs/*/all_results_multicycle.csv
+negative_steering/runs/*/all_results_multicycle_with_metrics.csv
+negative_steering/runs/*/pathways.json
+negative_steering/runs/*/cycle_statistics.csv
+negative_steering/runs/*/run_one_runtime_sec.txt
+negative_steering/runs/*/row_type.txt
+negative_steering/runs/*/inputs/*.fasta
+
+# ── Per-sequence cycle_0 artefacts (steered + controls) ───────────
+negative_steering/runs/*/cycle_0/contaminated.json
+negative_steering/runs/*/cycle_0/kickoff_distances.json
+negative_steering/runs/*/cycle_0/passing.json
+negative_steering/runs/*/cycle_0/plan.json
+negative_steering/runs/*/cycle_0/prefilter.json
+negative_steering/runs/*/cycle_0/reversion_plan.json
+negative_steering/runs/*/cycle_0/reversion_results.json
+negative_steering/runs/*/cycle_0/reversion_results_per_seed.json
+negative_steering/runs/*/cycle_0/steered_results.csv
+negative_steering/runs/*/cycle_0/steered_results_aggregate.csv
+negative_steering/runs/*/cycle_0/summary.txt
+negative_steering/runs/*/cycle_0/true_interface_residues.txt
+negative_steering/runs/*/cycle_0/wrong_interface_residues.txt
+
+# ── Per-seed contamination scratch ────────────────────────────────
+negative_steering/runs/*/cycle_0/contamination_scratch/*.csv
+
+# ── Cold-start / steering Boltz prediction trees ──────────────────
+# Three "initial" trees per sequence: initial, initial_s1, initial_s2
+# (one per seed).  Each carries Boltz output + the input yaml.
+negative_steering/runs/*/cycle_0/initial/boltz_results_input/predictions/input/*.json
+negative_steering/runs/*/cycle_0/initial/boltz_results_input/processed/*.json
+negative_steering/runs/*/cycle_0/initial/boltz_results_input/processed/*/*.json
+negative_steering/runs/*/cycle_0/initial/boltz_results_input/processed/*/*.pkl
+negative_steering/runs/*/cycle_0/initial/boltz_results_input/lightning_logs/version_0/hparams.yaml
+negative_steering/runs/*/cycle_0/initial/input/input.yaml
+negative_steering/runs/*/cycle_0/initial_s1/boltz_results_input/predictions/input/*.json
+negative_steering/runs/*/cycle_0/initial_s1/boltz_results_input/processed/*.json
+negative_steering/runs/*/cycle_0/initial_s1/boltz_results_input/processed/*/*.json
+negative_steering/runs/*/cycle_0/initial_s1/boltz_results_input/processed/*/*.pkl
+negative_steering/runs/*/cycle_0/initial_s1/boltz_results_input/lightning_logs/version_0/hparams.yaml
+negative_steering/runs/*/cycle_0/initial_s1/input/input.yaml
+negative_steering/runs/*/cycle_0/initial_s2/boltz_results_input/predictions/input/*.json
+negative_steering/runs/*/cycle_0/initial_s2/boltz_results_input/processed/*.json
+negative_steering/runs/*/cycle_0/initial_s2/boltz_results_input/processed/*/*.json
+negative_steering/runs/*/cycle_0/initial_s2/boltz_results_input/processed/*/*.pkl
+negative_steering/runs/*/cycle_0/initial_s2/boltz_results_input/lightning_logs/version_0/hparams.yaml
+negative_steering/runs/*/cycle_0/initial_s2/input/input.yaml
+
+# ── Steered Boltz prediction trees (per design × per seed) ────────
+negative_steering/runs/*/cycle_0/steered/*/boltz_results_input/predictions/input/*.json
+negative_steering/runs/*/cycle_0/steered/*/boltz_results_input/processed/*.json
+negative_steering/runs/*/cycle_0/steered/*/boltz_results_input/processed/*/*.json
+negative_steering/runs/*/cycle_0/steered/*/boltz_results_input/processed/*/*.pkl
+negative_steering/runs/*/cycle_0/steered/*/boltz_results_input/lightning_logs/version_0/hparams.yaml
+negative_steering/runs/*/cycle_0/steered/*/input/input.yaml
+negative_steering/runs/*/cycle_0/steered/*/mutations.tsv
+negative_steering/runs/*/cycle_0/steered/*/receptor.fasta
+negative_steering/runs/*/cycle_0/steered/*/result.json
+negative_steering/runs/*/cycle_0/steered/*/reversion_applied.json
+
+# ── Reversion Boltz prediction trees (per reversion attempt) ─────
+negative_steering/runs/*/cycle_0/reversions/*/boltz_results_input/predictions/input/*.json
+negative_steering/runs/*/cycle_0/reversions/*/boltz_results_input/processed/*.json
+negative_steering/runs/*/cycle_0/reversions/*/boltz_results_input/processed/*/*.json
+negative_steering/runs/*/cycle_0/reversions/*/boltz_results_input/processed/*/*.pkl
+negative_steering/runs/*/cycle_0/reversions/*/boltz_results_input/lightning_logs/version_0/hparams.yaml
+negative_steering/runs/*/cycle_0/reversions/*/input.yaml
+negative_steering/runs/*/cycle_0/reversions/*/metrics.csv
+negative_steering/runs/*/cycle_0/reversions/*/receptor.fasta
+negative_steering/runs/*/cycle_0/reversions/*/reversion_metadata.json
+
+# ── Cohort plots ──────────────────────────────────────────────────
+plots/*.png

@@ -1,0 +1,18 @@
+# tests/haddock/reference_manifest.txt
+# See header in tests/rfdiffusion/reference_manifest.txt for format.
+#
+# Haddock per-module test does not yet have a curated example_output_files/
+# fixture (Branch A is awaiting redesign — see notes/remediation_state.md
+# §"Phase 4+ work currently deferred").  The patterns below are
+# placeholders that match the expected output layout; populate after the
+# first successful Branch A test run.
+
+# ── Top-level Nextflow run artefacts ──────────────────────────────
+dag.html
+timeline.html
+trace.txt
+pipeline_report.html
+
+# ── HADDOCK3 outputs (placeholder; refine after first run) ───────
+# haddock/<docking-run-id>/*.pdb
+# haddock/<docking-run-id>/<run-summary-files>

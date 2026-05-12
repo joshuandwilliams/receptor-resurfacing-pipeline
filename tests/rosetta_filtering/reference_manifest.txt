@@ -1,0 +1,16 @@
+# tests/rosetta_filtering/reference_manifest.txt
+# See header in tests/rfdiffusion/reference_manifest.txt for format.
+
+# ── Top-level Nextflow run artefacts ──────────────────────────────
+dag.html
+timeline.html
+trace.txt
+pipeline_report.html
+
+# ── Rosetta filter outputs ────────────────────────────────────────
+rosetta_filtering/rosetta_passing_designs.txt
+rosetta_filtering/rosetta_filter_metrics.json
+rosetta_filtering/rosetta_filter_summary.json
+
+# ── Plots ──────────────────────────────────────────────────────────
+plots/*.png

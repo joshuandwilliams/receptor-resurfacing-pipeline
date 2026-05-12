@@ -1,0 +1,14 @@
+# tests/orthogonal_metrics/reference_manifest.txt
+# See header in tests/rfdiffusion/reference_manifest.txt for format.
+
+# ── Top-level Nextflow run artefacts ──────────────────────────────
+dag.html
+timeline.html
+trace.txt
+pipeline_report.html
+
+# ── Cross-summary with interface metrics (extended by P0-29) ─────
+negative_steering/cross_sequence_summary_with_interface_metrics.csv
+
+# ── Survivor manifest (input to AF3 / biophys / Rosetta) ─────────
+orthogonal_metrics/survivor_manifest.csv

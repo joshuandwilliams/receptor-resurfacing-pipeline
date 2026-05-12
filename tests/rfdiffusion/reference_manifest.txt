@@ -1,0 +1,23 @@
+# tests/rfdiffusion/reference_manifest.txt
+# Positive include-list for tests/rfdiffusion/example_output_files/.
+# One glob per line; matched against receptor_resurfacing_results/.
+# Globs use pathlib syntax: * (one segment), ** (recursive), ? (single char).
+# Lines starting with # or blank are ignored.
+# See tests/_update_example_dataset_impl.py for semantics.
+
+# ── Top-level Nextflow run artefacts ──────────────────────────────
+dag.html
+timeline.html
+trace.txt
+pipeline_report.html
+
+# ── RFDiffusion outputs (test-checked) ────────────────────────────
+# Note: design_*.pdb / passing/ / split/ / traj/ are NOT in the
+# manifest — they're large RFDiffusion artefacts not asserted on by
+# any characterization test.  See notes/inventory/17_storage_bloat_audit.md.
+rfdiffusion/filter_summary.json
+rfdiffusion/rfdiffusion_metrics.json
+rfdiffusion/passing_designs.txt
+
+# ── Plots ─────────────────────────────────────────────────────────
+plots/*.png

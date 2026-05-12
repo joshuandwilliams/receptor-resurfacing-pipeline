@@ -1,0 +1,30 @@
+# tests/proteinmpnn/reference_manifest.txt
+# See header in tests/rfdiffusion/reference_manifest.txt for format.
+
+# ── Top-level Nextflow run artefacts ──────────────────────────────
+dag.html
+timeline.html
+trace.txt
+pipeline_report.html
+
+# ── Preprocessing ──────────────────────────────────────────────────
+preprocessing/processed_contigs.txt
+preprocessing/sequences.json
+
+# ── MPNN per-design (only kept for two representative designs) ────
+mpnn/design_*/fixed_positions_design_*.jsonl
+mpnn/design_*/design_*_mpnn/seqs/design_*.fa
+
+# ── Curated sequences (CSV + corrected fasta + per-design QC) ────
+sequences/top_metadata.csv
+sequences/sequence_metadata.csv
+sequences/scored_metadata.csv
+sequences/mpnn_corrected.fasta
+sequences/qc_metadata.csv
+sequences/qc_report.txt
+sequences/mpnn_cluster_counts.csv
+sequences/qc_fastas/*.fasta
+sequences/top_fastas/*.fasta
+
+# ── Plots ──────────────────────────────────────────────────────────
+plots/*.png
