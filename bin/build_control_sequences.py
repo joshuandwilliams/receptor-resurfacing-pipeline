@@ -80,17 +80,12 @@ from typing import List
 
 # ── Sequence extraction (re-uses the project convention) ────────────
 
-def _extract_chain_sequence(pdb_path: Path, chain_id: str) -> str:
-    """
-    Return the one-letter sequence for `chain_id` in `pdb_path`.
-
-    Uses the same get_chain_sequence helper from boltz2_negative_steering
-    that the rest of the pipeline uses, so chain-letter conventions and
-    residue-name handling stay consistent across the codebase.
-    """
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
-    from boltz2_negative_steering import get_chain_sequence  # noqa: E402
-    return get_chain_sequence(pdb_path, chain_id)
+# Sequence extraction: use the canonical helper directly.  The
+# previous _extract_chain_sequence wrapper was a one-line passthrough
+# to boltz2_negative_steering.get_chain_sequence; removed in the
+# Phase 4 free-function consolidation.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from boltz2_negative_steering import get_chain_sequence as _extract_chain_sequence  # noqa: E402,F401
 
 
 # ── Design-region parsing (matches derive_design_region.py output) ──

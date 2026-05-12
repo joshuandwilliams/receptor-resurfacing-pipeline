@@ -39,28 +39,23 @@ _AA3TO1 = {
 
 
 def _extract_chain_seq(pdb_path: Path, chain_id: str) -> Optional[str]:
-    """Read Cα sequence for a chain from a PDB file."""
-    seq: List[str] = []
-    seen = set()
+    """Read Cα sequence for a chain from a PDB file.
+
+    Thin wrapper around the canonical
+    ``boltz2_negative_steering.get_chain_sequence`` (Phase 4
+    free-function consolidation).  Preserves the previous behaviour of
+    returning ``None`` on read failure or on a missing chain (callers
+    depend on the Optional return; the canonical helper raises on
+    missing chain).
+    """
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from boltz2_negative_steering import get_chain_sequence  # noqa: E402
     try:
-        with open(pdb_path) as f:
-            for line in f:
-                if not line.startswith(("ATOM  ", "HETATM")):
-                    continue
-                if line[21:22] != chain_id:
-                    continue
-                if line[12:16].strip() != "CA":
-                    continue
-                resnum = (line[22:27]).strip()
-                key = (chain_id, resnum)
-                if key in seen:
-                    continue
-                seen.add(key)
-                aa3 = line[17:20].strip()
-                seq.append(_AA3TO1.get(aa3, "X"))
-    except OSError:
+        seq = get_chain_sequence(pdb_path, chain_id)
+    except (OSError, ValueError):
         return None
-    return "".join(seq) if seq else None
+    return seq or None
 
 
 def _find_workdir(seq_name: str, workdirs_glob: str) -> Optional[Path]:
