@@ -303,12 +303,14 @@ process NEGSTEER_CROSS_SEQUENCE {
             ${metadata_arg} \\
             --output cross_sequence_summary.csv
     # NOTE: summary_script is now content-hashed via the path input
-    # above, so direct edits to cross_sequence_summary.py invalidate
-    # the cache.  However, cross_sequence_summary.py imports
-    # extract_passing.py and other helpers internally; those indirect
-    # imports remain untracked by Nextflow.  When edits land only on
-    # an indirectly-imported helper, the operator must still bust the
-    # cache manually (e.g. by touching the directly-invoked script).
+    # above.  As of Phase 4 the wired script is cross_summary_v2.py
+    # (Phase 4 typed CLI wrapping DesignCohort.emit_cross_summary_from_dirs);
+    # it delegates to bin/cross_sequence_summary.py:aggregate for column-
+    # level CSV construction.  Both files are indirect imports as far as
+    # Nextflow is concerned — only cross_summary_v2.py itself is
+    # content-hashed.  When edits land only on cross_sequence_summary.py
+    # or extract_passing.py, the operator must still bust the cache
+    # manually (e.g. by touching cross_summary_v2.py).
 
     echo "Cross-sequence summary head:"
     head -5 cross_sequence_summary.csv || true
