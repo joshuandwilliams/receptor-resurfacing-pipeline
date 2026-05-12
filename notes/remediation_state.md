@@ -2,7 +2,7 @@
 
 A living document tracking where the codebase remediation effort currently stands. Read this at the start of every session; update it at the end of every session.
 
-**Last updated:** 2026-05-08 (traj cleanup wired in; 15-run cleanup array updated; Phase 4 next)
+**Last updated:** 2026-05-12 (six pre-Phase-4 audit-close items landed; Phase 4 grill-me is next)
 
 ---
 
@@ -17,6 +17,66 @@ Dead code removed, key naming inconsistencies fixed, critical duplication consol
 ---
 
 ## Just Completed (this session)
+
+### Pre-Phase-4 audit-close items (2026-05-12)
+
+All six items from `notes/design_audit.md` "Audit close → Immediate actions" now land in `remediation`. Two commits: `6e5959b` (rename + latent-bug fix) and `05f0c07` (the other five).
+
+**Commit `6e5959b` — schema rename + latent-bug fix:**
+- Column renames across all output CSVs and producer/consumer code:
+  `aggregated_verdict → outcome`, `aggregated_verdict_reason → outcome_reason`,
+  `representative_* → rep_*`, and the five `n_seeds_{pose_holds, pose_collapses,
+  new_contamination, no_data, clean_steered}` columns consolidated to one
+  `n_pass` column (= `pose_holds_count + clean_steered_count`,
+  computed unconditionally from `_per_seed_verdict_breakdown`).
+- Function renames: `_classify_aggregated_verdict → _classify_outcome` (signature
+  now takes `verdict_counts: Dict[str, int]` instead of reading `n_seeds_*` keys
+  off the agg dict); `_pick_representative_from_aggregated → _pick_rep_from_aggregated`.
+- Latent-bug fix riding with the rename: `cross_sequence_summary._tier_for_row`
+  no longer shortcuts `outcome == "no_reversion" → tier A`. Tier is derived
+  purely from `n_pass / n_seeds`. **Wrong-placement-no-contamination groups
+  (n_pass=0, outcome=no_reversion) now correctly land in tier none**, not tier A.
+- New memory file `project_no_reversion_semantics.md` documents the recurring
+  Claude conflation between `no_reversion` and cold-start. **Read before
+  touching negsteer outcomes.**
+- 60 files changed including 37 fixture CSVs (rewritten by a one-shot script
+  that was deleted post-run).
+
+**Commit `05f0c07` — five other audit-close items:**
+- *Cohort summary visual groups* (`bin/orthogonal_metrics_plots.py`):
+  three-axis column groups (descriptive / Boltz-2 structure / Boltz-2
+  confidence / Orthogonal) drawn above the metric labels; AF3 ra_eff
+  column relabelled "AF3 ra_eff (best)"; legend split into two titled
+  blocks so the left stripe (negsteer cohort outcome) is visually
+  independent from cell colours (per-metric pass/fail). Mirror change
+  applied to the test-copy `tests/orthogonal_metrics/test_orthogonal_metrics_plots.py`.
+- *MPNN-sequence join* (`bin/cross_sequence_summary.py`,
+  `modules/negative_steering.nf`, `main.nf`): new `--scored-metadata`
+  flag joins three columns (`corrected_receptor`, `designed_residues`,
+  `native_residues`) by `mpnn_sequence`. `NEGSTEER_CROSS_SEQUENCE` now
+  consumes `MPNN_DESIGN_REGION_SCORE.out.scored_metadata`.
+- *Parameter validator* (`bin/validate_params.py`): 66 `ParamSpec` entries
+  (59 with concrete constraints, 7 documented `any` coverage gaps). Eight
+  validator kinds: `int_range`, `float_range`, `choice`, `bool`,
+  `non_empty_str`, `optional_path`, `regex`, `custom`, `any`. The
+  `negsteer_num_seeds` odd-only check is a custom validator. The Nextflow
+  workflow head dumps params to JSON, invokes the validator, and
+  `error()`s with the full stderr on non-zero exit — fails fast before
+  any SLURM job is dispatched. Coverage report via `--report`.
+- *Glossary update* (`notes/inventory/06_ubiquitous_language.md`):
+  `no_data` standalone entry; `n_pass` definition; `passes_orthogonal_filters`
+  clarified as Sc + BSA + ΔΔG only; three-axis framework added; F11
+  flags the `outcome` term as overloaded between per-sequence column
+  and per-seed plot label.
+- *Inventory mechanical updates* (`02_function_inventory.md`,
+  `15_discovery_run_path_coverage.md`): function-name renames mirrored;
+  a header note in 15 covers the historical diagnostic commands that
+  still reference pre-rename column names.
+
+**Tests**: 92 `local_unit` tests pass on Mac (up from 58 pre-session;
+the +34 are validator unit tests). Full HPC characterization sweep
+deferred — the user will re-run after these six items land, to set a
+fresh baseline before Phase 4 begins.
 
 ### Cleanup script: RFDiffusion traj/ added; array extended (2026-05-08)
 
@@ -141,8 +201,20 @@ All commits from the `experiments` worktree have been fast-forwarded into `remed
 
 Phase 4 is **structural refactoring toward deep modules**. Interface design decisions are required before touching code.
 
-**Before writing any code:**
-1. Run the grill-me skill to design the target module architecture. Key inputs: `notes/inventory/04_functional_categorization.md`, `notes/inventory/06_ubiquitous_language.md`, `notes/inventory/10_phase_1_synthesis.md`. Output: a short architecture document committed to `notes/`.
+**Pre-Phase-4 items are now complete** (commits `6e5959b`, `05f0c07`). Run the full HPC characterization sweep next to set a fresh baseline (the schema rename and the latent-bug fix together changed many fixture-comparable outputs; some tier-A rows will move to tier none for genuinely-wrong-placement designs — investigate any non-trivial diff before assuming it is a regression).
+
+**Before writing any Phase 4 code:**
+1. Run the grill-me skill to design the target module architecture. Authoritative inputs:
+   - `notes/design_audit.md` — Phase 4 scope is in §"Audit close → Phase 4 architecture — scope confirmed". Key modules to design:
+     - `boltz_lib.py` — extract `get_chain_sequence`, `find_contact_residues_heavy` (negsteer version), `jaccard`, weighted_jaccard primitives, `binding_rmsds`, `write_boltz_yaml`, Cα/Kabsch helpers, residue dataclasses.
+     - `plot_lib.py` — `make_empty_plot`, `save_fallback_plots`, `COLOUR_TIER`, `_TIER_SORT_ORDER`, `COMPOSITE_RA_EFF_WEIGHT`, shared utilities (currently duplicated across plot scripts and test copies).
+     - `derive_indices.py` — merge `derive_design_region.py` + `derive_true_interface.py`.
+     - Contig parser consolidation — `_parse_contigs` and `parse_contig_segments` rewritten on `parse_block_segments`.
+     - Six F-rated `cmd_*` function decomposition in `boltz2_iterate_steering.py`.
+     - `merge_orthogonal_metrics.py` test/production divergence elimination.
+   - `notes/inventory/06_ubiquitous_language.md` — recently updated with `n_pass`, `outcome`, three-axis framework, the `outcome` overload (F11).
+   - `notes/inventory/04_functional_categorization.md`, `10_phase_1_synthesis.md` — original Phase 1 outputs.
+   - Output: a short architecture document committed to `notes/`.
 
 **Targets in priority order:**
 1. **`bin/boltz2_negative_steering.py`** — already partly structured as library + CLI. Extract the public interface explicitly. First real deep module.
