@@ -349,9 +349,15 @@ workflow {
 
     // ── Cross-sequence aggregation ───────────────────────────────────
     per_sequence_workdirs_ch = all_workdirs_ch.collect()
+    // No upstream MPNN stage in this per-module test → pass the
+    // NO_FILE sentinel (committed at tests/_NO_FILE).  The module
+    // checks the basename and skips the scored_metadata join, leaving
+    // corrected_receptor / designed_residues / native_residues blank
+    // in cross_sequence_summary.csv.
     NEGSTEER_CROSS_SEQUENCE(
         per_sequence_workdirs_ch,
-        Channel.value(file("${projectDir}/bin/cross_sequence_summary.py"))
+        Channel.value(file("${projectDir}/bin/cross_sequence_summary.py")),
+        Channel.value(file("${projectDir}/tests/_NO_FILE"))
     )
 
     // ── Diagnostic plots ─────────────────────────────────────────────

@@ -1,0 +1,6 @@
+# nf-core-style sentinel for optional file inputs.
+# When a Nextflow process input is an optional path and the caller has
+# nothing to pass, the convention is to stage this placeholder. The
+# downstream script checks file.name == 'NO_FILE' and skips the
+# associated work. Real file content is irrelevant; the basename is
+# what carries meaning.
