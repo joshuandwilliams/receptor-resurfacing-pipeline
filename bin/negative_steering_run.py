@@ -25,6 +25,7 @@ _SCRIPT_DIR = Path(__file__).resolve().parent
 if str(_SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPT_DIR))
 
+from boltz_confidence import BoltzConfidenceMetrics  # noqa: E402
 from designed_sequence import DesignedSequence  # noqa: E402
 from position_set import PositionSet  # noqa: E402
 from protein_structure_prediction import ProteinStructurePrediction  # noqa: E402
@@ -34,6 +35,97 @@ from stage_result import StageResult  # noqa: E402
 VALID_ROW_TYPES = frozenset(
     ("steered", "control_scrambled", "control_polyA")
 )
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Workdir discovery helpers (used by from_workdir)
+# ═══════════════════════════════════════════════════════════════════════
+
+
+def _find_boltz_outputs(
+    pred_dir: Path, model_sample: int = 0
+) -> Tuple[Optional[Path], Optional[Path]]:
+    """Locate the canonical Boltz PDB + confidence JSON in a prediction
+    directory.  Returns (None, None) if either is missing.
+
+    Layout (per boltz2_iterate_steering.py:4426):
+      <pred_dir>/boltz_results_input/predictions/input/
+          pdb/input_model_<M>.pdb
+          confidence_input_model_<M>.json
+    """
+    pred_root = pred_dir / "boltz_results_input" / "predictions" / "input"
+    if not pred_root.is_dir():
+        return None, None
+    pdb_path = pred_root / "pdb" / f"input_model_{model_sample}.pdb"
+    if not pdb_path.is_file():
+        # Some pipeline versions write the PDB directly without the
+        # pdb/ subdir.  Try the flat variant too.
+        alt = pred_root / f"input_model_{model_sample}.pdb"
+        pdb_path = alt if alt.is_file() else None
+    conf_path = pred_root / f"confidence_input_model_{model_sample}.json"
+    if not conf_path.is_file():
+        conf_path = None
+    return pdb_path, conf_path
+
+
+def _read_mutations_positionset(
+    tsv_path: Path, chain: str
+) -> Optional["PositionSet"]:
+    """Parse mutations.tsv (columns: pos1, wt, mut) into a designed-
+    frame PositionSet.  Returns None when the file is missing."""
+    import csv as _csv
+    if not tsv_path.is_file():
+        return None
+    positions: List[int] = []
+    with open(tsv_path) as f:
+        reader = _csv.DictReader(f, delimiter="\t")
+        for row in reader:
+            try:
+                positions.append(int(row["pos1"]))
+            except (KeyError, ValueError, TypeError):
+                continue
+    return PositionSet(positions=positions, chain=chain, frame="designed")
+
+
+def _read_seed_stage_dirs(
+    cycle_dir: Path,
+    num_seeds: int,
+    receptor_chain: str,
+    effector_chain: str,
+    model_sample: int,
+    require_pdb: bool,
+) -> Tuple[List, List, List[int]]:
+    """Walk the cold-start seed subdirectories under cycle_dir.
+    Convention: seed 0 is in ``initial/``; seeds 1..N are in
+    ``initial_s1/``, ``initial_s2/``, ...
+
+    Returns three parallel lists (predictions, confidences, seed_indices),
+    skipping seeds whose PDB or confidence sidecar is missing.
+    """
+    preds: List = []
+    confs: List = []
+    seed_idx_out: List[int] = []
+    for seed_idx in range(num_seeds):
+        sub_name = "initial" if seed_idx == 0 else f"initial_s{seed_idx}"
+        sub = cycle_dir / sub_name
+        if not sub.is_dir():
+            continue
+        pdb, conf = _find_boltz_outputs(sub, model_sample)
+        if pdb is None or conf is None:
+            if require_pdb:
+                continue
+            # If require_pdb is False, we can't construct without files.
+            # Skip silently.
+            continue
+        preds.append(ProteinStructurePrediction(
+            path=pdb,
+            receptor_chain=receptor_chain,
+            effector_chain=effector_chain,
+            predictor="boltz",
+        ))
+        confs.append(BoltzConfidenceMetrics(conf))
+        seed_idx_out.append(seed_idx)
+    return preds, confs, seed_idx_out
 
 
 @dataclass(frozen=True)
@@ -102,30 +194,228 @@ class NegativeSteeringRun:
         num_seeds: int = 3,
         truth_psp=None,
         contamination_positions=None,
-    ):
+        receptor_chain: str = "A",
+        effector_chain: str = "B",
+        row_type: Optional[str] = None,
+        cycle: int = 0,
+        model_sample: int = 0,
+        require_pdb: bool = True,
+    ) -> Optional["NegativeSteeringRun"]:
         """Build a NegativeSteeringRun by reading a per-MPNN workdir.
 
-        STATUS: deep form NOT IMPLEMENTED.  Faithfully reconstructing
-        the StageResult / PSP chain from a workdir requires walking
-        every cold_start / steered / reversion subdir, identifying the
-        per-seed PDBs and confidence sidecars, and resolving the
-        applies_to_designs mapping for each reverted sequence.  That
-        work is scoped to a dedicated session after CL-3 has been
-        validated against real cohort data.
+        Walks the canonical workdir layout produced by
+        ``negative_steering_run_one.sh``:
 
-        For cohort-level queries that only need tier / n_pass /
-        outcome / composite score, use
-        :meth:`design_cohort.DesignCohort.from_cross_summary_csv`
-        which returns a CrossSummarySnapshot — a shallow typed view
-        over the already-emitted cross_sequence_summary.csv with the
-        same survivors / tier_breakdown / ranked_by_composite query
-        interface.
+            <workdir>/cycle_<C>/initial[_sN]/                ← cold-start seeds
+            <workdir>/cycle_<C>/steered/design_NN_sS/        ← steered (design, seed)
+            <workdir>/cycle_<C>/reversions/rev_design_NN_sS_sR/  ← reversion
 
-        Returns None to signal "deep form not buildable from this
-        workdir" so that batch factories (DesignCohort.from_runs_
-        directory) can skip and continue rather than crash.
+        For each prediction directory, the canonical Boltz output is
+        ``boltz_results_input/predictions/input/pdb/input_model_<M>.pdb``
+        with sidecar ``confidence_input_model_<M>.json``.  M is the
+        Boltz sample index within a seed (default 0 — first sample;
+        matches the post-canonicalisation convention used elsewhere).
+
+        Mutations for steered/reverted stages are read from
+        ``mutations.tsv`` in the prediction directory (columns:
+        ``pos1 wt mut``); the resulting positions become the
+        ``mutated_positions`` PositionSet (frame="designed", since
+        mutation positions are 1-based on the designed-frame receptor).
+
+        Returns None if the workdir has no cold-start data — signals
+        "skip this sequence" to ``DesignCohort.from_runs_directory``.
+
+        Arguments
+        ---------
+        receptor_chain / effector_chain : Chain labels Boltz emits.
+            "A"/"B" for the standard layout.
+        row_type : Override the row_type read from row_type.txt.  If
+            None and no sidecar exists, defaults to "steered".
+        cycle : Which cycle directory to read (default 0; multi-cycle
+            workdirs not yet exercised here).
+        model_sample : Which Boltz model sample to use as canonical
+            (default 0).  The pipeline's post-hoc canonicalisation
+            chooses one of 5; choosing 0 is a defensible default
+            without re-running canonicalisation logic.
+        require_pdb : If True (default) skip seeds whose PDB file is
+            missing.  If False, allow PSP construction to raise.
         """
-        return None
+        import csv
+        import re
+        from pathlib import Path
+
+        workdir = Path(workdir)
+        cycle_dir = workdir / f"cycle_{cycle}"
+        if not cycle_dir.is_dir():
+            return None
+
+        # ── row_type from sidecar ────────────────────────────────────
+        if row_type is None:
+            sidecar = workdir / "row_type.txt"
+            if sidecar.is_file():
+                row_type = sidecar.read_text().strip() or "steered"
+            else:
+                row_type = "steered"
+
+        # ── Cold start ──────────────────────────────────────────────
+        cold_preds, cold_confs, cold_seeds = _read_seed_stage_dirs(
+            cycle_dir, num_seeds, receptor_chain, effector_chain,
+            model_sample, require_pdb,
+        )
+        if not cold_preds:
+            return None
+        cold_start_stage = StageResult(
+            stage_type="cold_start",
+            config_id=mpnn_sequence_id,
+            predictions=tuple(cold_preds),
+            confidences=tuple(cold_confs),
+            seed_indices=tuple(cold_seeds),
+            mutated_positions=None,
+        )
+
+        # ── Steered ─────────────────────────────────────────────────
+        steered: Dict[str, StageResult] = {}
+        steered_root = cycle_dir / "steered"
+        if steered_root.is_dir():
+            by_design: Dict[str, List[Tuple[int, Path]]] = {}
+            for sub in sorted(steered_root.iterdir()):
+                if not sub.is_dir():
+                    continue
+                m = re.match(r"(design_\d+)_s(\d+)$", sub.name)
+                if not m:
+                    continue
+                design_id = m.group(1)
+                seed_idx = int(m.group(2))
+                by_design.setdefault(design_id, []).append((seed_idx, sub))
+
+            for design_id, items in by_design.items():
+                items.sort(key=lambda x: x[0])
+                preds, confs, seeds = [], [], []
+                mut_positions = None
+                for seed_idx, sub in items:
+                    pdb, conf = _find_boltz_outputs(sub, model_sample)
+                    if pdb is None or conf is None:
+                        if require_pdb:
+                            continue
+                    if pdb is not None and conf is not None:
+                        preds.append(ProteinStructurePrediction(
+                            path=pdb,
+                            receptor_chain=receptor_chain,
+                            effector_chain=effector_chain,
+                            predictor="boltz",
+                        ))
+                        confs.append(BoltzConfidenceMetrics(conf))
+                        seeds.append(seed_idx)
+                        if mut_positions is None:
+                            mut_positions = _read_mutations_positionset(
+                                sub / "mutations.tsv", receptor_chain,
+                            )
+                if not preds:
+                    continue
+                # mutated_positions REQUIRED for steered stage by StageResult
+                # invariants; synthesise an empty designed-frame set if the
+                # mutations.tsv was missing rather than dropping the stage.
+                if mut_positions is None:
+                    mut_positions = PositionSet(
+                        positions=(),
+                        chain=receptor_chain,
+                        frame="designed",
+                    )
+                steered[design_id] = StageResult(
+                    stage_type="steered",
+                    config_id=f"{mpnn_sequence_id}__{design_id}",
+                    predictions=tuple(preds),
+                    confidences=tuple(confs),
+                    seed_indices=tuple(seeds),
+                    mutated_positions=mut_positions,
+                )
+
+        # ── Reversions ──────────────────────────────────────────────
+        reversion: Dict[str, StageResult] = {}
+        rev_root = cycle_dir / "reversions"
+        if rev_root.is_dir():
+            # Reverted-sequence id pattern: rev_design_NN_sS_sR
+            #   NN = source design, S = source seed, R = reversion seed.
+            # The (design_NN, source_seed) pair identifies the
+            # PARENT steered slot; the reversion stage groups seeds
+            # by parent.  applies_to_designs gets the parent design_id.
+            by_parent: Dict[
+                Tuple[str, int], List[Tuple[int, Path]]
+            ] = {}
+            for sub in sorted(rev_root.iterdir()):
+                if not sub.is_dir():
+                    continue
+                m = re.match(r"rev_(design_\d+)_s(\d+)_s(\d+)$", sub.name)
+                if not m:
+                    continue
+                parent_design = m.group(1)
+                parent_seed = int(m.group(2))
+                rev_seed = int(m.group(3))
+                by_parent.setdefault(
+                    (parent_design, parent_seed), []
+                ).append((rev_seed, sub))
+
+            for (parent_design, parent_seed), items in by_parent.items():
+                items.sort(key=lambda x: x[0])
+                preds, confs, seeds = [], [], []
+                mut_positions = None
+                for rev_seed, sub in items:
+                    pdb, conf = _find_boltz_outputs(sub, model_sample)
+                    if pdb is None or conf is None:
+                        if require_pdb:
+                            continue
+                    if pdb is not None and conf is not None:
+                        preds.append(ProteinStructurePrediction(
+                            path=pdb,
+                            receptor_chain=receptor_chain,
+                            effector_chain=effector_chain,
+                            predictor="boltz",
+                        ))
+                        confs.append(BoltzConfidenceMetrics(conf))
+                        seeds.append(rev_seed)
+                        if mut_positions is None:
+                            mut_positions = _read_mutations_positionset(
+                                sub / "mutations.tsv", receptor_chain,
+                            )
+                if not preds:
+                    continue
+                if mut_positions is None:
+                    mut_positions = PositionSet(
+                        positions=(),
+                        chain=receptor_chain,
+                        frame="designed",
+                    )
+                rev_id = f"rev_{parent_design}_s{parent_seed}"
+                reversion[rev_id] = StageResult(
+                    stage_type="reversion",
+                    config_id=f"{mpnn_sequence_id}__{rev_id}",
+                    predictions=tuple(preds),
+                    confidences=tuple(confs),
+                    seed_indices=tuple(seeds),
+                    mutated_positions=mut_positions,
+                    applies_to_designs=(parent_design,),
+                )
+
+        # ── Optional run_one_runtime_sec sidecar ────────────────────
+        runtime_sidecar = workdir / "run_one_runtime_sec.txt"
+        runtime_sec: Optional[float] = None
+        if runtime_sidecar.is_file():
+            try:
+                runtime_sec = float(runtime_sidecar.read_text().strip())
+            except ValueError:
+                runtime_sec = None
+
+        return cls(
+            mpnn_sequence_id=mpnn_sequence_id,
+            workdir=workdir,
+            row_type=row_type,
+            cold_start=cold_start_stage,
+            steered=steered,
+            reversion=reversion,
+            truth=truth_psp,
+            contamination_positions=contamination_positions,
+            run_one_runtime_sec=runtime_sec,
+        )
 
     # ── Reversion mapping (per spec §2.9 + Step 4.3 addition) ──────
 

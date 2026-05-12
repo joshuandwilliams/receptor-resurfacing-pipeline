@@ -356,7 +356,9 @@ workflow {
     // in cross_sequence_summary.csv.
     NEGSTEER_CROSS_SEQUENCE(
         per_sequence_workdirs_ch,
-        Channel.value(file("${projectDir}/bin/cross_sequence_summary.py")),
+        // Phase 4: route through the typed CLI (cross_summary_v2.py
+        // wraps DesignCohort.emit_cross_summary_from_dirs).
+        Channel.value(file("${projectDir}/bin/cross_summary_v2.py")),
         Channel.value(file("${projectDir}/tests/_NO_FILE"))
     )
 

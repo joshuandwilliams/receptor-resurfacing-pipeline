@@ -57,6 +57,33 @@ class FixedSegment:
 
 
 @dataclass(frozen=True)
+class BreakSegment:
+    """A chain-break marker (literal ``0`` token in RFDiffusion contig
+    grammar).  Carries no length and no positions — purely a layout
+    signal between fixed/denovo segments to tell RFDiffusion that the
+    flanking residues are not contiguous.  Position-math methods on
+    ContigChain ignore breaks.
+    """
+
+    def __post_init__(self) -> None:
+        return None
+
+
+@dataclass(frozen=True)
+class PassthroughSegment:
+    """A bare-chain-letter segment whose residue range cannot be
+    resolved without a reference PDB.  Carried verbatim through the
+    contig pipeline; RFDiffusion expands it from the input PDB at run
+    time.  Like BreakSegment, has no length at the spec level.
+    """
+    chain: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.chain, str) or not self.chain:
+            raise ValueError("PassthroughSegment.chain must be non-empty")
+
+
+@dataclass(frozen=True)
 class DeNovoSegment:
     """A de novo (design) segment.  Carries a length RANGE (min_len,
     max_len) for both the constraint form (``5-7``) and the resolved
@@ -126,11 +153,24 @@ class ContigChain:
     @property
     def is_resolved(self) -> bool:
         """True iff every de novo segment in this chain has a single
-        concrete length."""
-        return all(
-            (not isinstance(s, DeNovoSegment)) or s.is_resolved
-            for s in self.segments
-        )
+        concrete length AND the chain carries no Passthrough segments
+        (whose length is PDB-dependent and unknown at spec level)."""
+        for s in self.segments:
+            if isinstance(s, DeNovoSegment) and not s.is_resolved:
+                return False
+            if isinstance(s, PassthroughSegment):
+                return False
+        return True
+
+    @property
+    def _length_bearing(self) -> List:
+        """Length-bearing segments only — Fixed + DeNovo.  Break and
+        Passthrough segments are excluded; position-math methods iterate
+        this list rather than ``self.segments``."""
+        return [
+            s for s in self.segments
+            if isinstance(s, (FixedSegment, DeNovoSegment))
+        ]
 
     @property
     def total_length(self) -> int:
@@ -144,25 +184,24 @@ class ContigChain:
                 "Resolve de novo segment lengths or use min_total_length / "
                 "max_total_length."
             )
-        return sum(
-            s.length if isinstance(s, FixedSegment) else s.length
-            for s in self.segments
-        )
+        return sum(s.length for s in self._length_bearing)
 
     @property
     def min_total_length(self) -> int:
-        """Minimum total residues across the chain (constraint form)."""
+        """Minimum total residues across the chain (constraint form).
+        Passthrough segments contribute 0 (unknown length until PDB)."""
         return sum(
             s.length if isinstance(s, FixedSegment) else s.min_len
-            for s in self.segments
+            for s in self._length_bearing
         )
 
     @property
     def max_total_length(self) -> int:
-        """Maximum total residues across the chain (constraint form)."""
+        """Maximum total residues across the chain (constraint form).
+        Passthrough segments contribute 0."""
         return sum(
             s.length if isinstance(s, FixedSegment) else s.max_len
-            for s in self.segments
+            for s in self._length_bearing
         )
 
     @property
@@ -172,6 +211,14 @@ class ContigChain:
     @property
     def denovo_segments(self) -> List[DeNovoSegment]:
         return [s for s in self.segments if isinstance(s, DeNovoSegment)]
+
+    @property
+    def has_breaks(self) -> bool:
+        return any(isinstance(s, BreakSegment) for s in self.segments)
+
+    @property
+    def passthrough_segments(self) -> List[PassthroughSegment]:
+        return [s for s in self.segments if isinstance(s, PassthroughSegment)]
 
     def designed_position_to_native(self, designed_pos: int) -> Optional[int]:
         """For a 1-based designed-frame position on this chain, return
@@ -185,7 +232,7 @@ class ContigChain:
         if designed_pos < 1:
             return None
         cursor = 0
-        for seg in self.segments:
+        for seg in self._length_bearing:
             seg_start = cursor + 1
             seg_end = cursor + seg.length
             if seg_start <= designed_pos <= seg_end:
@@ -203,7 +250,7 @@ class ContigChain:
         falls in or between the de novo / non-anchored regions).
         """
         cursor = 0
-        for seg in self.segments:
+        for seg in self._length_bearing:
             if isinstance(seg, FixedSegment):
                 if seg.start <= native_pos <= seg.end:
                     offset = native_pos - seg.start
@@ -214,7 +261,7 @@ class ContigChain:
     def is_design_region_position(self, designed_pos: int) -> bool:
         """True iff designed_pos is in a de novo segment on this chain."""
         cursor = 0
-        for seg in self.segments:
+        for seg in self._length_bearing:
             seg_start = cursor + 1
             seg_end = cursor + seg.length
             if seg_start <= designed_pos <= seg_end:
@@ -227,7 +274,7 @@ class ContigChain:
         segments on this chain."""
         out: List[int] = []
         cursor = 0
-        for seg in self.segments:
+        for seg in self._length_bearing:
             if isinstance(seg, DeNovoSegment):
                 out.extend(range(cursor + 1, cursor + seg.length + 1))
             cursor += seg.length
@@ -238,7 +285,7 @@ class ContigChain:
         counterparts (i.e. fall in fixed segments)."""
         out: List[int] = []
         cursor = 0
-        for seg in self.segments:
+        for seg in self._length_bearing:
             if isinstance(seg, FixedSegment):
                 out.extend(range(cursor + 1, cursor + seg.length + 1))
             cursor += seg.length
@@ -415,14 +462,19 @@ def _parse_block(block: str) -> ContigChain:
         seg = raw_seg.strip()
         if not seg:
             continue
+        if seg == "0":
+            # RFDiffusion chain-break marker.  Carries no length.
+            segments.append(BreakSegment())
+            continue
         if seg[0].isalpha():
-            # Fixed segment: chain-prefixed range
             chain_letter = seg[0]
             rest = seg[1:]
             if not rest:
-                raise ValueError(
-                    f"fixed segment {seg!r} has chain prefix but no range"
-                )
+                # Bare chain letter within a block — passthrough.
+                if chain_id is None:
+                    chain_id = chain_letter
+                segments.append(PassthroughSegment(chain=chain_letter))
+                continue
             if "-" in rest:
                 lo_s, hi_s = rest.split("-", 1)
                 try:

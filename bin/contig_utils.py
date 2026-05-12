@@ -65,45 +65,60 @@ def parse_block_segments(block, rec_chain=None, pdb_path=None):
         ("break",)
         ("passthrough", raw_string)
 
-    If rec_chain and pdb_path are provided, bare chain letters within the
-    block are resolved to full residue ranges.
+    Thin adapter around :class:`contig_spec.ContigChain` (Phase 4).  All
+    RFDiffusion contig-grammar features — including the chain-break
+    marker (`0`) and bare-chain-letter passthrough — round-trip through
+    the typed form.  Optional ``pdb_path`` triggers post-parse
+    resolution of passthrough segments to fixed residue ranges (via
+    ``get_chain_residue_range``).
+
+    Returns ``(descs, block_chain)`` to preserve the legacy CLI contract
+    used by ``resolve_contigs`` and ``remap_segments_to_pdb`` downstream.
     """
-    segments = block.split("/")
+    import sys as _sys
+    from pathlib import Path as _Path
+    _sys.path.insert(0, str(_Path(__file__).resolve().parent))
+    from contig_spec import (  # noqa: E402
+        ContigSpec, FixedSegment, DeNovoSegment,
+        BreakSegment, PassthroughSegment,
+    )
+
+    # ContigSpec.from_string parses multi-chain space-separated blocks.
+    # parse_block_segments operates on a single block, so wrap-and-pick.
+    try:
+        spec = ContigSpec.from_string(block)
+    except ValueError as e:
+        raise ValueError(f"contig block {block!r} parse failed: {e}")
+    if not spec.chains:
+        return [], None
+    chain = spec.chains[0]
+    block_chain = chain.chain_id
+
     descs = []
-    block_chain = None
+    # Bare-chain blocks (e.g. `B` alone) parse into ContigChain with
+    # segments=(); legacy parse_block_segments emitted a single
+    # passthrough descriptor for these.  Preserve that behaviour.
+    if not chain.segments:
+        if pdb_path:
+            lo, hi = get_chain_residue_range(pdb_path, block_chain)
+            if lo is not None:
+                return [("fixed", block_chain, lo, hi)], block_chain
+        return [("passthrough", block_chain)], block_chain
 
-    for seg in segments:
-        seg = seg.strip()
-        if not seg:
-            continue
-        if seg == "0":
+    for seg in chain.segments:
+        if isinstance(seg, FixedSegment):
+            descs.append(("fixed", block_chain, seg.start, seg.end))
+        elif isinstance(seg, DeNovoSegment):
+            descs.append(("denovo", f"{seg.min_len}-{seg.max_len}"))
+        elif isinstance(seg, BreakSegment):
             descs.append(("break",))
-            continue
-        if seg[0].isalpha():
-            chain = seg[0]
-            block_chain = chain
-            rest = seg[1:]
-            if "-" in rest:
-                parts = rest.split("-")
-                descs.append(("fixed", chain, int(parts[0]), int(parts[1])))
-            elif rest:
-                v = int(rest)
-                descs.append(("fixed", chain, v, v))
-            else:
-                # Bare chain letter within block — resolve from PDB
-                if pdb_path:
-                    lo, hi = get_chain_residue_range(pdb_path, chain)
-                    if lo is not None:
-                        descs.append(("fixed", chain, lo, hi))
-                    else:
-                        descs.append(("passthrough", seg))
-                else:
-                    descs.append(("passthrough", seg))
-        elif seg[0].isdigit():
-            if "-" not in seg:
-                seg = f"{seg}-{seg}"
-            descs.append(("denovo", seg))
-
+        elif isinstance(seg, PassthroughSegment):
+            if pdb_path:
+                lo, hi = get_chain_residue_range(pdb_path, seg.chain)
+                if lo is not None:
+                    descs.append(("fixed", seg.chain, lo, hi))
+                    continue
+            descs.append(("passthrough", seg.chain))
     return descs, block_chain
 
 

@@ -176,6 +176,79 @@ class DesignCohort:
         )
 
     @classmethod
+    def emit_cross_summary_from_dirs(
+        cls,
+        runs_dirs,
+        output_path,
+        published_runs_dir=None,
+        scored_metadata_path=None,
+        strict: bool = False,
+        explicit_pairs=None,
+    ) -> int:
+        """Walk one or more runs directories and emit cross_sequence_summary.csv.
+
+        The Phase 4 typed entry point for cohort CSV emission.  Building
+        full hydrated NegativeSteeringRun objects requires per-seed PDB
+        + confidence parsing for every sequence; that cost is only
+        warranted when downstream code consumes the StageResult chain.
+        For CSV emission alone the workdir + mpnn_sequence_id pairs are
+        sufficient — this classmethod gathers those and delegates to
+        the existing ``cross_sequence_summary.aggregate`` so the column
+        set stays bit-identical.
+
+        Arguments
+        ---------
+        runs_dirs : iterable of Path-like
+            Each directory contains one subdir per MPNN sequence with
+            its own passing_summary.csv.  Repeat-tolerant — duplicates
+            are deduplicated by sequence name.
+        explicit_pairs : optional list of (name, path) tuples
+            Per-sequence overrides for direct file paths (mirrors the
+            existing --passing-summary CLI flag).
+        """
+        from cross_sequence_summary import aggregate  # local import
+
+        # Sequence-name validation regex (matches the existing CLI).
+        import re as _re
+        _SEQ_NAME_RE = _re.compile(r"^[A-Za-z0-9_.+\-]+$")
+
+        sequences: List[Tuple[str, Path]] = []
+        seen: set = set()
+
+        if explicit_pairs is not None:
+            for name, path in explicit_pairs:
+                if name in seen:
+                    continue
+                seen.add(name)
+                sequences.append((name, Path(path)))
+
+        for d in runs_dirs:
+            d = Path(d)
+            if not d.is_dir():
+                continue
+            for sub in sorted(d.iterdir()):
+                if not sub.is_dir():
+                    continue
+                seq_name = sub.name
+                if not _SEQ_NAME_RE.match(seq_name):
+                    continue
+                if seq_name in seen:
+                    continue
+                seen.add(seq_name)
+                sequences.append((seq_name, sub / "passing_summary.csv"))
+
+        if not sequences:
+            return 2
+
+        return aggregate(
+            sequences=sequences,
+            output_path=Path(output_path),
+            strict=strict,
+            published_runs_dir=published_runs_dir,
+            scored_metadata_path=scored_metadata_path,
+        )
+
+    @classmethod
     def from_runs_directory(
         cls,
         runs_dir,

@@ -252,6 +252,34 @@ class TestDeNovoSegment:
 
 
 @pytest.mark.local_unit
+class TestBreakAndPassthrough:
+    def test_break_marker(self):
+        spec = cs.ContigSpec.from_string("A1-10/0/A15-20")
+        types = [type(s).__name__ for s in spec.chain("A").segments]
+        assert types == ["FixedSegment", "BreakSegment", "FixedSegment"]
+        # Break does not contribute to length
+        assert spec.chain("A").total_length == 10 + 6
+
+    def test_passthrough_within_block(self):
+        spec = cs.ContigSpec.from_string("A1-10/5/B/A15-20")
+        types = [type(s).__name__ for s in spec.chain("A").segments]
+        assert "PassthroughSegment" in types
+        # Passthrough makes the chain unresolved
+        assert not spec.chain("A").is_resolved
+        # but min/max_total_length still computes (passthrough contributes 0)
+        assert spec.chain("A").min_total_length == 10 + 5 + 6
+
+    def test_break_does_not_break_position_math(self):
+        """Designed-to-native lookup should ignore break markers."""
+        spec = cs.ContigSpec.from_string("A1-10/0/A15-20")
+        chain = spec.chain("A")
+        assert chain.designed_position_to_native(1) == 1
+        assert chain.designed_position_to_native(10) == 10
+        # Position 11 is the first native residue after the break — i.e. A15
+        assert chain.designed_position_to_native(11) == 15
+
+
+@pytest.mark.local_unit
 class TestConstraintForm:
     def test_from_string_accepts_ranges(self):
         spec = cs.ContigSpec.from_string("A1-10/5-7/A15-20 B")

@@ -876,7 +876,12 @@ workflow {
 
     NEGSTEER_CROSS_SEQUENCE(
         per_sequence_workdirs_ch,
-        Channel.value(file("${projectDir}/bin/cross_sequence_summary.py")),
+        // Phase 4: route through the typed CLI entry point
+        // (DesignCohort.emit_cross_summary_from_dirs).  Bit-identical
+        // CSV output relative to cross_sequence_summary.py — the typed
+        // wrapper delegates to the same aggregate() for column-level
+        // construction.  See bin/cross_summary_v2.py for the routing.
+        Channel.value(file("${projectDir}/bin/cross_summary_v2.py")),
         MPNN_DESIGN_REGION_SCORE.out.scored_metadata
     )
 
