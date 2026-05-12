@@ -87,6 +87,16 @@ def _apply_filters(
 ) -> None:
     """Populate orthogonal_flags and passes_orthogonal_filters in-place.
 
+    Orthogonal metrics are those INDEPENDENT of Boltz-2:
+      - Rosetta Sc and ΔΔG (physics-based, separate software)
+      - FreeSASA BSA (solvent-accessible surface, separate software)
+      - AF3-no-MSA ra_eff (separate structure predictor, INFORMATIONAL only)
+
+    Boltz-2 confidence metrics (interface_plddt, ipSAE, iPTM) are NOT
+    orthogonal — they come from the same model as the negsteer predictions.
+    They are displayed in the cohort summary under the Boltz confidence
+    column group but do NOT gate passes_orthogonal_filters.
+
     AF3 is INFORMATIONAL — its flag is emitted (so plots can report
     cross-model disagreement) but it does NOT gate
     passes_orthogonal_filters.  Negative steering optimises against
@@ -119,27 +129,17 @@ def _apply_filters(
     elif bsa_val < bsa_min:
         flags.append(f"bsa_too_low:{bsa_val:.0f}")
 
-    # Interface pLDDT — flag only.  Sourced from
-    # representative_interface_plddt_median, which comes from
-    # cross_sequence_summary.csv (computed per-prediction by
-    # compute_metrics.py and propagated through the aggregator).
-    # Falls back to the legacy interface_plddt column if the row
-    # came from an older biophysical_summary.csv (defensive — should
-    # not happen post-migration).
-    plddt_val = _as_float(
-        row.get("representative_interface_plddt_median", "")
-        or row.get("interface_plddt", "")
-    )
-    if plddt_val is None:
-        flags.append("interface_plddt_missing")
-    elif plddt_val < plddt_min:
-        flags.append(f"interface_plddt_too_low:{plddt_val:.3f}")
+    # NOTE: interface_plddt is intentionally NOT included here.
+    # It is a Boltz-2 confidence metric (pLDDT over interface residues),
+    # not an orthogonal metric.  It is displayed in the cohort summary
+    # under the Boltz confidence column group alongside iPTM and ipSAE.
+    # The --filter-plddt-min argument is accepted for backward compat
+    # but has no effect on the filter.
 
     row["orthogonal_flags"] = ",".join(flags)
     # Pass requires: every NON-AF3 flag absent.  AF3 flags
     # (af3_nomsa_missing, af3_nomsa_ra_eff_too_high) are informational
-    # only and do not gate passing.  Missing non-AF3 metrics still
-    # count as flags — strict "every column populated" interpretation.
+    # only and do not gate passing.
     gating_flags = [f for f in flags if not f.startswith("af3_nomsa")]
     passes = 1 if not gating_flags else 0
     row["passes_orthogonal_filters"] = str(passes)

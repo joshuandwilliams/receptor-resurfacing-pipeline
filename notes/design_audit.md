@@ -2600,5 +2600,156 @@ The constants are currently in 3 bin/ files plus their test twins (6 copies tota
 
 ---
 
-## Session 5 — Architecture + future
-*Q113 onwards — begins in next batch.*
+## Session 5 — Architecture + future intent
+
+### Batch 1 — Architecture scope, terminology, priorities (Q113–Q120)
+
+---
+
+**Q113 [VERIFY]** — `boltz_lib.py` scope confirmed?
+
+**A113:** I think all of those things are in scope as long as they don't break
+anything else. I'm looking to simplify and deduplicate the code as much as
+possible so that things are used consistently across the whole pipeline.
+
+**Synthesis note**: boltz_lib.py scope confirmed: `get_chain_sequence`,
+`find_contact_residues_heavy` (negsteer version as canonical), `jaccard`,
+weighted_jaccard primitives, `binding_rmsds`, `write_boltz_yaml`, Cα/Kabsch
+helpers, residue dataclasses. Guiding principle: one implementation, consistent
+use across all scripts.
+
+---
+
+**Q114 [VERIFY]** — `plot_lib.py` scope confirmed?
+
+**A114:** That scope also looks correct.
+
+**Synthesis note**: plot_lib.py scope confirmed: `make_empty_plot`,
+`save_fallback_plots`, `ALL_PLOT_FILES` pattern, `COLOUR_TIER`,
+`_TIER_SORT_ORDER`, `COMPOSITE_RA_EFF_WEIGHT`, `_try_float`/`_try_int`/`_short_name`
+shared utilities.
+
+---
+
+**Q115 [UNKNOWN]** — Terminology simplification proposals.
+
+**A115:** The representative prefix is actually useful because otherwise we get
+confused about whether the values are from cold-start, steering, or reversion -
+it's fine to rename it to "rep" though to make it shorter. I don't think the fine
+detail about how many seeds passed or failed each filter or stage are necessary -
+that information is in the per_seed csv output files, so I think you're right to
+just consolidate them into n_pass and n_seeds. I like the rename of
+aggregated_verdict to outcome.
+
+**Decisions recorded**:
+1. `representative_` prefix → `rep_` (shorter, retains semantic distinction)
+2. `n_seeds_pose_holds`, `n_seeds_clean_steered`, `n_seeds_pose_collapses`,
+   `n_seeds_new_contamination`, `n_seeds_no_data` → `n_pass` + `n_seeds`
+   (fine detail stays in `raw_per_seed_results.csv`)
+3. `aggregated_verdict` → `outcome`
+
+→ Phase 4 implementation: update `boltz2_iterate_steering.py` output column names,
+`cross_sequence_summary.py`, `extract_passing.py`, and all downstream CSV readers.
+
+---
+
+**Q116 [UNKNOWN]** — MPNN sequence propagation: add to cross_sequence_summary.csv?
+
+**A116:** I think that is the correct approach for now. Later on I'm going to do
+another audit of exactly what information is in each output file, cleaning out
+anything that isn't necessary or is duplicated for no reason, or files that don't
+really need to exist or can be merged, but for now I think making that information
+more visible is an important step.
+
+**Synthesis note**: Add to `cross_sequence_summary.csv`:
+- `corrected_receptor` (full MPNN-designed receptor sequence — for ordering)
+- The design-region slice of `corrected_receptor` (derived from contig info)
+- `native_residues` (pipe-separated native sequence at design region positions)
+
+Source: `scored_metadata.csv` from the MPNN stage, joined at the
+`NEGSTEER_CROSS_SEQUENCE` step on `mpnn_sequence` as the join key.
+A future output audit will decide which intermediate files can be removed or merged.
+
+---
+
+**Q117 [UNKNOWN]** — Input validation: dedicated script for all parameters.
+
+**A117:** Anything with boundaries between 0 and 1 should be checked to make sure
+it is. You should be able to come up with a range of possible inputs for each
+parameter, and these will all be tested in the unit tests. This is one of the most
+important bits. If the internal pipeline works that's great, but the most important
+part is to make sure the user can't break it by giving weird inputs. The input
+possibilities need to be completely locked down right at the start. Your existing
+suggestions are a good start but there should be checks for every parameter. It
+could be its own separate script.
+
+**Synthesis note — HIGH PRIORITY ITEM**:
+- Separate script: `bin/validate_params.py` (or inline in preprocessing.nf entry)
+- Called at the start of the pipeline before any SLURM jobs are submitted
+- Tests unit-tests: full range of valid/invalid inputs for every parameter
+- Current parameter catalogue needs to be assembled for the validation spec
+- Rationale: the user is currently the only operator; future operators may not
+  know which inputs are invalid, and silent failures downstream are worse than
+  clear upfront errors
+
+→ Phase 4 implementation task. The validation spec (full parameter catalogue with
+valid ranges and types) is a prerequisite.
+
+---
+
+**Q118 [VERIFY]** — Remove `interface_plddt` from orthogonal cascade now?
+
+**A118:** Implement it now. It is in the wrong place. The exact threshold value
+can be deferred to the threshold audit.
+
+**Action taken**: `merge_orthogonal_metrics.py` updated. The `interface_plddt`
+check is removed from `_apply_filters` (it is now a no-op comment explaining why).
+The `--filter-plddt-min` CLI argument is retained for backward compatibility but
+has no effect. AF3 remains informational. `passes_orthogonal_filters` now gates
+only on Sc, BSA, and ΔΔG (genuinely orthogonal metrics). Docstring updated to
+explain the orthogonal vs Boltz distinction explicitly.
+
+---
+
+**Q119 [VERIFY]** — Multi-cycle implementation: loop within shell orchestrator?
+
+**A119:** That sounds like the correct approach.
+
+**Synthesis note**: Multi-cycle implementation plan:
+1. Extend `negative_steering_run_one.sh` to loop over cycles (cycle-0, cycle-1, ...)
+2. After each cycle, run the novelty/selection logic inline (calling
+   `cmd_kickoff_distances` and the selection logic from Python)
+3. If at least one seed found the correct interface → stop (success)
+4. If no novel placements found → stop (search exhausted)
+5. Otherwise, continue to cycle-N+1 with the surviving sequences as input
+6. Stop at user-defined `n_cycles`
+
+The `cmd_kickoff*` sbatch-based submission family is retained for the standalone
+negsteer pipeline but is NOT used in the Nextflow integration. The Nextflow
+integration loop runs entirely within the single NEGSTEER_RUN_ONE SLURM job.
+
+→ First post-remediation feature implementation.
+
+---
+
+**Q120 [UNKNOWN]** — Any accumulating fixes/features not yet reached?
+
+**A120:** I've audited the plots before and caught most of the issues, but the
+main table that I'm using - the summary table produced after the orthogonal
+metrics (it's being used as a first view of the pipeline results) seems to have
+some inconsistencies that we've talked about. I think correcting that should
+become a priority.
+
+**Synthesis note**: The cohort summary table (`orthogonal_combined_cohort_summary.png`)
+is the primary result view. Known issues documented across the audit:
+1. **Mixed data sources** not communicated (Boltz medians vs AF3 best-of-15)
+2. **interface_plddt** in the filter cascade — FIXED (Q118)
+3. **Tier/orthogonal independence** confusing — needs clearer labelling
+4. **Column source labelling** needed (which columns are Boltz, which are orthogonal)
+
+→ Cohort summary table audit is a Phase 4 priority, immediately after the
+`interface_plddt` removal is tested.
+
+---
+
+*Session 5 continues — Q121 onwards below.*
