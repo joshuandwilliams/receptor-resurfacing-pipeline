@@ -2,7 +2,119 @@
 
 A living document tracking where the codebase remediation effort currently stands. Read this at the start of every session; update it at the end of every session.
 
-**Last updated:** 2026-05-12 (six pre-Phase-4 audit-close items landed; Phase 4 grill-me is next)
+**Last updated:** 2026-05-12 (Phase 4 architecture types implemented + initial caller migrations live on `phase4-impl`; HPC validation pending)
+
+## Current Phase
+
+**Phase 4 implementation — IN PROGRESS on branch `phase4-impl`.**  All 13 deep-module types built and tested; CL-3 majority-rule fix live; ~4,200 LOC of duplication removed; six caller migrations completed.  Remaining migrations (DesignCohort wiring, full threshold rollout, contig parser consolidation, find_contact_residues_heavy / read_ca_atoms consolidation) deferred to a future session that runs after HPC validation of CL-3 against real cohort data.
+
+## Branch state (as of 2026-05-12 end-of-session)
+
+- `main` — at `18718db`.  Safe-fallback baseline.  Contains everything through Phase 4 spec (Sessions 1–6 complete) but no implementation code.  If `phase4-impl` ever needs to be abandoned, `main` is the working pipeline to return to.
+- `phase4-impl` — at `54dec6f` (or later if more commits land).  19 commits ahead of `main`.  All Phase 4 implementation + caller migration work lives here.  Tracking remote `origin/phase4-impl`.
+- `remediation` — at `18718db`.  Historical; can be retired.
+- `experiments` — separate worktree branch; not touched in Phase 4.
+
+## What landed in this session (2026-05-12)
+
+### Phase 1 of session — pre-architecture deliverables (on `remediation`, then merged into `main`)
+
+Six items from `notes/design_audit.md` "Audit close → Immediate actions":
+
+1. **Schema rename + latent-bug fix** (commit `6e5959b`, 60 files):
+   - `aggregated_verdict → outcome`, `aggregated_verdict_reason → outcome_reason`, `representative_* → rep_*`, the five `n_seeds_{...}` columns consolidated to one `n_pass`.
+   - `_classify_aggregated_verdict → _classify_outcome` (signature changed to take `verdict_counts: Dict[str, int]`).
+   - `_pick_representative_from_aggregated → _pick_rep_from_aggregated`.
+   - **Latent-bug fix rides with rename**: `cross_sequence_summary._tier_for_row` no longer shortcuts `outcome == "no_reversion" → tier A`.  Tier is now derived purely from `n_pass / n_seeds`.  Wrong-placement-no-contamination groups (n_pass=0, outcome=no_reversion) now correctly land in tier none, not tier A.
+   - 37 fixture CSVs rewritten by a one-shot script that was deleted post-run.
+   - **New memory file**: `project_no_reversion_semantics.md` — recurring Claude failure mode (conflating `no_reversion` with cold-start).  Indexed in `MEMORY.md`.
+
+2. **Five other audit-close items** (commit `05f0c07`):
+   - Cohort summary visual groups (three-axis: Boltz structure / Boltz confidence / Orthogonal) + AF3 "(best)" label + restructured legend.  Mirror in `tests/orthogonal_metrics/test_orthogonal_metrics_plots.py`.
+   - MPNN-sequence join into `cross_sequence_summary.csv` (`corrected_receptor`, `designed_residues`, `native_residues` columns), wired through `NEGSTEER_CROSS_SEQUENCE`.
+   - `bin/validate_params.py` — 66 ParamSpec entries (59 with real constraints), 34 unit tests.  Wired into `main.nf` workflow head (fails fast before any SLURM job).
+   - Glossary additions in `notes/inventory/06_ubiquitous_language.md`: `no_data` standalone entry, `n_pass` definition, `passes_orthogonal_filters` clarified as Sc+BSA+ΔΔG only, three-axis framework, F11 ("outcome" overload between per-sequence column and per-seed plot label).
+   - Inventory mechanical updates (`02_function_inventory.md`, `15_discovery_run_path_coverage.md`).
+
+3. **Tests/run scripts** (commit `54107b4`):
+   - `tests/run_tests.sh` — multi-module dispatcher (parallel sbatch, `--with-plots` adds afterok dependency, `--no-clean` opt-out for the default cleanup).
+   - `tests/update_example_dataset.slurm.sh` + `tests/_update_example_dataset_impl.py` — diff-and-replace with per-module `reference_manifest.txt`.
+   - `scripts/sync_from_hpc.sh` — Mac-side puller (reverse of `sync_to_hpc.sh`).
+   - Per-module `reference_manifest.txt` files for all five modules (haddock placeholder).
+   - Retired `tests/rfdiffusion/capture_reference_set.sh`.
+
+4. **Post-tests-failure fixes** (commits `1cdefd6`, `1f735c0`):
+   - NO_FILE sentinel passed to `NEGSTEER_CROSS_SEQUENCE` in `tests/negative_steering/test_negative_steering.nf` (the 3-input regression from `05f0c07`).
+   - `tests/run_tests.sh` cleans stale Nextflow + SLURM artefacts before sbatch by default (otherwise Nextflow's resume cache served stale prior-run outputs).
+
+5. **Phase 4 architecture spec** (commits `d3a75f8`, `18718db`):
+   - `notes/phase4_architecture_spec.md` — 1065 lines, the architectural contract for Phase 4.
+   - Strategy B (deep modules) locked.
+   - 13 domain types specced with full interface, fields, methods, boundary, consolidation targets, dependency tier (0–6), composition tree, data flow narrative, code-fit validation against 4 real-code samples.
+   - Five user clarifications captured (CL-1 to CL-5).  CL-3 is the only intentional behaviour change.
+   - **New memory file**: `project_contig_string_format.md` — canonical RFDiffusion contig syntax (`A1-10/5/A15-20 B`, slash-separated, never commas).
+
+### Merge to main
+
+After Phase 1, `remediation → main` fast-forward merge.  `phase4-impl` branched off `main` for the implementation phase.
+
+### Phase 2 of session — Phase 4 implementation on `phase4-impl`
+
+**All 13 deep-module types built (Tiers 0–6, 13 commits):**
+
+| Tier | Type | File | Tests | Commit |
+|---|---|---|---|---|
+| 0.1 | `PipelineInternalThresholds` | `bin/pipeline_thresholds.py` | 19 | `f618b70` |
+| 0.2 | `PipelineParams` | `bin/pipeline_params.py` | 15 | `8e921fb` |
+| 0.3 | `BoltzConfidenceMetrics` | `bin/boltz_confidence.py` | 22 | `5dcbe98` |
+| 0.4 | `AF3ConfidenceAggregate` | `bin/af3_confidence.py` | 19 | `3119196` |
+| 0.5 | `ContigSpec` | `bin/contig_spec.py` | 35 | `8ee1d55` |
+| 1 | `PositionSet` | `bin/position_set.py` | 41 | `1b51259` |
+| 2 | `ProteinStructurePrediction` | `bin/protein_structure_prediction.py` | 23 (16 local + 7 gemmi) | `5457273` |
+| 3 | `DesignedBackbone` | `bin/designed_backbone.py` | 11 | `edd9336` |
+| 4.1 | `DesignedSequence` | `bin/designed_sequence.py` | 9 | `f6ae964` |
+| 4.2 | `StageResult` | `bin/stage_result.py` | 30 (incl. 6 CL-3 tests) | `0859641` |
+| 4.3 | `OrthogonalMetrics` | `bin/orthogonal_metrics.py` | 14 | `b044447` |
+| 5 | `NegativeSteeringRun` | `bin/negative_steering_run.py` | 14 | `36355b3` |
+| 6 | `DesignCohort` | `bin/design_cohort.py` | 13 | `0f194ee` |
+
+Total: ~4,000 LOC new code + 350 local_unit tests, all green.
+
+**Six caller migrations completed:**
+
+| Migration | Commit | Impact |
+|---|---|---|
+| **CL-3 fix in `cmd_build_contaminated`** | `b67b4b3` | Reversion now per-design majority-of-correctly-placed, not per-(design, seed).  Headline behaviour change.  Encoded inline in the existing function rather than as a wholesale rewrite to StageResult (lower risk; same data flow). |
+| Test/prod plot-script divergence eliminated | `4370e99` | 3 test scripts collapsed into thin wrappers; `tests/orthogonal_metrics/merge_orthogonal_metrics.py` deleted (zero callers).  **~4,200 LOC duplication removed.** |
+| `get_chain_sequence` consolidation (2 of 4 duplicates) | `4e19b1b` | `build_control_sequences._extract_chain_sequence` and `extract_survivor_manifest._extract_chain_seq` migrated to canonical `boltz2_negative_steering.get_chain_sequence`. |
+| `THREE_TO_ONE` / `_AA3TO1` dedup | `e60628b` | `protein_structure_prediction.py` and `extract_survivor_manifest.py` no longer carry their own copies; both use `contig_utils.THREE_TO_ONE`. |
+| `parse_af3_output.py` rewritten as thin CLI wrapper | `8230ee5` | 319 → 104 LOC.  All logic now in `AF3ConfidenceAggregate`.  CLI contract preserved; `AF3_PARSE_OUTPUT` Nextflow process unchanged. |
+| `extract_passing._compute_confidence_flag` reads from `PipelineInternalThresholds` | `54dec6f` | First threshold-catalogue caller migration.  Lazy import + fallback to historical literals if `pipeline_thresholds` unavailable. |
+
+## Caller migrations explicitly NOT done (with reasons)
+
+These were considered and deferred — each is a real Phase 4 todo but each has a specific reason it deserves a future, focused session:
+
+1. **`cross_sequence_summary.py` → `DesignCohort.to_cross_summary_csv`** — the production aggregator is ~900 LOC.  `DesignCohort.from_runs_directory` and `NegativeSteeringRun.from_workdir` factories are currently stubs; implementing them is several hundred LOC of careful parsing.  Replacing the production aggregator without HPC validation between commits is high-risk.  **Deserves a dedicated session.**
+2. **ContigSpec parser consolidation (4 existing parsers → ContigSpec)** — the 4 existing parsers accept *constraint-form* contigs (range-form denovo segments like `5-7`).  The new `ContigSpec` strictly requires *resolved form* per Step 1 of the spec.  Consolidation requires either revising the spec to allow constraint form, or introducing a separate `ContigConstraint` type.  Both are real design decisions.
+3. **Full threshold migration** — `orthogonal_metrics_plots.py` (`ORTHOG_SC_MIN` etc.), `compute_metrics.py` defaults, `main.nf` inline numbers.  Each migration is small but they're scattered across ~10–15 files; each deserves verification.
+4. **`find_contact_residues_heavy` consolidation** — the two implementations have genuinely different return contracts (residue_seq_index vs positional_index_0b; raise on missing chain vs return empty list).  Callers depend on the differences.  Safe consolidation requires renaming for disambiguation, not merging.
+5. **`read_ca_atoms` consolidation** — similar issue: 4 implementations with different return types (CAEntry dataclass vs tuples vs numpy arrays).
+6. **`pipeline_correct_sequences.get_pdb_sequence`** — different signature (returns `(seq, resnums)` tuple).  Migrating it requires changes to every caller.
+
+## HPC validation queue (pending at end of session)
+
+Tests submitted during the session:
+- `rfdiffusion` — was queued, GPU-pending at end of session (3–4h+ wait expected)
+- `negative_steering` — was queued, GPU-pending at end of session
+- `proteinmpnn`, `rosetta_filtering`, `orthogonal_metrics` — completed successfully against commit `1f735c0` (pre-implementation baseline)
+
+**The CL-3 fix (`b67b4b3`) has not yet been validated against real cohort data.**  The next session should run the per-module negsteer test against `phase4-impl` and verify:
+- Test runs to completion (no broken negsteer pipeline)
+- `outcome_tally` log line shows the expected redistribution of designs across tiers
+- Fixture diffs are sensible: expect some tier-C → tier-A/B promotions (sequences whose lone contaminated seed used to trigger reversion-and-collapse now keep their clean_steered partners and pass)
+
+If CL-3 changes the example_output_files content, use `sbatch tests/update_example_dataset.slurm.sh --module negative_steering --updated-output-folder tests/negative_steering/receptor_resurfacing_results` to regenerate, then `./scripts/sync_from_hpc.sh --module negative_steering` to pull back.
 
 ## Pre-Phase-4 baseline commit
 
