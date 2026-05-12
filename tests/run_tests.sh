@@ -122,7 +122,12 @@ clean_module() {
         "${mod_dir}"/test_plots_*.err
     )
     shopt -u nullglob
-    [ ${#stale_logs[@]} -gt 0 ] && rm -f "${stale_logs[@]}"
+    # Use a full `if` (not `[ … ] && rm …`) so that an empty stale_logs
+    # array doesn't make this function return non-zero on its last
+    # command, which under `set -e` would silently kill the dispatcher.
+    if [ ${#stale_logs[@]} -gt 0 ]; then
+        rm -f "${stale_logs[@]}"
+    fi
 }
 
 submit_one() {
