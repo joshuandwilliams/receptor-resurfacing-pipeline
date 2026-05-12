@@ -61,10 +61,11 @@ contigs: "B A1-400/20-30/A426-435"
 hotspot: ""            # auto-derived from HADDOCK3 in modes 1-3; set manually in mode 2
                        # e.g. "B45,B67,B89" — soft hint, not exhaustive; RFDiffusion
                        # aims for these residues but may also contact neighbours
-num_designs: 32
-rfdiff_iterations: 100
+num_designs: 64                            # RFDiffusion backbone designs per run (32 for tests, 64+ for production)
+rfdiff_iterations: 100                     # Diffusion denoising steps (50 for tests, 100 for production)
 rfdiff_checkpoint: "Complex_beta_ckpt.pt"  # Checkpoint filename in /opt/RFdiffusion/models/
-                                           # Options: Base_ckpt.pt | Complex_base_ckpt.pt | Complex_beta_ckpt.pt
+                                           # Complex_beta_ckpt.pt is strongly preferred for PPI design.
+                                           # Other options (Base_ckpt.pt, Complex_base_ckpt.pt) are rarely needed.
 min_hotspot_frac: 0.5      # Min fraction of effector contacts inside design region to keep a design (0.0 = no filter)
 rfdiff_contact_cutoff: 8.0 # Cα–Cα distance cutoff (Å) for receptor–effector contact
                            # detection in rfdiffusion_filter.py.  Also reused as the
@@ -99,15 +100,22 @@ effector_active_residues: ""  # Comma-separated effector residue numbers to stee
 
 # ── Rosetta pre-validation physics filter ────────────────────────────
 sc_threshold: 0.62
-stop_after_rosetta: false  # Set true to halt after Sc filtering; re-run with --resume to continue             # Min shape complementarity (Sc) to pass filter
+stop_after_rosetta: false  # *** USEFUL DIAGNOSTIC TOOL ***
+                           # Set true to halt after Sc filtering; inspect designs in ChimeraX
+                           # before committing to the GPU-intensive negsteer stage.
+                           # Re-run with --resume to continue once satisfied.
+                           # Saves significant compute when designs need iteration.
                                # (Overath et al., 2025).  Designs below this are
                                # removed before ProteinMPNN sequence design.
 
 # ── ProteinMPNN ───────────────────────────────────────────────────────
-num_seqs: 16               # Sequences per RFDiffusion design (total = num_designs × num_seqs)
-mpnn_sampling_temp: 0.25
+num_seqs: 2                # Sequences per RFDiffusion design (total = num_designs × num_seqs)
+                           # Low values (2-4) preferred — backbone diversity (num_designs)
+                           # is more valuable than sequence diversity within a design.
+mpnn_sampling_temp: 0.25   # Sequence diversity temperature; higher = more diverse but lower quality
 rm_aa: "C"
-mpnn_top_n: 64             # Select top N sequences by MPNN score for AF2 (0 = use all)
+mpnn_top_n: 128            # Select top N sequences by MPNN score for negsteer (0 = use all)
+                           # Set to num_designs × num_seqs to pass all sequences through.
 
 # -- Boltz2 Negative-Steering Validation ----------------------------------
 # The Boltz2 validation stage runs the negative-steering pipeline per
@@ -142,7 +150,10 @@ negsteer_protected_set_source: "design_region_union"
                                             # designs so steering never lands on MPNN residues
 
 # Design / seed counts
-negsteer_n_designs: 20                      # Steered designs per MPNN sequence
+negsteer_n_designs: 3                       # Steered designs per MPNN sequence per cycle
+                                            # Small values (3-5) work better than large — more
+                                            # RFDiffusion backbone diversity (num_designs) yields
+                                            # more hits than more steering attempts per sequence.
 negsteer_num_seeds: 3                       # Independent Boltz seeds per unique sequence
                                             # Total steered predictions per sequence
                                             # = n_designs * num_seeds (= 60 by default)
