@@ -184,15 +184,41 @@ def _get(row, key, fallback_key=None):
 
 def _compute_confidence_flag(
     out,
-    pass_frac_min=0.10,
-    iptm_min=0.30,
-    complex_plddt_min=0.70,
-    ipae_max=15.0,
+    pass_frac_min=None,
+    iptm_min=None,
+    complex_plddt_min=None,
+    ipae_max=None,
 ):
     """Compute confidence_flag from the median metrics in `out`.
-    Same thresholds as compute-final-metrics defaults.  Operates on
-    median values: a sequence is flagged if its TYPICAL prediction
-    fails the confidence filter, ignoring single rogue seeds."""
+    Operates on median values: a sequence is flagged if its TYPICAL
+    prediction fails the confidence filter, ignoring single rogue seeds.
+
+    Thresholds default to PipelineInternalThresholds.default()
+    (Phase 4 caller migration — was hard-coded 0.10/0.30/0.70/15.0
+    literals).  Callers can still pass explicit values to override."""
+    if pass_frac_min is None or iptm_min is None or complex_plddt_min is None or ipae_max is None:
+        # Lazy import — keep extract_passing.py importable in environments
+        # that don't have the pipeline_thresholds module available.
+        try:
+            import sys
+            sys.path.insert(0, str(Path(__file__).resolve().parent))
+            from pipeline_thresholds import PipelineInternalThresholds
+            _t = PipelineInternalThresholds.default()
+            if pass_frac_min is None:
+                pass_frac_min = _t.pae_pass_frac_min
+            if iptm_min is None:
+                iptm_min = _t.iptm_min
+            if complex_plddt_min is None:
+                complex_plddt_min = _t.complex_plddt_min
+            if ipae_max is None:
+                ipae_max = _t.ipae_max
+        except ImportError:
+            # Fallback to the historical hard-coded values if the new
+            # module isn't on the path (e.g. older standalone invocations).
+            pass_frac_min = pass_frac_min if pass_frac_min is not None else 0.10
+            iptm_min = iptm_min if iptm_min is not None else 0.30
+            complex_plddt_min = complex_plddt_min if complex_plddt_min is not None else 0.70
+            ipae_max = ipae_max if ipae_max is not None else 15.0
     triggers = []
     try:
         if float(out.get("pae_pass_frac_median", 1)) < pass_frac_min:
