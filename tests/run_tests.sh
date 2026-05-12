@@ -42,14 +42,20 @@ VALID_MODULES=(
 MODULES=()
 WITH_PLOTS=0
 DRY_RUN=0
+CLEAN=1   # default ON; --no-clean to opt out
 
 usage() {
     cat <<EOF
-Usage: $(basename "$0") --modules MOD [MOD ...] [--with-plots] [--dry-run]
+Usage: $(basename "$0") --modules MOD [MOD ...] [--with-plots] [--no-clean] [--dry-run]
 
   --modules     One or more of: ${VALID_MODULES[*]}
   --with-plots  Also submit the per-module plot SLURM script with an
                 afterok:<workflow-job> dependency.
+  --no-clean    Skip pre-run cleanup.  By default the dispatcher wipes
+                stale Nextflow/SLURM artefacts in each tests/<module>/
+                before sbatch'ing so the new run is not served from
+                Nextflow's resume cache.  Use --no-clean if you DO want
+                to resume an interrupted run.
   --dry-run     Print what would be submitted, but do not call sbatch.
 EOF
 }
@@ -63,6 +69,7 @@ while [[ $# -gt 0 ]]; do
             done
             ;;
         --with-plots)  WITH_PLOTS=1; shift ;;
+        --no-clean)    CLEAN=0;      shift ;;
         --dry-run)     DRY_RUN=1;    shift ;;
         -h|--help)     usage; exit 0 ;;
         *)             echo "ERROR: unknown argument: $1" >&2; usage; exit 2 ;;
@@ -84,6 +91,40 @@ for m in "${MODULES[@]}"; do
     fi
 done
 
+clean_module() {
+    # Wipe stale Nextflow + SLURM artefacts so the next run starts from
+    # scratch (Nextflow's resume cache would otherwise serve cached
+    # outputs from the previous run with the previous code).  Preserves
+    # the inputs (data/, bin/), the fixture (example_output_files/), the
+    # workflow definitions (test_*.nf, run_test_*.slurm.sh), the manifest,
+    # and the .tar.gz backups.
+    local module="$1"
+    local mod_dir="${SCRIPT_DIR}/${module}"
+
+    echo "[${module}] clean: wiping work/ tmp/ receptor_resurfacing_results/ "
+    echo "[${module}]        .nextflow* slurm_*.out|err test_plots_*.out|err"
+
+    if [ "${DRY_RUN}" = "1" ]; then
+        return
+    fi
+
+    rm -rf  "${mod_dir}/work" \
+            "${mod_dir}/tmp" \
+            "${mod_dir}/receptor_resurfacing_results" \
+            "${mod_dir}"/.nextflow*
+    # Per-job logs from previous runs.  Glob-with-nullglob so the rm
+    # silently no-ops when there are no matches.
+    shopt -s nullglob
+    local stale_logs=(
+        "${mod_dir}"/slurm_*.out
+        "${mod_dir}"/slurm_*.err
+        "${mod_dir}"/test_plots_*.out
+        "${mod_dir}"/test_plots_*.err
+    )
+    shopt -u nullglob
+    [ ${#stale_logs[@]} -gt 0 ] && rm -f "${stale_logs[@]}"
+}
+
 submit_one() {
     local module="$1"
     local mod_dir="${SCRIPT_DIR}/${module}"
@@ -92,6 +133,10 @@ submit_one() {
     if [ ! -f "${workflow_script}" ]; then
         echo "[${module}] SKIP: workflow script not found: ${workflow_script}" >&2
         return
+    fi
+
+    if [ "${CLEAN}" = "1" ]; then
+        clean_module "${module}"
     fi
 
     echo "[${module}] sbatch ${workflow_script}"
@@ -153,6 +198,7 @@ echo "============================================================"
 echo "run_tests.sh"
 echo "  Modules:    ${MODULES[*]}"
 echo "  With plots: ${WITH_PLOTS}"
+echo "  Clean:      ${CLEAN}   (--no-clean to skip)"
 echo "  Dry-run:    ${DRY_RUN}"
 echo "============================================================"
 
