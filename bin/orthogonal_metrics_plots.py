@@ -849,6 +849,30 @@ COMBINED_SUMMARY_GROUPS = [
 COLOUR_NEUTRAL = "#CFE3F3"
 
 
+def _boltz_conf_thresholded_columns() -> List[Tuple[str, float, str]]:
+    """Resolve the (column, threshold, op) tuples for every Boltz-2
+    confidence metric that has a threshold.  Used by the combined-
+    cohort plot's tie-breaker ranking so it can answer "does this row
+    pass every thresholded Boltz-2 confidence metric?".
+
+    Single source of truth: derive the column set from the
+    ``"Boltz-2 confidence"`` group span in COMBINED_SUMMARY_GROUPS,
+    then keep only the entries with a non-None threshold.  Changing
+    the columns in COMBINED_SUMMARY_COLUMNS / COMBINED_SUMMARY_GROUPS
+    propagates here automatically.
+    """
+    out: List[Tuple[str, float, str]] = []
+    for group_label, start_idx, end_idx in COMBINED_SUMMARY_GROUPS:
+        if group_label != "Boltz-2 confidence":
+            continue
+        for col, _src, _label, threshold, op, _fmt in (
+            COMBINED_SUMMARY_COLUMNS[start_idx:end_idx + 1]
+        ):
+            if threshold is not None:
+                out.append((col, threshold, op))
+    return out
+
+
 def _format_cell(v: float, fmt: str) -> str:
     if fmt == "int":
         return f"{int(round(v))}"
@@ -925,18 +949,40 @@ def plot_combined_cohort_orthogonal_summary(
         _make_empty_plot("No steered rows in cross_summary", out_path)
         return False
 
-    # Sort by (tier, -composite) — strict tier-first, composite within.
-    # Tier A → B → C → none.  Within each tier, descending composite.
-    # Rows without composite go to the bottom of their tier.  Matches
-    # cross_rank_by_composite in the CSV (which itself sorts tier-first
-    # at cross_sequence_summary.py:_composite_rank_key).
+    # Sort by (tier, boltz_conf_passes, -composite).
+    # 1. Tier A → B → C → none (strict tier-first).
+    # 2. Within tier: rows that pass EVERY thresholded Boltz-2 confidence
+    #    metric come first; rows that fail any of them come below.
+    # 3. Within each group: descending composite score.  Rows missing
+    #    composite go to the bottom of their group.
+    # Rationale: at small cohort sizes, two same-tier sequences may sit
+    # adjacent where one has clean confidence and the other has a single
+    # failed confidence threshold — promoting the clean one above the
+    # failing one makes the top-of-plot a defensible "best of the
+    # survivors so far" reading.  This is ordering only; every steered
+    # row still appears.
+    boltz_conf_thresholded = _boltz_conf_thresholded_columns()
+
+    def _fails_any_boltz_conf(r: Dict) -> bool:
+        for col, threshold, op in boltz_conf_thresholded:
+            v = _try_float(r.get(col, ""))
+            if v is None:
+                # Treat missing as a failure for ranking purposes —
+                # the row hasn't proved it passes.
+                return True
+            if op == ">=" and v < threshold:
+                return True
+            if op == "<=" and v > threshold:
+                return True
+        return False
+
     def _sort_key(r: Dict):
         tier = (r.get("cross_tier") or "none").strip() or "none"
         tier_order = _TIER_SORT_ORDER.get(tier, _TIER_SORT_ORDER["none"])
+        conf_key = 1 if _fails_any_boltz_conf(r) else 0
         comp = _try_float(r.get("cross_composite_score", ""))
-        # None composite → sort to bottom within tier
         comp_key = -(comp if comp is not None else float("-inf"))
-        return (tier_order, comp_key)
+        return (tier_order, conf_key, comp_key)
     steered.sort(key=_sort_key)
 
     n_seq = len(steered)

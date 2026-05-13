@@ -101,6 +101,7 @@ include { AF3_PARSE_OUTPUT             } from '../../modules/negsteer_af3_nomsa'
 include { NEGSTEER_BIOPHYSICAL_METRICS } from '../../modules/negsteer_biophysical_metrics'
 include { NEGSTEER_ROSETTA_METRICS     } from '../../modules/negsteer_rosetta_metrics'
 include { NEGSTEER_ORTHOGONAL_METRICS  } from '../../modules/negsteer_orthogonal_metrics'
+include { ORTHOG_PLOTS                 } from '../../modules/negsteer_orthogonal_metrics'
 
 
 // ---------------------------------------------------------------------------
@@ -223,6 +224,18 @@ workflow {
         NEGSTEER_BIOPHYSICAL_METRICS.out.summary_csv.collect(),
         NEGSTEER_ROSETTA_METRICS.out.summary_csv.collect(),
         Channel.value(file("${projectDir}/bin/merge_orthogonal_metrics.py"))
+    )
+
+    // ── Render cohort plots into receptor_resurfacing_results/plots/ ──
+    // Mirrors the pattern in every other test workflow (RFDIFFUSION_PLOTS,
+    // MPNN_PLOTS, ROSETTA_FILTER_PLOTS, NEGSTEER_PLOTS).  The standalone
+    // run_test_orthogonal_metrics_plot.slurm.sh script still exists for
+    // plot-only iteration; it publishes to plots_iter/ so the two
+    // outputs are easy to distinguish.
+    ORTHOG_PLOTS(
+        NEGSTEER_ORTHOGONAL_METRICS.out.final_csv,
+        extended_csv_ch,
+        Channel.value(file("${projectDir}/bin/orthogonal_metrics_plots.py"))
     )
 }
 
