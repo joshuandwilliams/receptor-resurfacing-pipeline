@@ -40,11 +40,21 @@
 
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-IMPL="${SCRIPT_DIR}/_update_example_dataset_impl.py"
+# Find the impl alongside this script.  Under sbatch, ${BASH_SOURCE[0]}
+# resolves to the spool-copy at /var/spool/slurmd/job<id>/, NOT to the
+# real tests/ directory.  Prefer ${PWD} (set by #SBATCH --chdir above);
+# fall back to BASH_SOURCE for direct shell invocation.
+if [ -f "${PWD}/_update_example_dataset_impl.py" ]; then
+    IMPL="${PWD}/_update_example_dataset_impl.py"
+else
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    IMPL="${SCRIPT_DIR}/_update_example_dataset_impl.py"
+fi
 
 if [ ! -f "${IMPL}" ]; then
-    echo "ERROR: implementation not found: ${IMPL}" >&2
+    echo "ERROR: implementation not found.  Tried:" >&2
+    echo "  ${PWD}/_update_example_dataset_impl.py" >&2
+    echo "  ${BASH_SOURCE[0]%/*}/_update_example_dataset_impl.py" >&2
     exit 2
 fi
 
