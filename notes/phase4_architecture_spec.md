@@ -189,28 +189,38 @@ All take `other: ProteinStructurePrediction` as the argument.  Both predictions 
 - Fixed segments are chain-prefixed native residue ranges: `A1-10` = chain A, native residues 1 through 10.
 - De novo segments have no chain prefix and are written as length ranges: `5-7` = "fill in a de novo region of length 5 to 7 residues."
 - Bare chain identifier (e.g. ` B` after a space) = entire chain included, no design regions.
+- The literal `0` token within a chain is the RFDiffusion chain-break marker.
 - Different chains are space-separated.  Never commas.
 
-ContigSpec represents the *resolved* form: after RFDiffusion has sampled a specific length for each de novo segment, the contig becomes a concrete layout.  The constraint form (with length ranges) is an input string to RFDiffusion and is NOT a runtime type — it's just plumbed through as text.  Each DesignedBackbone has exactly one ContigSpec describing its resolved layout.
+**As-implemented (2026-05-13 update — see commits `7385042` and `babd5d4`).**  The original spec described two forms (resolved vs constraint).  The implementation collapses them: `DeNovoSegment` now always carries `(min_len, max_len)`, with `min_len == max_len` for the resolved case.  Parser accepts both bare integers (`5` → `(5,5)`) and ranges (`5-7` → `(5,7)`).  Serializer emits the short form when resolved.  Each DesignedBackbone has exactly one ContigSpec; downstream code that needs a fixed length consumes resolved instances (a `ContigSpec.is_resolved` boolean property gates this).
+
+Two additional segment types added to support the full RFDiffusion contig grammar:
+
+- `BreakSegment` — the literal `0` token; carries no length.  Position-math methods on `ContigChain` skip these.
+- `PassthroughSegment(chain)` — a bare chain letter inside a block (e.g. `A1-10/B/A15-20`).  Carries no length at the spec level; resolved to a fixed range later by callers that have access to a PDB.
 
 **Construction.**
 
 ```
 ContigSpec(
     chains,          # ordered list of ContigChain (one per chain in the contig)
-    contig_string,   # original resolved string, kept for round-trip
+    contig_string,   # original string, kept for round-trip
 )
 
 ContigChain(
     chain_id,        # str, e.g. "A"
-    segments,        # ordered list of FixedSegment | DeNovoSegment
+    segments,        # ordered list of FixedSegment | DeNovoSegment | BreakSegment | PassthroughSegment
 )
 
 FixedSegment(start: int, end: int)            # native residue numbers; inclusive
-DeNovoSegment(length: int)                    # specific resolved length (not a range)
+DeNovoSegment(min_len: int, max_len: int)     # range form; resolved when min == max
+BreakSegment()                                # `0` chain-break marker
+PassthroughSegment(chain: str)                # bare-chain reference; PDB-resolution-deferred
 ```
 
-Static constructor: `ContigSpec.from_resolved_string(s: str) -> ContigSpec` — the canonical parser.
+Static constructors:
+- `ContigSpec.from_string(s: str) -> ContigSpec` — accepts both resolved and constraint forms.  The canonical parser used by all four migrated callers (`derive_input_design_region`, `haddock3_prepare`, `pipeline_correct_sequences`, `contig_utils`).
+- `ContigSpec.from_resolved_string(s: str) -> ContigSpec` — strict variant; raises if any de novo segment is unresolved.
 
 **Methods — frame conversion (per Q7 decision).**
 

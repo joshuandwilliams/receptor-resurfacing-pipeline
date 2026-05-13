@@ -2,16 +2,16 @@
 
 A living document tracking where the codebase remediation effort currently stands. Read this at the start of every session; update it at the end of every session.
 
-**Last updated:** 2026-05-12 (Phase 4 architecture types implemented + initial caller migrations live on `phase4-impl`; HPC validation pending)
+**Last updated:** 2026-05-13 (Phase 4 deep-form migrations complete on `phase4-impl`; all five per-module HPC tests submitted; only verification pending)
 
 ## Current Phase
 
-**Phase 4 implementation — IN PROGRESS on branch `phase4-impl`.**  All 13 deep-module types built and tested; CL-3 majority-rule fix live; ~4,200 LOC of duplication removed; six caller migrations completed.  Remaining migrations (DesignCohort wiring, full threshold rollout, contig parser consolidation, find_contact_residues_heavy / read_ca_atoms consolidation) deferred to a future session that runs after HPC validation of CL-3 against real cohort data.
+**Phase 4 implementation — IN PROGRESS on branch `phase4-impl`.**  All 13 deep-module types built and tested; CL-3 majority-rule fix live; all originally-deferred caller migrations now landed (cross_sequence_summary wiring, full threshold rollout, contig parser consolidation, NegativeSteeringRun.from_workdir deep form, DesignCohort.from_runs_directory).  Only HPC validation remains.
 
-## Branch state (as of 2026-05-12 end-of-session)
+## Branch state (as of 2026-05-13 end-of-session)
 
 - `main` — at `18718db`.  Safe-fallback baseline.  Contains everything through Phase 4 spec (Sessions 1–6 complete) but no implementation code.  If `phase4-impl` ever needs to be abandoned, `main` is the working pipeline to return to.
-- `phase4-impl` — at `54dec6f` (or later if more commits land).  19 commits ahead of `main`.  All Phase 4 implementation + caller migration work lives here.  Tracking remote `origin/phase4-impl`.
+- `phase4-impl` — at `c15923f`.  24 commits ahead of `main`.  All Phase 4 implementation + caller migration work lives here.  Tracking remote `origin/phase4-impl`.
 - `remediation` — at `18718db`.  Historical; can be retired.
 - `experiments` — separate worktree branch; not touched in Phase 4.
 
@@ -95,26 +95,91 @@ Total: ~4,000 LOC new code + 350 local_unit tests, all green.
 
 These were considered and deferred — each is a real Phase 4 todo but each has a specific reason it deserves a future, focused session:
 
-1. **`cross_sequence_summary.py` → `DesignCohort.to_cross_summary_csv`** — the production aggregator is ~900 LOC.  `DesignCohort.from_runs_directory` and `NegativeSteeringRun.from_workdir` factories are currently stubs; implementing them is several hundred LOC of careful parsing.  Replacing the production aggregator without HPC validation between commits is high-risk.  **Deserves a dedicated session.**
-2. **ContigSpec parser consolidation (4 existing parsers → ContigSpec)** — the 4 existing parsers accept *constraint-form* contigs (range-form denovo segments like `5-7`).  The new `ContigSpec` strictly requires *resolved form* per Step 1 of the spec.  Consolidation requires either revising the spec to allow constraint form, or introducing a separate `ContigConstraint` type.  Both are real design decisions.
-3. **Full threshold migration** — `orthogonal_metrics_plots.py` (`ORTHOG_SC_MIN` etc.), `compute_metrics.py` defaults, `main.nf` inline numbers.  Each migration is small but they're scattered across ~10–15 files; each deserves verification.
-4. **`find_contact_residues_heavy` consolidation** — the two implementations have genuinely different return contracts (residue_seq_index vs positional_index_0b; raise on missing chain vs return empty list).  Callers depend on the differences.  Safe consolidation requires renaming for disambiguation, not merging.
-5. **`read_ca_atoms` consolidation** — similar issue: 4 implementations with different return types (CAEntry dataclass vs tuples vs numpy arrays).
-6. **`pipeline_correct_sequences.get_pdb_sequence`** — different signature (returns `(seq, resnums)` tuple).  Migrating it requires changes to every caller.
+1. **~~`cross_sequence_summary.py` → `DesignCohort.to_cross_summary_csv`~~** — DONE in commit `babd5d4`.  `DesignCohort.from_runs_directory` and `NegativeSteeringRun.from_workdir` factories are now real.  CSV emission routes through `DesignCohort.emit_cross_summary_from_dirs` (delegates to the existing `aggregate()` for column-level construction; output is bit-identical).  Nextflow process points at `bin/cross_summary_v2.py` as the directly-tracked script.
+2. **~~ContigSpec parser consolidation (4 existing parsers → ContigSpec)~~** — DONE in commits `7385042` (three Python parsers) and `babd5d4` (the fourth, `contig_utils.parse_block_segments`).  Resolved by collapsing resolved/constraint forms: `DeNovoSegment` now always carries `(min_len, max_len)`, with `min_len == max_len` for the resolved case.  RFDiffusion-specific grammar features (chain-break `0`, bare-chain passthrough) modelled as new `BreakSegment` + `PassthroughSegment` types on `ContigChain`.
+3. **~~Full threshold migration~~** — DONE in commit `7385042`.  `orthogonal_metrics_plots.py`, `compute_metrics.py` (weighted-Jaccard constants), and `boltz2_iterate_steering.py` (`intact_threshold`) all migrated to lazy-imported `PipelineInternalThresholds` with literal fallback.  `main.nf` inline `params.*` defaults are user-facing knobs not in scope for the threshold catalogue.
+4. **~~`find_contact_residues_heavy` consolidation~~** — Resolved in commit `7385042`.  The two implementations now produce IDENTICAL output (compute_metrics.py's was buggy on PDBs with insertion codes; fixed to match boltz2_negative_steering.py's icode-aware bucketing).  Cross-reference docstrings added on both ends.  Two implementations retained intentionally; future refactor can extract a shared `pdb_atom_io` helper.
+5. **`read_ca_atoms` consolidation** — INTENTIONALLY NOT consolidated.  Two implementations with different return types (CAEntry list vs coord-dict list) serve different consumers.  Cross-reference docstrings added on both ends (commit `7385042`).
+6. **~~`pipeline_correct_sequences.get_pdb_sequence`~~** — DONE in commit `7385042` (deleted as dead code; had zero callers).
 
-## HPC validation queue (pending at end of session)
+## HPC validation queue (pending at end of session 2026-05-13)
 
-Tests submitted during the session:
-- `rfdiffusion` — was queued, GPU-pending at end of session (3–4h+ wait expected)
-- `negative_steering` — was queued, GPU-pending at end of session
-- `proteinmpnn`, `rosetta_filtering`, `orthogonal_metrics` — completed successfully against commit `1f735c0` (pre-implementation baseline)
+All five per-module tests submitted via `./tests/run_tests.sh --modules rfdiffusion proteinmpnn rosetta_filtering negative_steering orthogonal_metrics --with-plots`.  `haddock` intentionally omitted (deprecated, not currently used).
 
-**The CL-3 fix (`b67b4b3`) has not yet been validated against real cohort data.**  The next session should run the per-module negsteer test against `phase4-impl` and verify:
-- Test runs to completion (no broken negsteer pipeline)
-- `outcome_tally` log line shows the expected redistribution of designs across tiers
-- Fixture diffs are sensible: expect some tier-C → tier-A/B promotions (sequences whose lone contaminated seed used to trigger reversion-and-collapse now keep their clean_steered partners and pass)
+GPU queue was congested at submission time (another user's 6,000-job array job had blocked GPU access).  RFDiffusion, negative_steering, and orthogonal_metrics' AF3 step depend on GPU; their queue timing depends on that array clearing.
 
-If CL-3 changes the example_output_files content, use `sbatch tests/update_example_dataset.slurm.sh --module negative_steering --updated-output-folder tests/negative_steering/receptor_resurfacing_results` to regenerate, then `./scripts/sync_from_hpc.sh --module negative_steering` to pull back.
+**The CL-3 fix (`b67b4b3`), the deep-form factories (`babd5d4`), and the cross_summary_v2.py rewiring have not yet been validated against real HPC data.**  The next session should:
+- Confirm `Success: true` in each module's `slurm_<jobid>.out`
+- For `negative_steering`: check the new `[build-contaminated] CL-3 gating: …` log line for the expected per-design reversion redistribution
+- Diff `tests/<module>/example_output_files/` against the post-run `tests/<module>/receptor_resurfacing_results/` for each module that completed
+- Regenerate fixtures only where the diff is sensible and CL-3-driven (use `sbatch tests/update_example_dataset.slurm.sh --module <module> --updated-output-folder tests/<module>/receptor_resurfacing_results` then `./scripts/sync_from_hpc.sh --module <module>`)
+
+**Note for `negative_steering` specifically:** expect some tier-C/none → tier-A/B promotions (sequences whose lone contaminated seed used to trigger reversion-and-collapse now keep their clean_steered partners and pass).  Some `reversions/` subtrees should disappear from designs that no longer trigger reversion under the majority rule.
+
+## What landed in this session (2026-05-13)
+
+Five commits on top of the prior end-of-session state (`020d32b`).  All built and verified locally (370 local_unit tests pass, up from 350).  Nothing GPU-blocked locally; HPC validation is the remaining gap.
+
+### Commit `7385042` — threshold migration + ContigSpec range form + parser dedup + icode fix
+
+- **Threshold migration**: `bin/orthogonal_metrics_plots.py`, `bin/compute_metrics.py` (weighted-Jaccard mu + two_sigma_sq), and `bin/boltz2_iterate_steering.py` (`intact_threshold` at 4 sites) now lazy-import `PipelineInternalThresholds` with literal fallback.  No value changes; just sourcing.  Pattern matches commit `54dec6f`.
+- **ContigSpec range form**: `bin/contig_spec.py` reworked so `DeNovoSegment` always carries `(min_len, max_len)`.  Resolved form is the special case `min_len == max_len`.  Parser accepts both `5` (bare integer → `(5,5)`) and `5-7` (range).  Serializer emits `5` when resolved, `5-7` otherwise.  Added `ContigSpec.from_string` (form-agnostic) + `ContigSpec.is_resolved`.  `from_resolved_string` preserved as a strict variant that raises if any segment is unresolved.  Per Q on parser consolidation, the user directed: "What other forms of denovo segments are there? All denovo segments should take that format.  Even if it's not variable length it will still be `5-5` instead of `5-7`."
+- **Three contig parsers migrated**: `derive_input_design_region._parse_contigs`, `haddock3_prepare.parse_contig_segments`, `pipeline_correct_sequences.parse_contig_segments` are now thin adapters around `ContigSpec.from_string`.  Comma-separator back-compat preserved by pre-normalising to spaces.
+- **`find_contact_residues_heavy` icode bug fix**: `bin/compute_metrics.py:596` rewritten to do icode-aware bucketing (matching `boltz2_negative_steering.read_residue_heavy_atoms`).  Two residues with the same resseq but different insertion codes (common in wwPDB structures) used to collapse into one — wrong positional indices on any input PDB with icodes.  Both copies now produce identical output.  Cross-reference docstrings added on both ends.  `read_ca_atoms` intentionally NOT consolidated (different return shapes serve different consumers); docstrings cross-referenced.
+- **`bin/cross_summary_view.py` NEW**: `CrossSummaryRow` + `CrossSummarySnapshot` — typed read-only view over `cross_sequence_summary.csv`.  Exposes the same `survivors() / tier_breakdown() / ranked_by_composite()` interface as `DesignCohort` for cohort-level queries that don't need the deep StageResult/PSP scaffolding.
+- **`DesignCohort.from_cross_summary_csv`** + **`DesignCohort.to_cross_summary_csv`** added.  The latter delegates to the existing `aggregate()` for bit-identical CSV output.
+- **Cleanup**: dead function `get_pdb_sequence` removed from `bin/pipeline_correct_sequences.py` (zero callers).
+
+### Commit `babd5d4` — complete the deferred deep-form migrations
+
+- **`NegativeSteeringRun.from_workdir` deep form**: walks the canonical workdir layout (`cycle_<C>/initial[_sN]`, `steered/design_NN_sS`, `reversions/rev_design_NN_sS_sR`); for each prediction directory finds the canonical Boltz output (`boltz_results_input/predictions/input/pdb/input_model_<M>.pdb` + matching confidence JSON) and constructs `ProteinStructurePrediction` + `BoltzConfidenceMetrics`; parses `mutations.tsv` into a designed-frame `PositionSet` for steered/reversion stages; resolves reversion → steered mapping via the source-(design, seed) prefix encoded in directory names; reads `row_type.txt` + `run_one_runtime_sec.txt` sidecars.  Returns `None` cleanly when cold-start data is missing.  Six dedicated unit tests using synthetic workdirs with minimal PDB + confidence fixtures.
+- **`DesignCohort.from_runs_directory`** — now hydrating runs via `from_workdir` per subdir; tested with synthetic runs dir including bogus-subdir skip path.
+- **`DesignCohort.emit_cross_summary_from_dirs`** classmethod — typed entry point for the Nextflow process to call.  Gathers `(seq_name, passing_summary.csv)` pairs and emits via the existing `aggregate()` column-builder.  Bit-identical CSV output.
+- **`bin/cross_summary_v2.py` NEW** — Phase 4 typed CLI entry point.  Drop-in replacement for `cross_sequence_summary.py` from the Nextflow perspective (same flags, same output).
+- **Nextflow rewiring**: `NEGSTEER_CROSS_SEQUENCE` in `main.nf:879` and `tests/negative_steering/test_negative_steering.nf:361` now points at `cross_summary_v2.py`.
+- **`contig_utils.parse_block_segments` fourth-parser migration**: added `BreakSegment` + `PassthroughSegment` types to `bin/contig_spec.py`.  `ContigChain` position-math methods (`total_length`, `designed_position_to_native`, etc.) iterate a `_length_bearing` filtered list — break + passthrough are skipped naturally.  `ContigSpec.from_string` now accepts the literal `0` chain-break marker and bare-chain-letter passthroughs.  `parse_block_segments` reshapes to the legacy `(descs, block_chain)` tuple form so downstream `resolve_contigs` + `remap_segments_to_pdb` keep working unchanged.
+
+### Commit `23e0fc4` — Nextflow comment refresh
+
+`modules/negative_steering.nf` comment block previously said `cross_sequence_summary.py` is the directly-tracked script; updated to reflect that `cross_summary_v2.py` is now the directly-hashed entry point, with `cross_sequence_summary.py` (and `extract_passing.py`) as indirect imports.
+
+### Commit `c15923f` — `tests/run_tests.sh` silent-exit bug fix
+
+Old `clean_module()` ended with:
+```bash
+[ ${#stale_logs[@]} -gt 0 ] && rm -f "${stale_logs[@]}"
+```
+When `stale_logs` was empty (no `slurm_*` files to delete), `[ 0 -gt 0 ]` returned exit code 1, `&&` short-circuited, and the compound command exited 1.  As the function's LAST command, that propagated as the function's return status.  Under `set -e` this silently killed the dispatcher.  First three modules in a session worked because they had stale `slurm_*` files from prior runs; the fourth module (alphabetically first one without stale logs) would silently die.  Replaced with explicit `if [ … ]; then rm -f …; fi` so the function exits 0 cleanly when there's nothing to clean.
+
+### Caller migrations status
+
+All six items previously listed in "Caller migrations explicitly NOT done" are now resolved:
+1. ~~cross_sequence_summary → DesignCohort~~: DONE (`babd5d4`)
+2. ~~ContigSpec parser consolidation~~: DONE across two commits (`7385042` for 3 parsers, `babd5d4` for the 4th)
+3. ~~Full threshold migration~~: DONE (`7385042`)
+4. ~~find_contact_residues_heavy consolidation~~: RESOLVED via bug fix (`7385042`); both copies now produce identical output
+5. read_ca_atoms consolidation: INTENTIONALLY NOT consolidated (different return types serve different consumers); cross-reference docstrings added
+6. ~~get_pdb_sequence~~: DONE — was dead code, removed (`7385042`)
+
+### Test state
+
+```
+370 local_unit tests pass (up from 350)
++13 ContigSpec tests (range form, break/passthrough, parsing, position math)
++ 4 CrossSummarySnapshot tests
++ 6 NegativeSteeringRun.from_workdir tests
++ 4 ContigSpec.is_resolved / from_string variants
+```
+
+No regressions.  Skipped tests: 7 (gemmi-dependent).
+
+### Architecture spec follow-up
+
+`notes/phase4_architecture_spec.md` §2.2 (ContigSpec) currently describes the resolved-form-only model and three segment types (Fixed, DeNovo, plus Passthrough as a single PassthroughChain encoding).  The implementation now has FOUR explicit segment types (Fixed, DeNovo with range form, Break, Passthrough) on `ContigChain`.  Spec doc should be updated to reflect this — minor write-up task for the next session.
+
+### HPC sync state
+
+All commits pushed to `origin/phase4-impl` and synced to HPC via `./scripts/sync_to_hpc.sh`.  HPC tests submitted at end of session — see "HPC validation queue" section above.
 
 ## Pre-Phase-4 baseline commit
 
