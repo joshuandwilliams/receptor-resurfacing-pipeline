@@ -257,7 +257,14 @@ process NEGSTEER_CROSS_SEQUENCE {
     // directory is expected to be named after the MPNN sequence; the
     // aggregator infers the sequence name from the directory name.
     path per_sequence_workdirs
-    path summary_script
+    // Entire bin/ directory.  Staged into the work dir as ``bin/``; the
+    // CLI invocation runs ``python bin/cross_summary_v2.py …`` so
+    // Python's sibling-import resolution finds every transitively-
+    // imported module (design_cohort, cross_sequence_summary,
+    // extract_passing, …) without sys.path acrobatics.  Nextflow
+    // content-hashes the whole directory, closing the indirect-import
+    // cache-busting gap noted in notes/remediation_state.md.
+    path bin_dir, name: 'bin'
     // Optional MPNN scored_metadata.csv (from MPNN_DESIGN_REGION_SCORE).
     // Surfaces corrected_receptor / designed_residues / native_residues
     // in cross_sequence_summary.csv.  Pass `file('NO_FILE')` (or any
@@ -297,20 +304,11 @@ process NEGSTEER_CROSS_SEQUENCE {
     ls -la aggregator/ | head -40 || true
 
     singularity exec --bind \${PWD}:\${PWD} ${params.boltz2_container} \\
-        python ${summary_script} \\
+        python bin/cross_summary_v2.py \\
             --passing-summary-dir aggregator \\
             --published-runs-dir  ${params.outdir}/negative_steering/runs \\
             ${metadata_arg} \\
             --output cross_sequence_summary.csv
-    # NOTE: summary_script is now content-hashed via the path input
-    # above.  As of Phase 4 the wired script is cross_summary_v2.py
-    # (Phase 4 typed CLI wrapping DesignCohort.emit_cross_summary_from_dirs);
-    # it delegates to bin/cross_sequence_summary.py:aggregate for column-
-    # level CSV construction.  Both files are indirect imports as far as
-    # Nextflow is concerned — only cross_summary_v2.py itself is
-    # content-hashed.  When edits land only on cross_sequence_summary.py
-    # or extract_passing.py, the operator must still bust the cache
-    # manually (e.g. by touching cross_summary_v2.py).
 
     echo "Cross-sequence summary head:"
     head -5 cross_sequence_summary.csv || true

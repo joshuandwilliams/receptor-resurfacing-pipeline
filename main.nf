@@ -881,7 +881,11 @@ workflow {
         // CSV output relative to cross_sequence_summary.py — the typed
         // wrapper delegates to the same aggregate() for column-level
         // construction.  See bin/cross_summary_v2.py for the routing.
-        Channel.value(file("${projectDir}/bin/cross_summary_v2.py")),
+        //
+        // Pass the entire bin/ directory (not just cross_summary_v2.py)
+        // so Nextflow content-hashes every transitively-imported file.
+        // Closes the indirect-import cache-busting gap.
+        Channel.value(file("${projectDir}/bin")),
         MPNN_DESIGN_REGION_SCORE.out.scored_metadata
     )
 

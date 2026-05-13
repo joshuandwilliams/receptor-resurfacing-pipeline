@@ -357,8 +357,10 @@ workflow {
     NEGSTEER_CROSS_SEQUENCE(
         per_sequence_workdirs_ch,
         // Phase 4: route through the typed CLI (cross_summary_v2.py
-        // wraps DesignCohort.emit_cross_summary_from_dirs).
-        Channel.value(file("${projectDir}/bin/cross_summary_v2.py")),
+        // wraps DesignCohort.emit_cross_summary_from_dirs).  Pass the
+        // entire bin/ directory so Nextflow content-hashes every
+        // transitively-imported file.
+        Channel.value(file("${projectDir}/bin")),
         Channel.value(file("${projectDir}/tests/_NO_FILE"))
     )
 

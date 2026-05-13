@@ -28,6 +28,14 @@
 
 set -euo pipefail
 
+# ERR trap: print the failing command + line + exit code BEFORE the
+# shell exits.  Defends against the failure mode this script hit at
+# commit c15923f, where the last command of a function returned
+# non-zero from a short-circuited `[ ... ] && cmd`, killing the
+# dispatcher mid-loop with no visible diagnostic.
+trap 'rc=$?; printf >&2 "\nERROR: %s exited %d at line %d:\n  %s\n" \
+    "$(basename "$0")" "$rc" "${LINENO}" "${BASH_COMMAND}"' ERR
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 VALID_MODULES=(
