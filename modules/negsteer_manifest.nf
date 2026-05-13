@@ -58,6 +58,7 @@ process EXTRACT_SURVIVOR_MANIFEST {
             --workdirs-glob 'workdirs/*' \\
             --receptor-chain ${params.rfdiff_output_receptor_chain} \\
             --effector-chain ${params.rfdiff_output_effector_chain} \\
+            --tier-filter ${params.orthogonal_tier_filter} \\
             --output-manifest survivor_manifest.csv
 
     echo "Manifest built:"

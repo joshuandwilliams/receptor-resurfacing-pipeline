@@ -142,6 +142,16 @@ def main() -> int:
     ap.add_argument("--receptor-chain", default="A")
     ap.add_argument("--effector-chain", default="B")
     ap.add_argument("--output-manifest", required=True, type=Path)
+    ap.add_argument(
+        "--tier-filter", choices=("all", "abc"), default="all",
+        help="Which cross_tier values to include in the orthogonal "
+             "cascade.  'all' (default): every steered row gets "
+             "AF3/biophys/Rosetta, including tier-none failed designs "
+             "— useful diagnostic for understanding why designs failed.  "
+             "'abc': restrict to cross_tier in (A, B, C); skips "
+             "tier-none rows and reduces GPU/CPU cost when only "
+             "survivors are of interest.",
+    )
     args = ap.parse_args()
 
     with open(args.input_csv, newline="") as f:
@@ -156,6 +166,15 @@ def main() -> int:
         if not seq_name:
             skipped["no_mpnn_sequence"] = skipped.get("no_mpnn_sequence", 0) + 1
             continue
+
+        # Tier filter — controlled by --tier-filter (params.orthogonal_tier_filter).
+        # Default 'all' lets every row through (including tier-none failed
+        # designs).  'abc' restricts to cross_tier in {A, B, C}.
+        if args.tier_filter == "abc":
+            tier = (row.get("cross_tier") or "").strip()
+            if tier not in ("A", "B", "C"):
+                skipped["tier_excluded"] = skipped.get("tier_excluded", 0) + 1
+                continue
 
         # Resolve workdir BEFORE checking canonical_pdb so we can use
         # it to remap stale absolute paths embedded in the CSV.
