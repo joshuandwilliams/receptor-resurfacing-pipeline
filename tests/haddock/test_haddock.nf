@@ -26,6 +26,12 @@ params.effector_chain    = "B"
 params.contigs           = "B A1-390/20-40/A421-438"
 params.haddock_sampling  = 100    // reduced from 10000 for faster test runs
 params.haddock_seletop   = 20
+// Reduced from production default of 4: with sampling=100 the clusters
+// produced by clustfcc are naturally smaller (1 cluster of ~3 models is
+// typical at this scale).  The test exists to exercise the pipeline
+// plumbing end-to-end; 2 is the floor that still demands real clustering
+// signal.  Production keeps haddock_min_cluster_size = 4 via nextflow.config.
+params.haddock_min_cluster_size = 2
 params.rfdiff_contact_cutoff = 8.0
 params.effector_active_residues = ""   // Comma-separated effector residues for HADDOCK AIRs
 params.receptor_seq      = null   // Optional: reference sequence for chain disambiguation
