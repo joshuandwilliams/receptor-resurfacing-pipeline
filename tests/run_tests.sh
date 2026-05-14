@@ -15,11 +15,19 @@
 #   ./tests/run_tests.sh --modules rfdiffusion --dry-run        # print, don't submit
 #
 # Recognised modules: rfdiffusion, proteinmpnn, rosetta_filtering,
-# negative_steering, orthogonal_metrics, haddock.
+# negative_steering, orthogonal_metrics, haddock, full_test_run.
+#
+# full_test_run runs the end-to-end main.nf pipeline against
+# tests/full_test_run/params_full_test.yml.  It uses the project-root
+# run_pipeline.slurm.sh launcher (not a per-module test wrapper).  ETA
+# is ~24h+ depending on GPU queue.  --no-clean preserves Nextflow state
+# (work/, .nextflow*) so a follow-up sbatch with --resume can continue
+# an interrupted run.
 #
 # --with-plots adds the per-module plot SLURM script as a dependency
 # (afterok:<workflow-job-id>) so plots only run if the workflow test
-# succeeds.  Modules without a plot script (e.g. haddock) silently skip.
+# succeeds.  Modules without a plot script (haddock, full_test_run)
+# silently skip.
 #
 # Each module is its own independent sbatch — they run in parallel
 # subject to cluster capacity.  Output / error logs land in each
@@ -45,6 +53,7 @@ VALID_MODULES=(
     negative_steering
     orthogonal_metrics
     haddock
+    full_test_run
 )
 
 MODULES=()
@@ -141,6 +150,42 @@ clean_module() {
 submit_one() {
     local module="$1"
     local mod_dir="${SCRIPT_DIR}/${module}"
+
+    # full_test_run is the end-to-end pipeline run, not a per-module
+    # test.  Its launcher lives at the repo root (run_pipeline.slurm.sh)
+    # and takes a params file as an argument.  Special-case it here so
+    # the dispatcher's clean + sbatch flow still applies.
+    if [ "${module}" = "full_test_run" ]; then
+        local repo_root="$(dirname "${SCRIPT_DIR}")"
+        local pipeline_script="${repo_root}/run_pipeline.slurm.sh"
+        local params_file="${mod_dir}/params_full_test.yml"
+        if [ ! -f "${pipeline_script}" ]; then
+            echo "[${module}] SKIP: pipeline launcher not found: ${pipeline_script}" >&2
+            return
+        fi
+        if [ ! -f "${params_file}" ]; then
+            echo "[${module}] SKIP: params file not found: ${params_file}" >&2
+            return
+        fi
+        if [ "${CLEAN}" = "1" ]; then
+            clean_module "${module}"
+        fi
+        echo "[${module}] sbatch ${pipeline_script} ${params_file}"
+        if [ "${DRY_RUN}" = "1" ]; then
+            echo "[${module}]   (dry-run; nothing submitted)"
+        else
+            local jid
+            jid=$(sbatch --parsable "${pipeline_script}" "${params_file}")
+            echo "[${module}]   pipeline job id: ${jid}"
+            echo "[${module}]   outdir: ${mod_dir}/results"
+            echo "[${module}]   ETA: ~24h+ (subject to GPU queue)"
+        fi
+        if [ "${WITH_PLOTS}" = "1" ]; then
+            echo "[${module}]   --with-plots is a no-op: the full pipeline runs every plot process inline." >&2
+        fi
+        return
+    fi
+
     local workflow_script="${mod_dir}/run_test_${module}.slurm.sh"
 
     if [ ! -f "${workflow_script}" ]; then
