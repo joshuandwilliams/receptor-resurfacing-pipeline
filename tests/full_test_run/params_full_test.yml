@@ -39,8 +39,10 @@ receptor_chain: "A"
 effector_chain: "C"
 
 # ── HADDOCK3 (modes 1/3 only — UNUSED in mode 2) ──────────────────────
-# These have no effect on this run but are required by the schema.
-haddock_sampling: 1
+# These have no effect on this run but the validator (validate_params.py)
+# runs unconditionally regardless of mode, so the values must clear the
+# spec's min/max.  Placeholder values, not run-time meaningful.
+haddock_sampling: 100
 haddock_seletop: 1
 effector_active_residues: ""
 

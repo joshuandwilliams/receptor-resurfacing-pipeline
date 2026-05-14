@@ -324,6 +324,14 @@ PARAM_SPECS: List[ParamSpec] = [
     ParamSpec("haddock_seletop","int_range", {"min": 1, "max": 10000}),
     ParamSpec("rfdiff_contact_cutoff","float_range", {"min": 0.0, "max": 30.0}),
 
+    # ── Orthogonal cascade ──────────────────────────────────────────
+    # Which cross_tier values get the AF3 + biophysical + Rosetta
+    # cascade.  Default 'all' includes tier-none failed designs
+    # (diagnostic).  'abc' restricts to survivors (cheaper for GPU).
+    ParamSpec("orthogonal_tier_filter","choice",
+              {"values": ["all", "abc"]},
+              "which cross_tier values get the orthogonal cascade"),
+
     # ── Infrastructure ──────────────────────────────────────────────
     ParamSpec("max_boltz2_parallel","int_range", {"min": 1, "max": 100}),
 
