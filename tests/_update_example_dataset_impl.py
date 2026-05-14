@@ -207,6 +207,28 @@ def main(argv: List[str] = None) -> int:
     example_dir = module_dir / "example_output_files"
     src_dir = args.updated_output_folder.resolve()
 
+    # Robustness against the sbatch path-doubling gotcha.  This script
+    # runs with CWD = tests/ (via #SBATCH --chdir in the wrapper).
+    # Users naturally pass project-relative paths like
+    # `tests/<module>/receptor_resurfacing_results`, which then resolve
+    # as `tests/tests/<module>/...` and don't exist.  If the given
+    # path doesn't resolve, try stripping a leading `tests/` segment
+    # and use that if it exists.  Emits a note to stderr so the user
+    # knows their command was ambiguous.
+    if not src_dir.is_dir():
+        as_given = args.updated_output_folder
+        if as_given.parts and as_given.parts[0] == "tests":
+            stripped = Path(*as_given.parts[1:]).resolve()
+            if stripped.is_dir():
+                print(
+                    f"NOTE: --updated-output-folder {as_given!s} resolved "
+                    f"to {src_dir!s} which doesn't exist.  Falling back "
+                    f"to {stripped!s} (leading 'tests/' segment stripped "
+                    f"— CWD is already tests/ under sbatch).",
+                    file=sys.stderr,
+                )
+                src_dir = stripped
+
     if not src_dir.is_dir():
         print(f"ERROR: --updated-output-folder not found: {src_dir}",
               file=sys.stderr)
