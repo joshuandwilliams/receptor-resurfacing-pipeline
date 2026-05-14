@@ -8,7 +8,7 @@
       "label": "design_03_s0",
       "design_idx": 9,
       "seed_index": 0,
-      "design_workdir": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/7b/6845842d5b75546ae970cc36b77498/design_42_seq_0/cycle_0/steered/design_03_s0",
+      "design_workdir": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/89/a5a83163a0e3271c25ae68262de0dc/design_42_seq_0/cycle_0/steered/design_03_s0",
       "cumulative_mutations": [
         [
           5,
@@ -77,7 +77,7 @@
       "label": "design_03_s1",
       "design_idx": 10,
       "seed_index": 1,
-      "design_workdir": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/7b/6845842d5b75546ae970cc36b77498/design_42_seq_0/cycle_0/steered/design_03_s1",
+      "design_workdir": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/89/a5a83163a0e3271c25ae68262de0dc/design_42_seq_0/cycle_0/steered/design_03_s1",
       "cumulative_mutations": [
         [
           5,
@@ -141,7 +141,7 @@
       "label": "design_03_s2",
       "design_idx": 11,
       "seed_index": 2,
-      "design_workdir": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/7b/6845842d5b75546ae970cc36b77498/design_42_seq_0/cycle_0/steered/design_03_s2",
+      "design_workdir": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/89/a5a83163a0e3271c25ae68262de0dc/design_42_seq_0/cycle_0/steered/design_03_s2",
       "cumulative_mutations": [
         [
           5,

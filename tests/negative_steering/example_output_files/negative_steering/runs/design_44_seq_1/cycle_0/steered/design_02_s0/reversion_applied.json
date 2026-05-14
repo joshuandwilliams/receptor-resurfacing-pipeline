@@ -5,7 +5,7 @@
   "reversion_result": {
     "verdict": "pose_holds",
     "reason": "reverted pose holds structurally and cleanly; ungated mutated contacts at [7] accepted under gated-contamination policy",
-    "reverted_prediction_pdb": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/28/59f0b4cd7089ee5014b366a3a65368/design_44_seq_1/cycle_0/reversions/rev_design_02_s0_s0/prediction.pdb",
+    "reverted_prediction_pdb": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/6b/dc1ea8eb00fdfc7a93f1bf4c1e6ebc/design_44_seq_1/cycle_0/reversions/rev_design_02_s0_s0/prediction.pdb",
     "reverted_ra_eff_vs_truth": 4.918,
     "reverted_ra_eff_vs_steered": 0.724,
     "reverted_independent_receptor_rmsd": 2.173,

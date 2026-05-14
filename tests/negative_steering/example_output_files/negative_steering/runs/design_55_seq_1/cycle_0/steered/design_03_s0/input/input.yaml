@@ -3,13 +3,13 @@ sequences:
   - protein:
       id: A
       sequence: GLKQKIVIKVAMEGNKCREKAKALVDETGGVRAVSSSLLKKGETLDIYAITVVGYGIDPIKLISALRKKVGDAELLQVETMEGL
-      msa: /hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/50/3f24a65088cbb641ff1440b2dee160/design_55_seq_1/cycle_0/steered/design_03_s0/input/msa/chain_A.a3m
+      msa: /hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/a7/c7732a27ca46ed2fd3e08daea31cab/design_55_seq_1/cycle_0/steered/design_03_s0/input/msa/chain_A.a3m
   - protein:
       id: B
       sequence: AIDLSRERDPNFFDNADIPVPECFWFMFKNNVRQDAGTCYSSWKMDKKVGPNWVHIKSDDNCNLSGDFPPGWIVLGKKRPGF
-      msa: /hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/50/3f24a65088cbb641ff1440b2dee160/design_55_seq_1/cycle_0/steered/design_03_s0/input/msa/chain_B.a3m
+      msa: /hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/a7/c7732a27ca46ed2fd3e08daea31cab/design_55_seq_1/cycle_0/steered/design_03_s0/input/msa/chain_B.a3m
       templates:
-        - cif: /hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/50/3f24a65088cbb641ff1440b2dee160/design_55_seq_1/cycle_0/effector_template.cif
+        - cif: /hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/a7/c7732a27ca46ed2fd3e08daea31cab/design_55_seq_1/cycle_0/effector_template.cif
           chain_id: B
           template_id: B
           force: true

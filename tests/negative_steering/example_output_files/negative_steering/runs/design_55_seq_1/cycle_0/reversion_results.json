@@ -2,7 +2,7 @@
   "design_02_s1": {
     "verdict": "pose_holds",
     "reason": "reverted pose holds structurally and cleanly",
-    "reverted_prediction_pdb": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/50/3f24a65088cbb641ff1440b2dee160/design_55_seq_1/cycle_0/reversions/rev_design_02_s1_s1/prediction.pdb",
+    "reverted_prediction_pdb": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/a7/c7732a27ca46ed2fd3e08daea31cab/design_55_seq_1/cycle_0/reversions/rev_design_02_s1_s1/prediction.pdb",
     "reverted_ra_eff_vs_truth": 2.99,
     "reverted_ra_eff_vs_steered": 2.458,
     "reverted_independent_receptor_rmsd": 4.051,
@@ -39,7 +39,7 @@
   "design_03_s0": {
     "verdict": "pose_collapses",
     "reason": "reverted not intact (rec_rmsd=5.459, eff_rmsd=0.447)",
-    "reverted_prediction_pdb": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/50/3f24a65088cbb641ff1440b2dee160/design_55_seq_1/cycle_0/reversions/rev_design_03_s0_s0/prediction.pdb",
+    "reverted_prediction_pdb": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/a7/c7732a27ca46ed2fd3e08daea31cab/design_55_seq_1/cycle_0/reversions/rev_design_03_s0_s0/prediction.pdb",
     "reverted_ra_eff_vs_truth": 28.229,
     "reverted_ra_eff_vs_steered": 29.479,
     "reverted_independent_receptor_rmsd": 5.459,
@@ -78,7 +78,7 @@
   "design_03_s1": {
     "verdict": "pose_collapses",
     "reason": "reverted not intact (rec_rmsd=5.576, eff_rmsd=0.516)",
-    "reverted_prediction_pdb": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/50/3f24a65088cbb641ff1440b2dee160/design_55_seq_1/cycle_0/reversions/rev_design_03_s1_s1/prediction.pdb",
+    "reverted_prediction_pdb": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/a7/c7732a27ca46ed2fd3e08daea31cab/design_55_seq_1/cycle_0/reversions/rev_design_03_s1_s1/prediction.pdb",
     "reverted_ra_eff_vs_truth": 27.97,
     "reverted_ra_eff_vs_steered": 29.566,
     "reverted_independent_receptor_rmsd": 5.576,
@@ -118,7 +118,7 @@
   "design_03_s2": {
     "verdict": "pose_collapses",
     "reason": "reverted ra_eff 26.48 \u2265 cutoff 5.00",
-    "reverted_prediction_pdb": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/50/3f24a65088cbb641ff1440b2dee160/design_55_seq_1/cycle_0/reversions/rev_design_03_s1_s2/prediction.pdb",
+    "reverted_prediction_pdb": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/a7/c7732a27ca46ed2fd3e08daea31cab/design_55_seq_1/cycle_0/reversions/rev_design_03_s1_s2/prediction.pdb",
     "reverted_ra_eff_vs_truth": 26.482,
     "reverted_ra_eff_vs_steered": 28.221,
     "reverted_independent_receptor_rmsd": 2.804,

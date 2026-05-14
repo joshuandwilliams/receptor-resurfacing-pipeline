@@ -30,6 +30,6 @@
     81,
     83
   ],
-  "pdb": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/50/3f24a65088cbb641ff1440b2dee160/design_55_seq_1/cycle_0/steered/design_02_s1/prediction.pdb",
+  "pdb": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/a7/c7732a27ca46ed2fd3e08daea31cab/design_55_seq_1/cycle_0/steered/design_02_s1/prediction.pdb",
   "status": "ok"
 }

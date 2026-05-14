@@ -18,12 +18,12 @@ Initial wrong site:     23 residue(s)
 Protected (overlap):    6 residue(s)
 Candidate pool:         10 residue(s)
 
-Initial receptor_aligned_effector_rmsd: 36.203 Å
-Initial independent_receptor_rmsd:      14.536 Å
+Initial receptor_aligned_effector_rmsd: 36.212 Å
+Initial independent_receptor_rmsd:      14.535 Å
 Initial independent_effector_rmsd:      0.538 Å
 
 Best overall (any fold): 7.037 Å (design_00_s0)
-  delta_receptor_aligned_effector_rmsd: +29.166 Å
+  delta_receptor_aligned_effector_rmsd: +29.175 Å
   independent_receptor_rmsd:            12.332 Å  ⚠ receptor deformed
   independent_effector_rmsd:            1.000 Å
   wrong_jaccard:                        0.353 (12 of 23 shared with initial wrong site)

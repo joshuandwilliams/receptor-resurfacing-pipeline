@@ -4,10 +4,10 @@
     "design_00_s1"
   ],
   "design_idx": 1,
-  "design_workdir": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/4d/8cbef140f997ec888c3c145f1b7269/design_3_seq_1/cycle_0/steered/design_00_s1",
-  "steered_receptor_fasta": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/4d/8cbef140f997ec888c3c145f1b7269/design_3_seq_1/cycle_0/steered/design_00_s1/receptor.fasta",
-  "steered_prediction_pdb": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/4d/8cbef140f997ec888c3c145f1b7269/design_3_seq_1/cycle_0/steered/design_00_s1/prediction.pdb",
-  "reverted_receptor_fasta": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/4d/8cbef140f997ec888c3c145f1b7269/design_3_seq_1/cycle_0/reversions/rev_design_00_s1_s1/receptor.fasta",
+  "design_workdir": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/b2/de79025a2e368118938cfbf20aec60/design_3_seq_1/cycle_0/steered/design_00_s1",
+  "steered_receptor_fasta": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/b2/de79025a2e368118938cfbf20aec60/design_3_seq_1/cycle_0/steered/design_00_s1/receptor.fasta",
+  "steered_prediction_pdb": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/b2/de79025a2e368118938cfbf20aec60/design_3_seq_1/cycle_0/steered/design_00_s1/prediction.pdb",
+  "reverted_receptor_fasta": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/b2/de79025a2e368118938cfbf20aec60/design_3_seq_1/cycle_0/reversions/rev_design_00_s1_s1/receptor.fasta",
   "positions_to_revert": [
     5
   ],

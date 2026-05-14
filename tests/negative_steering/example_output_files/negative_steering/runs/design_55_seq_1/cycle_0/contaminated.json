@@ -8,7 +8,7 @@
       "label": "design_02_s1",
       "design_idx": 7,
       "seed_index": 1,
-      "design_workdir": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/50/3f24a65088cbb641ff1440b2dee160/design_55_seq_1/cycle_0/steered/design_02_s1",
+      "design_workdir": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/a7/c7732a27ca46ed2fd3e08daea31cab/design_55_seq_1/cycle_0/steered/design_02_s1",
       "cumulative_mutations": [
         [
           19,
@@ -69,7 +69,7 @@
       "label": "design_03_s0",
       "design_idx": 9,
       "seed_index": 0,
-      "design_workdir": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/50/3f24a65088cbb641ff1440b2dee160/design_55_seq_1/cycle_0/steered/design_03_s0",
+      "design_workdir": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/a7/c7732a27ca46ed2fd3e08daea31cab/design_55_seq_1/cycle_0/steered/design_03_s0",
       "cumulative_mutations": [
         [
           16,
@@ -137,7 +137,7 @@
       "label": "design_03_s1",
       "design_idx": 10,
       "seed_index": 1,
-      "design_workdir": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/50/3f24a65088cbb641ff1440b2dee160/design_55_seq_1/cycle_0/steered/design_03_s1",
+      "design_workdir": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/a7/c7732a27ca46ed2fd3e08daea31cab/design_55_seq_1/cycle_0/steered/design_03_s1",
       "cumulative_mutations": [
         [
           16,
@@ -204,7 +204,7 @@
       "label": "design_03_s2",
       "design_idx": 11,
       "seed_index": 2,
-      "design_workdir": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/50/3f24a65088cbb641ff1440b2dee160/design_55_seq_1/cycle_0/steered/design_03_s2",
+      "design_workdir": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/a7/c7732a27ca46ed2fd3e08daea31cab/design_55_seq_1/cycle_0/steered/design_03_s2",
       "cumulative_mutations": [
         [
           16,

@@ -1,0 +1,6 @@
+task_id	hash	native_id	name	status	exit	submit	duration	realtime	%cpu	peak_rss	peak_vmem	rchar	wchar	cpus	memory	time
+2	53/1493da	20091069	WRITE_DUMMY_MAPPING_REC (dummy_receptor)	COMPLETED	0	2026-05-13 09:50:47.025	4.2s	12ms	96.0%	0	0	174.6 KB	211 B	4	8 GB	4h
+1	83/cd1785	20091071	HADDOCK3_PREPARE (haddock_prep)	COMPLETED	0	2026-05-13 09:50:47.278	4s	637ms	67.3%	8.8 MB	26.8 MB	3.2 MB	692.8 KB	2	4 GB	30m
+3	95/7066cf	20091070	WRITE_DUMMY_MAPPING_EFF (dummy_effector)	COMPLETED	0	2026-05-13 09:50:47.153	4.1s	12ms	97.0%	0	0	174.6 KB	211 B	4	8 GB	4h
+4	94/c23719	20091083	HADDOCK3_DOCK (haddock3)	FAILED	1	2026-05-13 09:50:51.501	4m 40s	4m 35s	-	-	-	-	-	64	128 GB	2d
+5	ab/697d83	20091157	HADDOCK3_DOCK (haddock3)	FAILED	1	2026-05-13 09:55:31.417	4m 30s	4m 25s	-	-	-	-	-	64	128 GB	2d

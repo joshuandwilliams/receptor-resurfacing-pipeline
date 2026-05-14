@@ -44,6 +44,7 @@ flowchart TB
     v18["fastrelax_xml_ch"]
     v19["metrics_script"]
     v24["merge_script"]
+    v26["plot_script"]
     end
     v4(["NEGSTEER_INTERFACE_METRICS"])
     v6(["EXTRACT_SURVIVOR_MANIFEST"])
@@ -53,8 +54,9 @@ flowchart TB
     v16(["NEGSTEER_BIOPHYSICAL_METRICS"])
     v20(["NEGSTEER_ROSETTA_METRICS"])
     v25(["NEGSTEER_ORTHOGONAL_METRICS"])
+    v27(["ORTHOG_PLOTS"])
     subgraph " "
-    v26[" "]
+    v28[" "]
     end
     v2(( ))
     v7(( ))
@@ -67,6 +69,7 @@ flowchart TB
     v2 --> v4
     v4 --> v6
     v4 --> v25
+    v4 --> v27
     v5 --> v6
     v2 --> v6
     v6 --> v7
@@ -86,7 +89,9 @@ flowchart TB
     v21 --> v25
     v22 --> v25
     v23 --> v25
-    v25 --> v26
+    v25 --> v27
+    v26 --> v27
+    v27 --> v28
 
 </pre>
 <script type="module">

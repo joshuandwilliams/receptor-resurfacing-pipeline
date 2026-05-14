@@ -5,7 +5,7 @@
   "reversion_result": {
     "verdict": "pose_holds",
     "reason": "reverted pose holds structurally and cleanly",
-    "reverted_prediction_pdb": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/7b/6845842d5b75546ae970cc36b77498/design_42_seq_0/cycle_0/reversions/rev_design_03_s0_s0/prediction.pdb",
+    "reverted_prediction_pdb": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/89/a5a83163a0e3271c25ae68262de0dc/design_42_seq_0/cycle_0/reversions/rev_design_03_s0_s0/prediction.pdb",
     "reverted_ra_eff_vs_truth": 2.692,
     "reverted_ra_eff_vs_steered": 1.863,
     "reverted_independent_receptor_rmsd": 1.796,

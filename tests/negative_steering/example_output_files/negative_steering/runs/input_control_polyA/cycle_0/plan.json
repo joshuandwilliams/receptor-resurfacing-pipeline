@@ -5,15 +5,15 @@
   "pred_receptor_chain": "A",
   "pred_effector_chain": "B",
   "wild_type_receptor_seq": "GLKQKIVIKVAMEGNNCRSKAMALVASTGGVDAAAAAGAAAAAAAVVGYGIDPIKLISALRKKVGDAELLQVAAAAAA",
-  "initial_receptor_aligned_effector_rmsd": 36.203,
-  "initial_independent_receptor_rmsd": 14.536,
+  "initial_receptor_aligned_effector_rmsd": 36.212,
+  "initial_independent_receptor_rmsd": 14.535,
   "initial_independent_effector_rmsd": 0.538,
   "rmsd_threshold": 6.0,
   "contact_cutoff": 4.5,
   "max_mutations": 6,
   "candidate_pool_size": 10,
   "mode": "mild",
-  "effector_template_cif": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/f8/7e194b3335504b5422a4fb647104f7/input_control_polyA/cycle_0/effector_template.cif",
+  "effector_template_cif": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/f3/1d8d3e20ae86d95897852d179f32f0/input_control_polyA/cycle_0/effector_template.cif",
   "n_designs": 1,
   "num_seeds": 3,
   "boltz_container": "/hpc-home/jowillia/singularity/Boltz1_Boltz2_Chai1_ColabFold/boltz2_negsteer.img",
@@ -21,14 +21,14 @@
   "diffusion_samples": 5,
   "seed": 0,
   "no_kernels": true,
-  "receptor_fasta_override": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/f8/7e194b3335504b5422a4fb647104f7/input_control_polyA/inputs/control_polyA_receptor.fasta",
-  "effector_fasta_override": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/f8/7e194b3335504b5422a4fb647104f7/input_control_polyA/inputs/effector.fasta",
+  "receptor_fasta_override": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/f3/1d8d3e20ae86d95897852d179f32f0/input_control_polyA/inputs/control_polyA_receptor.fasta",
+  "effector_fasta_override": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/f3/1d8d3e20ae86d95897852d179f32f0/input_control_polyA/inputs/effector.fasta",
   "designs": [
     {
       "index": 0,
       "name": "design_00_s0",
-      "dir": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/f8/7e194b3335504b5422a4fb647104f7/input_control_polyA/cycle_0/steered/design_00_s0",
-      "yaml": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/f8/7e194b3335504b5422a4fb647104f7/input_control_polyA/cycle_0/steered/design_00_s0/input/input.yaml",
+      "dir": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/f3/1d8d3e20ae86d95897852d179f32f0/input_control_polyA/cycle_0/steered/design_00_s0",
+      "yaml": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/f3/1d8d3e20ae86d95897852d179f32f0/input_control_polyA/cycle_0/steered/design_00_s0/input/input.yaml",
       "total_mutations": 6,
       "mutated_positions": [
         1,
@@ -45,8 +45,8 @@
     {
       "index": 1,
       "name": "design_00_s1",
-      "dir": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/f8/7e194b3335504b5422a4fb647104f7/input_control_polyA/cycle_0/steered/design_00_s1",
-      "yaml": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/f8/7e194b3335504b5422a4fb647104f7/input_control_polyA/cycle_0/steered/design_00_s1/input/input.yaml",
+      "dir": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/f3/1d8d3e20ae86d95897852d179f32f0/input_control_polyA/cycle_0/steered/design_00_s1",
+      "yaml": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/f3/1d8d3e20ae86d95897852d179f32f0/input_control_polyA/cycle_0/steered/design_00_s1/input/input.yaml",
       "total_mutations": 6,
       "mutated_positions": [
         1,
@@ -63,8 +63,8 @@
     {
       "index": 2,
       "name": "design_00_s2",
-      "dir": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/f8/7e194b3335504b5422a4fb647104f7/input_control_polyA/cycle_0/steered/design_00_s2",
-      "yaml": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/f8/7e194b3335504b5422a4fb647104f7/input_control_polyA/cycle_0/steered/design_00_s2/input/input.yaml",
+      "dir": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/f3/1d8d3e20ae86d95897852d179f32f0/input_control_polyA/cycle_0/steered/design_00_s2",
+      "yaml": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/f3/1d8d3e20ae86d95897852d179f32f0/input_control_polyA/cycle_0/steered/design_00_s2/input/input.yaml",
       "total_mutations": 6,
       "mutated_positions": [
         1,
@@ -109,10 +109,10 @@
     {
       "seed_offset": 0,
       "boltz_seed": 0,
-      "ra_eff": 36.203,
-      "ind_rec": 14.536,
+      "ra_eff": 36.212,
+      "ind_rec": 14.535,
       "ind_eff": 0.538,
-      "pdb_path": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/f8/7e194b3335504b5422a4fb647104f7/input_control_polyA/cycle_0/initial_prediction.pdb"
+      "pdb_path": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/f3/1d8d3e20ae86d95897852d179f32f0/input_control_polyA/cycle_0/initial_prediction.pdb"
     },
     {
       "seed_offset": 1,
@@ -120,7 +120,7 @@
       "ra_eff": 27.878,
       "ind_rec": 10.805,
       "ind_eff": 0.451,
-      "pdb_path": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/f8/7e194b3335504b5422a4fb647104f7/input_control_polyA/cycle_0/initial_prediction_s1.pdb"
+      "pdb_path": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/f3/1d8d3e20ae86d95897852d179f32f0/input_control_polyA/cycle_0/initial_prediction_s1.pdb"
     },
     {
       "seed_offset": 2,
@@ -128,7 +128,7 @@
       "ra_eff": 28.791,
       "ind_rec": 11.725,
       "ind_eff": 0.613,
-      "pdb_path": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/f8/7e194b3335504b5422a4fb647104f7/input_control_polyA/cycle_0/initial_prediction_s2.pdb"
+      "pdb_path": "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/negative_steering/work/f3/1d8d3e20ae86d95897852d179f32f0/input_control_polyA/cycle_0/initial_prediction_s2.pdb"
     }
   ],
   "cold_start_n_clean": 0,

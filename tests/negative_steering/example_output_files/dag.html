@@ -63,25 +63,26 @@ flowchart TB
     v43["build_script"]
     v44["orchestrator_script"]
     v48["summary_script"]
-    v51["plots_script"]
-    v54["plots_script"]
+    v49["scored_metadata"]
+    v52["plots_script"]
+    v55["plots_script"]
     end
     v10(["NEGSTEER_DERIVE_INDICES"])
     v21(["NEGSTEER_RUN_ONE"])
     v28(["DERIVE_INPUT_INDICES"])
     v45(["NEGSTEER_CONTROLS"])
-    v49(["NEGSTEER_CROSS_SEQUENCE"])
-    v52(["NEGSTEER_PLOTS"])
+    v50(["NEGSTEER_CROSS_SEQUENCE"])
+    v53(["NEGSTEER_PLOTS"])
     subgraph " "
-    v53[" "]
-    v56[" "]
+    v54[" "]
+    v57[" "]
     end
-    v55(["NEGSTEER_WITHIN_SEQUENCE_PLOTS"])
+    v56(["NEGSTEER_WITHIN_SEQUENCE_PLOTS"])
     v2(( ))
     v7(( ))
     v30(( ))
     v46(( ))
-    v50(( ))
+    v51(( ))
     v0 --> v2
     v1 --> v7
     v4 --> v2
@@ -106,7 +107,7 @@ flowchart TB
     v26 --> v28
     v27 --> v28
     v28 --> v30
-    v28 --> v50
+    v28 --> v51
     v29 --> v30
     v37 --> v45
     v38 --> v45
@@ -118,17 +119,18 @@ flowchart TB
     v44 --> v45
     v30 --> v45
     v45 --> v46
-    v48 --> v49
-    v46 --> v49
-    v49 --> v52
-    v49 --> v55
-    v51 --> v52
-    v46 --> v52
-    v50 --> v52
+    v48 --> v50
+    v49 --> v50
+    v46 --> v50
+    v50 --> v53
+    v50 --> v56
     v52 --> v53
-    v54 --> v55
-    v46 --> v55
+    v46 --> v53
+    v51 --> v53
+    v53 --> v54
     v55 --> v56
+    v46 --> v56
+    v56 --> v57
 
 </pre>
 <script type="module">
