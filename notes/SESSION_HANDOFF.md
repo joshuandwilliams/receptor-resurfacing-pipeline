@@ -1,4 +1,4 @@
-# Session Handoff — 2026-05-13 → next session
+# Session Handoff — 2026-05-14 → next session
 
 A focused starting brief for the next chat.  Read this first.  For the full picture, follow the cross-references to `notes/remediation_state.md`, `notes/phase4_architecture_spec.md`, and `notes/design_audit.md`.
 
@@ -7,104 +7,118 @@ A focused starting brief for the next chat.  Read this first.  For the full pict
 1. **This file** — orientation and immediate next step.
 2. **`notes/remediation_state.md`** — full session log + branch state.  Authoritative.
 3. **`notes/phase4_architecture_spec.md`** — the architectural contract.  Especially §"User clarifications" (CL-1 to CL-5) and the §2.2 note about `BreakSegment` + `PassthroughSegment`.
-4. **`~/.claude/.../memory/MEMORY.md`** — two recurring-failure memory files indexed (`project_no_reversion_semantics.md`, `project_contig_string_format.md`).  Read both before touching negsteer outcomes or contig strings.
+4. **`notes/design_audit.md`** — six-session grill-me record.  **Session 7 (HADDOCK restructure) is the next planned grill-me** — research already begun this session, see §"HADDOCK code surface" below for current state.
+5. **`~/.claude/.../memory/MEMORY.md`** — two recurring-failure memory files indexed (`project_no_reversion_semantics.md`, `project_contig_string_format.md`).  Read both before touching negsteer outcomes or contig strings.
 
 ## Where the code is
 
-- `main` at commit `18718db`: safe-fallback baseline.  Has the full Phase 4 spec + all pre-architecture work.  No Phase 4 implementation code.
-- `phase4-impl` at commit `c15923f` (or later if more lands): **active branch.**  24 commits ahead of `main`.  All deep-form migrations complete; only HPC verification remaining.
+- `main` at commit `18718db`: safe-fallback baseline.  Phase 4 spec + pre-architecture work.  No Phase 4 implementation code.
+- `phase4-impl` at commit `be593db`: **active branch.**  38 commits ahead of `main`.  All Phase 4 implementation, deep-form migrations, polish, fixture regeneration, full-pipeline test integration done.
 - Working directory should be on `phase4-impl`.  Verify with `git branch -vv`.
 
-## What happened in the last session (2026-05-13)
+## What happened in the last session (2026-05-13 → 2026-05-14)
 
-The previous handoff said "implement everything, debug tomorrow."  All of the deferred implementation work landed.  Five commits on top of the prior `020d32b`:
+17 commits on top of the prior `ea6dd71` (notes update).  Three logical groupings:
 
-1. **`7385042`** — threshold migration in three files (`orthogonal_metrics_plots.py`, `compute_metrics.py`, `boltz2_iterate_steering.py`); `ContigSpec` rebuilt around `DeNovoSegment(min_len, max_len)`; three contig parsers migrated to thin adapters around `ContigSpec.from_string` (`derive_input_design_region`, `haddock3_prepare`, `pipeline_correct_sequences`); icode-aware bucketing fix in `compute_metrics.find_contact_residues_heavy`; `CrossSummaryRow` + `CrossSummarySnapshot` typed view over `cross_sequence_summary.csv`; dead `get_pdb_sequence` removed.
-2. **`babd5d4`** — `NegativeSteeringRun.from_workdir` deep form (walks cycle_0/initial[_sN], steered/design_NN_sS, reversions/rev_design_NN_sS_sR; reads PDBs + confidence JSONs + mutations.tsv + sidecars); `DesignCohort.from_runs_directory` hydrates real runs; `DesignCohort.emit_cross_summary_from_dirs` + `to_cross_summary_csv` typed entry points; `bin/cross_summary_v2.py` CLI; `NEGSTEER_CROSS_SEQUENCE` in `main.nf` and `tests/negative_steering/test_negative_steering.nf` rewired to call `cross_summary_v2.py`; `contig_utils.parse_block_segments` migrated to `ContigSpec` (with new `BreakSegment` + `PassthroughSegment` types on `ContigChain`).
-3. **`23e0fc4`** — Nextflow comment refresh in `modules/negative_steering.nf` to reflect the new wiring.
-4. **`c15923f`** — `tests/run_tests.sh` bug fix.  Old code had `[ ${#stale_logs[@]} -gt 0 ] && rm -f …` as the last line of `clean_module`; an empty stale_logs array made the function return non-zero under `set -e`, silently killing the dispatcher mid-loop.  Replaced with an explicit `if`.
+### A. Phase 4 polish (post-implementation, pre-verification)
 
-**370 local_unit tests pass** (up from 350 at session start, +20 from new tests covering range form, break/passthrough, from_workdir, CrossSummarySnapshot).
+- **`1641c76`** — `extract_survivor_manifest.py`: remap stale absolute paths (`/Users/...` → `/hpc-home/...` survives via fallback to discovered workdir + repo-root); exit non-zero on 0-survivor manifest (was silently exiting 0, letting Nextflow fan out the orthogonal cascade over an empty channel and report "Success" with no orthogonal data).
+- **`e3c2752`** — polish pass: ERR trap on `tests/run_tests.sh` (prints failing line on `set -e` exit); F821 typing fixes (`Optional` import in `boltz2_negative_steering.py`); `NEGSTEER_CROSS_SEQUENCE` cache-busting via passing the entire `bin/` directory as a path input (closes the indirect-import cache-busting gap).
 
-Full detail in `notes/remediation_state.md` § "What landed in this session (2026-05-13)".
+### B. Orthogonal cascade enhancements
+
+- **`f5f9167`** → **`373e164`** → **`0bf94f6`**: orthog combined-cohort plot ranking churn.  Final state: `(cross_tier, boltz_conf_passes, -composite_score)` — tier first, rows that pass every thresholded Boltz-2 confidence metric next, then descending composite within each group.  Legends side-by-side instead of stacked.  ORTHOG_PLOTS wired into `tests/orthogonal_metrics/test_orthogonal_metrics.nf` so plots land in `plots/` (matching other modules' patterns; `--with-plots` iterator still publishes to `plots_iter/`).
+- **`20f9ed0`** — `params.orthogonal_tier_filter` introduced.  Default `'all'` runs AF3 + biophysical + Rosetta on every steered design including tier-none failed designs (useful diagnostic).  `'abc'` restricts to survivors.  Plumbed through `extract_survivor_manifest.py` (new `--tier-filter` CLI flag) and `modules/negsteer_manifest.nf`.
+- **`scripts/refresh_orthog_fixture.sh`** (also `20f9ed0`) — one-shot refresh of `tests/orthogonal_metrics/data/negsteer_run/` from the latest `tests/negative_steering/receptor_resurfacing_results/`.  Brings the orthogonal_metrics test fixture from a 2-sequence mini-cohort up to all 8 steered designs (+ 2 controls).
+
+### C. Test infrastructure + fixture regeneration
+
+- **`06c0157`** — `tests/haddock/test_haddock.nf`: override `params.haddock_min_cluster_size = 2` for small test cohorts (production default of 4 is too strict at `haddock_sampling=100`).
+- **`ba95ede`**, **`fa14d3a`** — `tests/update_example_dataset.slurm.sh` and its impl: two sbatch-specific bugs fixed.  (1) `${BASH_SOURCE[0]}` resolves to `/var/spool/slurmd/job<id>/` under sbatch, not the real `tests/` dir; switched to `${PWD}` (set by `#SBATCH --chdir`).  (2) Path doubling: when CWD is already `tests/` and the user passes `tests/<module>/...` relative to project root, the path resolved as `tests/tests/<module>/...`.  Impl now auto-strips a leading `tests/` segment with a stderr NOTE.
+- **`e5f3be0`** — **all 6 module fixtures regenerated** against `phase4-impl`.  657 files updated.  By module: negative_steering 627 (CL-3 + schema rename touches per-design × per-seed × per-stage), rfdiffusion 9 (RFD container `complex_beta` update changed designs), proteinmpnn 9 (small `design_region_score` shifts), rosetta_filtering 5 (`design[3].dG_separated` 33→57 — unexplained, blessed), orthogonal_metrics 6 (10-sequence cohort + ranking + ORTHOG_PLOTS), **haddock NEW** (first time HADDOCK has a fixture — Nextflow run-artefacts only; scientific outputs are placeholders pending the restructure).
+- **`279f078`** + **`8e21c7b`** + **`be593db`** — `full_test_run` is now a first-class module in `tests/run_tests.sh`.  Dispatcher special-cases it to invoke the project-root `run_pipeline.slurm.sh` with `tests/full_test_run/params_full_test.yml`.  Two fixes to the params file: `haddock_sampling: 1 → 100` (validator's min is 100; value is unused in mode 2 but the validator runs unconditionally); `pdb_file` corrected to `af3_pikp1_native_avrpikf_complex.pdb` (the actual filename on disk).  `orthogonal_tier_filter` added to `validate_params.py:PARAM_SPECS`.
+
+### Verification state at end of session
+
+- **272 / 272 hpc-marked characterization tests passing.**  386 local_unit tests deselected by `-m hpc`.  26 expected skips.
+- **All 6 per-module test runs reported `Success: true`** prior to fixture regeneration.
+- **Full pipeline test (`./tests/run_tests.sh --modules full_test_run`) running on HPC at end-of-session.**  ETA ~24h+ depending on GPU queue.  Submission required two iterations to clear validator + a stale `pdb_file` path; the running attempt is `nextflow_pipeline_<latest jobid>` and should be checked first thing.
 
 ## What needs to happen FIRST in the next session
 
-**HPC tests for all five modules were submitted at end-of-session 2026-05-13** (GPU queue was congested with someone else's 6,000-job array — submission timing depended on queue movement):
-
-- `rfdiffusion` (workflow job + plots, afterok-dependent)
-- `proteinmpnn` (workflow + plots)
-- `rosetta_filtering` (workflow + plots)
-- `negative_steering` (workflow + plots)
-- `orthogonal_metrics` (workflow + plot)
-- `haddock` deliberately omitted (deprecated)
-
-Concrete steps:
-
-1. **Check HPC queue status:**
+1. **Check the full pipeline test status:**
    ```
    ssh slurm
    squeue -u $USER
+   tail -100 nextflow_pipeline_<latest-jobid>.out
    ```
-   See which finished and which are still pending.
+   Expect a long-running process tree.  If it finished successfully: skim the output for any tier-none orthogonal data (the `orthogonal_tier_filter: all` setting should have produced AF3 + biophys + Rosetta for every steered design).  If it failed mid-run: bring the failing process work dir into the next session.
 
-2. **For each that completed: read its log.**
-   ```
-   tail -50 tests/<module>/slurm_<latest-jobid>.out
-   ```
-   Look for `Success: true`.  For `negative_steering` specifically, also look at the new `[build-contaminated] CL-3 gating: X / Y designs trigger reversion (Z contaminated entries queued)` line.
+2. **If full test passed, start the HADDOCK Session 7 grill-me.**  Background research has been done; see §"HADDOCK code surface" below.  No notes added to `design_audit.md` yet — the next chat should open with Batch 1 of Q129–Q136.
 
-3. **For any module whose fixture diff is non-trivial, regenerate:**
-   ```
-   sbatch tests/update_example_dataset.slurm.sh \
-       --module <module> \
-       --updated-output-folder tests/<module>/receptor_resurfacing_results
-   ```
-   Then pull to Mac:
-   ```
-   ./scripts/sync_from_hpc.sh --module <module>
-   git diff --stat tests/<module>/example_output_files/
-   ```
-
-4. **Run characterization tests against `phase4-impl`:**
-   ```
-   sbatch tests/characterization/run_pytest.slurm.sh
-   ```
-   Note: this runs `pytest -m hpc` only — requires the per-module `receptor_resurfacing_results/` outputs to exist.
-
-5. **Expected diff shape on `negative_steering`:**  CL-3 should reduce the number of designs that trigger reversion.  Some sequences that were Tier-C/none under the old rule may now be Tier-A/B (their lone contaminated seed no longer reverts-and-collapses; the clean_steered partners hold and contribute to `n_pass`).
-
-6. **Expected diff shape elsewhere:** input PDBs in `tests/<module>/data/` were grep-confirmed to have no insertion codes, so the `find_contact_residues_heavy` icode fix produces bit-identical output on test fixtures.  No fixture regeneration expected from the icode change alone.
+3. **If full test failed and isn't a quick fix, fix and resubmit.**  Then revisit HADDOCK after the long run lands.
 
 ## What's left to do (in priority order)
 
-This list is much smaller than it was at end of session 2026-05-12.  Every architectural meat item is now implemented; only verification + a few cleanup tasks remain.
+### High priority
 
-### After HPC verification
+1. **HADDOCK module restructure** (Session 7 grill-me + iterative redesign).  User-flagged motivations:
+   - Most energetically favourable HADDOCK pose never matched the intended pose.
+   - Suspected AIR table issues.
+   - Suspected cluster-selection issues (HADDOCK ranks by score, but the "right" cluster may not be the top one).
+   - Wants more targeted contact restraints to hold the input pose.
 
-1. **Regenerate fixtures driven by CL-3** — only if `negative_steering` diff is sensible.  Commit separately so the CL-3-driven changes are reviewable as a discrete unit.
+2. **`rfdiff_contact_cutoff` / `haddock_hotspot_cutoff` parameter split** (deferred since pre-Phase-4) — fits naturally with the HADDOCK restructure since `EXTRACT_HOTSPOTS` is the HADDOCK consumer with the odd name.
 
-2. **Update `notes/phase4_architecture_spec.md` §2.2** with the formal description of `BreakSegment` and `PassthroughSegment` (currently only documented in the commit message + `bin/contig_spec.py` docstring).
+### Medium priority
 
-3. **Add an `ERR` trap to `tests/run_tests.sh`** so future `set -e` exits print the failing line.  The `c15923f` fix patches the specific bug but the pattern is general (any function whose last command is `[ … ] && cmd` is at risk).
+3. **Investigate the Rosetta `dG_separated` 33→57 drift** — fixture was blessed in `e5f3be0` but the cause wasn't isolated.  Inputs are frozen PDBs, container should be unrelated to the RFD container update.  May be Rosetta non-determinism, may be a real change.
 
-### Optional follow-ups
+4. **Validator coverage gaps** — 9 params still flagged as "no spec entry": `af2_data_dir`, `af3_db_v3`, `af3_model_dir`, `af3_package_id`, `boltz2_container`, `colabfold_container`, `rfdiff_container`, `max_af3_parallel`, `haddock_min_cluster_size`.  Infrastructure-type params from `nextflow.config`.  Add specs as part of a threshold audit.
 
-4. **Indirect-import cache-busting gap in `NEGSTEER_CROSS_SEQUENCE`** — `cross_summary_v2.py` is the directly-tracked script; its delegate `cross_sequence_summary.py:aggregate` is an indirect import.  When edits land only on the delegate, the operator must touch `cross_summary_v2.py` to invalidate Nextflow's cache.  Same caveat exists across other indirect-import sites in the codebase (per the verification queue in `remediation_state.md`).
+### Low priority / deferred
 
-5. **`contig_utils.parse_design_region` and `resolve_contigs`** — these still live in `contig_utils.py` and use the now-migrated `parse_block_segments` internally.  Their external contract is preserved, but they could themselves be migrated to thin adapters around `ContigSpec` in a future cleanup pass.
+5. **`contig_utils.parse_design_region` / `resolve_contigs` migration** to thin ContigSpec adapters.  External contract preserved; cosmetic refactor.
 
-6. **`NegativeSteeringRun.from_workdir` against a real production workdir** — synthetic-fixture tests pass; full-data verification only possible once a real negsteer run is observed on `phase4-impl`.
+6. **`NegativeSteeringRun.from_workdir` against a real production workdir** — synthetic-fixture tests pass; full-data verification only possible once a real negsteer run is observed on `phase4-impl`.  The full pipeline test run should provide this.
 
-### Deferred indefinitely (low-priority)
+7. **`read_ca_atoms` consolidation** — intentionally NOT consolidated; cross-reference docstrings added.  No functional issue.
 
-7. **`read_ca_atoms` consolidation** — the two implementations have intentionally different return types (CAEntry list vs coord-dict list).  Cross-reference docstrings added on both ends (commit `7385042`).  No functional issue.
+8. **Class 8 (`new_contamination`) coverage gap** — user has a separate plan to surface a Class 8 example from the full test run.
 
-8. **Sixth audit-close item, `find_contact_residues_heavy` consolidation** — the two implementations now produce identical output (both icode-aware as of `7385042`); they remain duplicated by design until a future refactor extracts a shared `pdb_atom_io` helper.
+9. **Stale Nextflow process selectors in `nextflow.config`** — `BOLTZ2_PREPARE`, `COLABFOLD_SEARCH_PER_DESIGN`, `BOLTZ2_PREDICT`, `BOLTZ2_VERIFY_BINDING`, `BOLTZ2_FILTER_AND_RANK`, `BOLTZ2_PLOTS`, `AGGREGATE_RESULTS` — config has labels for these but no workflow imports/calls them.  Warns at every pipeline start.  Cosmetic cleanup.
+
+## HADDOCK code surface (research for Session 7 grill-me)
+
+Already-read files:
+
+- `bin/haddock3_prepare.py` (258 LOC) — parses contig to identify de novo regions as HADDOCK active residues; generates ambig_restraints.tbl.  **AIR generation is one big AND-of-OR: every receptor active residue must contact OR(every effector active residue).**  No active/passive distinction.  One-sided default (receptor → entire effector chain) when `effector_active_residues=""`; two-sided when given.
+- `bin/extract_hotspots.py` (199 LOC) — post-docking interface-residue extraction from the docked complex; outputs RFDiffusion-format hotspot string.  Uses `find_interface_residues` from `haddock_utils.py`.
+- `bin/collect_haddock3_dock.py` (291 LOC) — post-processes HADDOCK run dir; rejects clusters below `--min-cluster-size`.
+- `bin/haddock3_plots.py` (695 LOC) — plotting code (genuine HADDOCK plots, untested by characterization).
+- `bin/build_contigs.py` (229 LOC) — builds RFDiffusion contig string from selected docked output.
+- `bin/haddock_utils.py` (283 LOC) — shared helpers.
+
+The Nextflow processes (`modules/haddock.nf`):
+
+- `HADDOCK3_PREPARE` — runs `haddock3_prepare.py`.
+- `HADDOCK3_DOCK` — runs HADDOCK3.  docking.cfg has 8 modules: topoaa → rigidbody → seletop → flexref → emref → clustfcc → seletopclusts → caprieval.  Sampling = `params.haddock_sampling` (production: 10000), `min_population = params.haddock_min_cluster_size` (production: 4), seletop = 20.
+- `HADDOCK3_PLOTS` — runs `haddock3_plots.py`.
+- `EXTRACT_HOTSPOTS` — runs `extract_hotspots.py` on the chosen docked complex; uses `params.rfdiff_contact_cutoff` (currently shared with RFDiffusion's filter).
+- `BUILD_CONTIGS` — runs `build_contigs.py`.
+
+Initial grill-me question candidates (NOT YET CAPTURED IN design_audit.md — open them in Batch 1):
+
+- **VERIFY: AIR generation has no passive residues; every receptor active residue is restrained to OR-of-every-effector-active-residue with distance 2.0 ± 2.0 ± 0.0 (one-sided) or 2.0 ± 2.0 ± 2.0 (two-sided).  Is this what you want, or is the lack of passive residues the underlying cause of poor cluster discrimination?**
+- **VERIFY: `effector_active_residues` is an empty string by default (params_example.yml line where this lives).  When empty, every receptor active residue is restrained to "any effector residue" — effectively a very loose "must contact effector somewhere" constraint.  Is the empty default why intended-pose recovery is poor?**
+- **VERIFY: Cluster selection in `collect_haddock3_dock.py` is by HADDOCK score (default cluster `1` is the best-scoring).  No structural similarity check against the intended pose.  Is this the "wrong cluster picked" mechanism you described?**
+- **UNKNOWN: What does "intended pose" mean operationally — do you have a reference complex (e.g. AF3 prediction) that's the target, or is it more abstract (a region of receptor surface you want contacted)?**
+- **UNKNOWN: Have you tried HADDOCK's pairwise distance restraints (not AIRs) — `unambig_restraints.tbl` with explicit residue-pair distances?**
+- **UNKNOWN: Is the goal to RECOVER an existing input pose, or to GENERATE a pose that holds specific contacts?**
 
 ## Critical context the next session must know
 
-### CL-3 reversion-gating rule (the headline behaviour change)
+### CL-3 reversion-gating rule
 
 **Old rule** (pre-Phase-4): any single contaminated (design, seed) triggers reversion for that design.
 
@@ -126,6 +140,14 @@ Recurring confusion documented in memory file `project_no_reversion_semantics.md
 ### Contig string format
 
 Canonical: `A1-10/5/A15-20 B`.  Slash-separated within a chain, space-separated between chains, never commas.  Fixed segments chain-prefixed; denovo segments are bare lengths (resolved) or length ranges (constraint).  As of Phase 4, `DeNovoSegment` always carries `(min_len, max_len)` — `min_len == max_len` for the resolved case.  RFDiffusion chain-break marker `0` parses as `BreakSegment` (no length, ignored by position-math methods).  Bare chain letters within a block (e.g. `A1-10/B/A15-20`) parse as `PassthroughSegment(chain)`.
+
+### Orthogonal cascade scope
+
+`params.orthogonal_tier_filter` controls which `cross_tier` values receive the AF3 + biophysical + Rosetta cascade:
+- `'all'` (default): every steered design including tier-none failed designs.  Useful diagnostic.  More expensive (per-design AF3).
+- `'abc'`: restrict to cross_tier in (A, B, C).  Lower GPU cost.
+
+Controls (row_type != steered) are not currently filtered out by `extract_survivor_manifest.py` — so with `'all'` they also get the cascade.  Documented as a follow-up choice in the previous session's notes; carried forward.
 
 ### The 13 deep-module types and their tiers
 
@@ -156,11 +178,11 @@ Both indexed in `MEMORY.md`.
 ```bash
 # On Mac, on phase4-impl:
 git status                                                   # should be clean
-git log --oneline 18718db..HEAD | wc -l                      # expect 24
+git log --oneline 18718db..HEAD | wc -l                      # expect 38
 python3 -m pytest tests/characterization/ -q -m local_unit \
     --ignore=tests/characterization/test_plots.py \
     --ignore=tests/characterization/helpers/tests/test_png_compare.py
-# Expect: 370 passed, 7 skipped (gemmi-dependent), 272 deselected
+# Expect: 386 passed, 7 skipped (gemmi-dependent), 272 deselected
 ```
 
 If any of those checks fail, something has changed since end-of-session — investigate before continuing.

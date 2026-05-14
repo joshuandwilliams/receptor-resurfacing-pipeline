@@ -2,16 +2,16 @@
 
 A living document tracking where the codebase remediation effort currently stands. Read this at the start of every session; update it at the end of every session.
 
-**Last updated:** 2026-05-13 (Phase 4 deep-form migrations complete on `phase4-impl`; all five per-module HPC tests submitted; only verification pending)
+**Last updated:** 2026-05-14 (Phase 4 verification complete on `phase4-impl`; all 6 fixtures regenerated; full pipeline test running on HPC; Session 7 HADDOCK grill-me is the next planned work)
 
 ## Current Phase
 
-**Phase 4 implementation — IN PROGRESS on branch `phase4-impl`.**  All 13 deep-module types built and tested; CL-3 majority-rule fix live; all originally-deferred caller migrations now landed (cross_sequence_summary wiring, full threshold rollout, contig parser consolidation, NegativeSteeringRun.from_workdir deep form, DesignCohort.from_runs_directory).  Only HPC validation remains.
+**Phase 4 implementation — VERIFICATION COMPLETE on branch `phase4-impl`.**  All 13 deep-module types built and tested; CL-3 majority-rule fix live; all caller migrations done; all 6 per-module HPC tests passed; all 6 fixtures regenerated and committed; 272/272 hpc-marked characterization tests passing.  Full pipeline test running on HPC at end-of-session — once that completes successfully, Phase 4 is fully closed.
 
-## Branch state (as of 2026-05-13 end-of-session)
+## Branch state (as of 2026-05-14 end-of-session)
 
 - `main` — at `18718db`.  Safe-fallback baseline.  Contains everything through Phase 4 spec (Sessions 1–6 complete) but no implementation code.  If `phase4-impl` ever needs to be abandoned, `main` is the working pipeline to return to.
-- `phase4-impl` — at `c15923f`.  24 commits ahead of `main`.  All Phase 4 implementation + caller migration work lives here.  Tracking remote `origin/phase4-impl`.
+- `phase4-impl` — at `be593db`.  38 commits ahead of `main`.  All Phase 4 implementation + caller migration + polish + verification work lives here.  Tracking remote `origin/phase4-impl`.
 - `remediation` — at `18718db`.  Historical; can be retired.
 - `experiments` — separate worktree branch; not touched in Phase 4.
 
@@ -180,6 +180,76 @@ No regressions.  Skipped tests: 7 (gemmi-dependent).
 ### HPC sync state
 
 All commits pushed to `origin/phase4-impl` and synced to HPC via `./scripts/sync_to_hpc.sh`.  HPC tests submitted at end of session — see "HPC validation queue" section above.
+
+## What landed in this session (2026-05-13 → 2026-05-14)
+
+17 commits on top of the prior `ea6dd71` (the previous notes update).  All Phase 4 verification + polish + fixture regeneration + full-pipeline-test integration.  Branch went from `c15923f` (24 commits ahead of main) to `be593db` (38 commits ahead).
+
+### A. Polish pass (post-implementation, pre-verification)
+
+- **`1641c76`** — `extract_survivor_manifest.py` hardening.  Two changes: (1) remap stale absolute paths.  `rep_canonical_pdb` (CSV), `ground_truth` and `effector_template_cif` (plan.json) carry absolute paths stamped at fixture-generation time.  When the fixture is built on host A (Mac at `/Users/...`) and consumed on host B (HPC at `/hpc-home/...`), those paths don't resolve.  Two new helpers: `_remap_canonical_pdb` (finds `/runs/<seq>/` segment, joins tail onto discovered workdir) and `_remap_repo_path` (finds `/tests/`-or-`/bin/`-etc. segment, joins against runtime repo root deduced from script location).  (2) Empty-manifest guard.  Previously the script exited 0 even when every survivor was skipped, letting Nextflow fan out the orthogonal cascade over an empty channel (which it treated as successful no-op).  Now exits 2 with stderr message.
+
+- **`e3c2752`** — three polish items in one commit.  (1) ERR trap on `tests/run_tests.sh` that prints failing command + line + rc before the shell exits — defends against the general "function's last command is a short-circuiting compound returning non-zero under `set -e`" pattern, not just the c15923f-specific bug.  (2) F821 typing fix in `bin/boltz2_negative_steering.py` — 7 uses of `Optional` in string-typed annotations without `Optional` being imported.  Trivial fix (add to `from typing import` line); `ruff check --select F821` now clean.  (3) `NEGSTEER_CROSS_SEQUENCE` cache-busting via passing the entire `bin/` directory as a `path bin_dir, name: 'bin'` input.  Process invokes `python bin/cross_summary_v2.py …` so Python's sibling-import resolution finds every dependency; Nextflow content-hashes the whole `bin/` tree, busting cache on any indirect-import edit.  Closes the verification queue's "indirect-import cache-busting gap".
+
+### B. Orthogonal cascade enhancements
+
+- **`f5f9167`** → **`373e164`** → **`0bf94f6`**: combined-cohort plot ranking iteration.  First attempt added a Boltz-2-confidence tie-breaker; reverted at user request after misreading; restored after user clarified the original intent.  Final state: `_sort_key = (cross_tier_order, fails_any_boltz_conf, -composite)` — tier first, rows that pass every thresholded Boltz-2 confidence metric next, then descending composite within each group.  Missing values count as fails for ranking purposes.  Helper `_boltz_conf_thresholded_columns()` derives the threshold list from `COMBINED_SUMMARY_GROUPS` at call time (single source of truth).  Legends side-by-side instead of stacked (`ncol=2` each, `bbox_to_anchor` at `(0.0, -0.04)` and `(1.0, -0.04)`).  Also (in `0bf94f6`): `ORTHOG_PLOTS` wired into `tests/orthogonal_metrics/test_orthogonal_metrics.nf` so plots land in `plots/` matching the pattern of every other module test.  The standalone `run_test_orthogonal_metrics_plot.slurm.sh` still exists for plot-only iteration; publishes to `plots_iter/`.
+
+- **`20f9ed0`** — `params.orthogonal_tier_filter` introduced.  Configurable choice; default `'all'` runs AF3 + biophysical + Rosetta on every steered design (including tier-none failed designs — useful diagnostic since orthogonal metrics can explain WHY a design failed even when its negsteer tier is none).  `'abc'` restricts to cross_tier in (A, B, C).  Plumbed through `extract_survivor_manifest.py` (new `--tier-filter` CLI flag, with skip-counter increment when restricted) and `modules/negsteer_manifest.nf`.  **Also added `scripts/refresh_orthog_fixture.sh`** — one-shot rsync that mirrors the negsteer test outputs (`tests/negative_steering/receptor_resurfacing_results/.../runs/`) into the orthogonal_metrics fixture (`tests/orthogonal_metrics/data/negsteer_run/runs/`).  Errors loudly if negsteer outputs are missing; idempotent (`rsync -a --delete`).  Used to expand the orthogonal_metrics test cohort from the previously-staged 2-survivor mini-fixture to the full 10-row (8 designs + 2 controls) negsteer output.
+
+### C. Test infrastructure fixes
+
+- **`06c0157`** — `tests/haddock/test_haddock.nf` overrides `params.haddock_min_cluster_size = 2` (production default 4 in `nextflow.config`).  HADDOCK itself ran cleanly through all 8 steps but `collect_haddock3_dock.py` rejected the run because the only cluster had 3 models, below the production threshold.  At `haddock_sampling = 100` (vs production 10000), clusters are naturally smaller.  Override is test-only.
+
+- **`ba95ede`** + **`fa14d3a`** — `tests/update_example_dataset.slurm.sh` and its impl `_update_example_dataset_impl.py`: two sbatch-specific bugs.  (1) `${BASH_SOURCE[0]}` resolves to `/var/spool/slurmd/job<id>/` under sbatch, not the real `tests/` dir.  Fix: try `${PWD}` first (set by `#SBATCH --chdir`), fall back to `BASH_SOURCE`.  (2) Path-doubling: when CWD is already `tests/` and the user passes `tests/<module>/...` (project-root-relative) as the value of `--updated-output-folder`, it resolves as `tests/tests/<module>/...`.  Impl now auto-strips a leading `tests/` segment from the as-given path when that path doesn't exist; emits stderr NOTE so the user knows their command was ambiguous.  Both fixes preserve direct-shell-invocation behaviour on Mac.
+
+### D. Fixture regeneration
+
+- **`e5f3be0`** — all 6 module fixtures regenerated against `phase4-impl` head (post-1641c76).  657 files updated.  By module:
+  - **negative_steering**: 627 files.  Driven by CL-3 majority-rule reversion gating (per-design, not per-seed) and the prior `n_pass / outcome` schema rename.  Touches every design's per-seed outputs.
+  - **rfdiffusion**: 9 files.  RFD container update (`complex_beta` checkpoint) produces structurally different designs; metrics + plots all shifted.
+  - **proteinmpnn**: 9 files.  Small `design_region_score` shifts (likely ProteinMPNN minor non-determinism); plot redraws follow.
+  - **rosetta_filtering**: 5 files.  Blesses the previous `design[3].dG_separated` 33→57 shift.  **Cause not isolated** — flagged in the verification queue.
+  - **orthogonal_metrics**: 6 files.  `cross_sequence_summary_with_interface_metrics.csv` and `survivor_manifest.csv` now 10 rows (was 2) after the test fixture was refreshed from negsteer outputs and `orthogonal_tier_filter='all'` (default) let every steered design through.
+  - **haddock**: NEW fixture (first time HADDOCK has one).  Manifest intentionally minimal (Nextflow run-artefacts only — `dag.html`, `pipeline_report.html`, `timeline.html`, `trace.txt`).  Scientific outputs (docked PDBs, CAPRI scores) are placeholders pending the HADDOCK restructure.
+
+### E. Full pipeline test integration
+
+- **`279f078`** — `tests/run_tests.sh` now supports `full_test_run` as a module name.  Special-cased in `submit_one()` because the launcher lives at the repo root (`run_pipeline.slurm.sh`) and takes a params file argument (`tests/full_test_run/params_full_test.yml`), not the per-module test wrapper pattern.  `--no-clean` preserves Nextflow state (`work/`, `.nextflow*`) so a follow-up `--resume` can continue interrupted runs.  The expensive `results/` tree is NOT touched by clean either way.  `--with-plots` is a no-op for `full_test_run` (the main pipeline runs every plot process inline).
+
+- **`8e21c7b`** — `tests/full_test_run/params_full_test.yml`: bumped `haddock_sampling: 1 → 100`.  Validator (`bin/validate_params.py`) runs unconditionally regardless of mode and rejects values below 100; mode 2 (pre-docked PDB) skips HADDOCK so the actual value is unused.  Placeholder.  Also added a `ParamSpec` for `orthogonal_tier_filter` (the new param introduced in `20f9ed0`).
+
+- **`be593db`** — `tests/full_test_run/params_full_test.yml`: `pdb_file` corrected to `af3_pikp1_native_avrpikf_complex.pdb` (the actual filename on disk).  The previous reference (`pikp1_avrpikf_complex.pdb`) didn't exist on either Mac or HPC.
+
+### Verification at end of session
+
+- **272 / 272 hpc-marked characterization tests passing.**  386 local_unit tests deselected by `-m hpc` (run those Mac-side for a quick green).  26 expected skips (long-standing, documented in §"Known expected skips in pytest").
+- **All 6 per-module test runs reported `Success: true`** prior to fixture regeneration.
+- **Full pipeline test (`./tests/run_tests.sh --modules full_test_run`) running on HPC at end-of-session.**  ETA ~24h+ depending on GPU queue.  Submission required two iterations to clear validator + a stale `pdb_file` path; the running attempt should be checked first thing next session.
+
+### Caller migrations resolution status (post-Phase 4)
+
+| Item | Status |
+|---|---|
+| `cross_sequence_summary.py` → `DesignCohort.to_cross_summary_csv` | DONE in `babd5d4` |
+| ContigSpec parser consolidation (4 → 1) | DONE in `7385042` (3) + `babd5d4` (4th) |
+| Full threshold migration | DONE in `7385042` |
+| `find_contact_residues_heavy` consolidation | RESOLVED via icode bug fix (`7385042`); two impls now produce identical output |
+| `read_ca_atoms` consolidation | INTENTIONALLY NOT consolidated; cross-reference docstrings |
+| `get_pdb_sequence` | DONE — was dead code; removed (`7385042`) |
+| `NegativeSteeringRun.from_workdir` deep form | DONE in `babd5d4` |
+| `cross_summary_v2.py` Nextflow rewiring | DONE in `babd5d4` |
+| `contig_utils.parse_block_segments` migration | DONE in `babd5d4` |
+| `ORTHOG_PLOTS` in `tests/orthogonal_metrics/test_orthogonal_metrics.nf` | DONE in `0bf94f6` |
+| `orthogonal_tier_filter` user-facing param | DONE in `20f9ed0` |
+| `extract_survivor_manifest.py` path remap + empty-guard | DONE in `1641c76` |
+| `tests/run_tests.sh` full_test_run support | DONE in `279f078` |
+
+Every caller migration originally listed as "deferred" is now resolved.
+
+### HPC sync state
+
+All commits pushed to `origin/phase4-impl` and synced to HPC via `./scripts/sync_to_hpc.sh`.  Full pipeline test submitted at end-of-session and running.
 
 ## Pre-Phase-4 baseline commit
 
