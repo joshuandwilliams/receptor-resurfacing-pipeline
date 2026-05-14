@@ -186,11 +186,12 @@ def _check_num_seeds_odd(v: Any) -> Optional[str]:
 
 # ── Param specs ──────────────────────────────────────────────────────
 #
-# Coverage: ~25 of ~64 params have meaningful specs.  Remaining params
-# get `any` with a TODO note — these are coverage gaps to close as the
-# threshold audit (Task 47 in design_audit.md) decides each value's
-# valid range.  An unspecced param does NOT block the pipeline; the
-# coverage report (--report) lists them so reviewers can prioritise.
+# Coverage: most pipeline params have meaningful specs.  A handful
+# remain marked `any` with a TODO note — these are coverage gaps to
+# close as the threshold audit (Task 47 in design_audit.md) decides
+# each value's valid range.  An unspecced param does NOT block the
+# pipeline; the coverage report (--report) lists them so reviewers
+# can prioritise.
 
 PARAM_SPECS: List[ParamSpec] = [
     # ── Identification ──────────────────────────────────────────────
@@ -322,6 +323,9 @@ PARAM_SPECS: List[ParamSpec] = [
     # ── HADDOCK ─────────────────────────────────────────────────────
     ParamSpec("haddock_sampling","int_range", {"min": 100, "max": 100000}),
     ParamSpec("haddock_seletop","int_range", {"min": 1, "max": 10000}),
+    ParamSpec("haddock_min_cluster_size","int_range", {"min": 2, "max": 100},
+              "min cluster population accepted by collect_haddock3_dock; "
+              "production default 4, test override 2"),
     ParamSpec("rfdiff_contact_cutoff","float_range", {"min": 0.0, "max": 30.0}),
 
     # ── Orthogonal cascade ──────────────────────────────────────────
@@ -333,7 +337,29 @@ PARAM_SPECS: List[ParamSpec] = [
               "which cross_tier values get the orthogonal cascade"),
 
     # ── Infrastructure ──────────────────────────────────────────────
+    # Container / model-store paths are non_empty_str — existence is
+    # checked by the workflow when the container is invoked, not here.
     ParamSpec("max_boltz2_parallel","int_range", {"min": 1, "max": 100}),
+    ParamSpec("max_af3_parallel","int_range", {"min": 1, "max": 100},
+              "maxForks cap for AF3_NOMSA_ON_SURVIVORS"),
+    ParamSpec("rfdiff_container",  "non_empty_str", {},
+              "Singularity image path for RFDiffusion + HADDOCK + MPNN"),
+    ParamSpec("rosetta_container", "non_empty_str", {},
+              "Singularity image path for Rosetta"),
+    ParamSpec("boltz2_container",  "non_empty_str", {},
+              "Singularity image path for Boltz2 negsteer"),
+    ParamSpec("colabfold_container","non_empty_str", {},
+              "Singularity image path for ColabFold"),
+    ParamSpec("af3_package_id",    "regex",
+              {"pattern": r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}"
+                          r"-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"},
+              "NBI source-package UUID for AlphaFold 3"),
+    ParamSpec("af3_model_dir",     "non_empty_str", {},
+              "directory containing af3.bin"),
+    ParamSpec("af3_db_v3",         "non_empty_str", {},
+              "AlphaFold 3 reference database root"),
+    ParamSpec("af2_data_dir",      "non_empty_str", {},
+              "AlphaFold 2 BFD + MGnify database root"),
 
     # ── Coverage gaps (specs TBD per threshold audit) ──────────────
     # Listed explicitly so the coverage report surfaces them, not just

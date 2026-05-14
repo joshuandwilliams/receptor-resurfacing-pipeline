@@ -245,12 +245,21 @@ def resolve_contigs(raw_contigs, pdb_path):
 
     Handles: bare chain letters, single-residue shorthands, bare de novo
     numbers, and remaps fixed-segment residues to match actual PDB numbering.
+
+    Delegates per-block parsing to :func:`parse_block_segments`, which is
+    a thin adapter over :class:`contig_spec.ContigSpec`.  The only
+    non-delegated branch is the bare-chain shortcut — it goes through a
+    direct PDB lookup so that a chain not present in the PDB surfaces a
+    visible WARNING (the ContigSpec/passthrough path would silently emit
+    the bare letter back instead).
     """
     blocks = raw_contigs.replace(",", " ").replace(":", " ").split()
     out_blocks = []
 
     for block in blocks:
-        # Bare chain letter (e.g. "B")
+        # Bare chain letter (e.g. "B") — direct PDB lookup so the
+        # missing-chain case surfaces a warning rather than passing
+        # through silently as a PassthroughSegment.
         if len(block) == 1 and block.isalpha():
             lo, hi = get_chain_residue_range(pdb_path, block)
             if lo is not None:
@@ -260,7 +269,6 @@ def resolve_contigs(raw_contigs, pdb_path):
                 out_blocks.append(block)
             continue
 
-        # Multi-segment block
         seg_descs, block_chain = parse_block_segments(block, pdb_path=pdb_path)
         seg_descs = remap_segments_to_pdb(seg_descs, block_chain, pdb_path)
         out_blocks.append(segments_to_string(seg_descs))
@@ -311,44 +319,46 @@ def parse_design_region(contigs, rec_chain):
     """
     Identify de novo (design) and fixed residue sets from the contig string.
     De novo residues are those in gaps between consecutive fixed ranges.
-    Returns (design_residues, fixed_residues) as sets.
+    Returns (design_residues, fixed_residues) as sets of native residue
+    numbers on the receptor chain.
+
+    Thin adapter around :class:`contig_spec.ContigSpec`: parses the
+    contig once, looks up the receptor chain (case-insensitive), and
+    derives the design region as the gaps between consecutive fixed
+    segments in native numbering.  Returns empty sets if the contig
+    can't be parsed or the receptor chain isn't present.
     """
-    blocks = contigs.split()
-    rec_block = None
-    for block in blocks:
-        # Match by checking whether any segment in this block starts with
-        # the receptor chain letter, rather than substring matching the
-        # whole block (which gives false positives for multi-letter chain
-        # IDs or chain letters that happen to appear elsewhere).
-        for seg in block.split("/"):
-            seg = seg.strip()
-            if seg and seg[0].upper() == rec_chain.upper():
-                rec_block = block
-                break
-        if rec_block is not None:
-            break
-    if rec_block is None:
+    import sys as _sys
+    from pathlib import Path as _Path
+    _sys.path.insert(0, str(_Path(__file__).resolve().parent))
+    from contig_spec import ContigSpec  # noqa: E402
+
+    try:
+        spec = ContigSpec.from_string(contigs)
+    except ValueError:
         return set(), set()
 
-    fixed_residues = set()
+    rec_upper = rec_chain.upper()
+    chain = next(
+        (c for c in spec.chains if c.chain_id.upper() == rec_upper),
+        None,
+    )
+    if chain is None:
+        return set(), set()
+
+    fixed_segments = chain.fixed_segments
+    if not fixed_segments:
+        return set(), set()
+
+    fixed_residues: set = set()
     fixed_ranges = []
+    for seg in fixed_segments:
+        fixed_residues.update(range(seg.start, seg.end + 1))
+        fixed_ranges.append((seg.start, seg.end))
 
-    for seg in rec_block.split("/"):
-        seg = seg.strip()
-        if not seg or seg == "0":
-            continue
-        if seg[0].isalpha() and seg[0].upper() == rec_chain.upper():
-            rest = seg[1:]
-            if "-" in rest:
-                parts = rest.split("-")
-                start, end = int(parts[0]), int(parts[1])
-            else:
-                start = end = int(rest)
-            fixed_ranges.append((start, end))
-            fixed_residues.update(range(start, end + 1))
-
-    design_residues = set()
-    for a, b in zip(sorted(fixed_ranges), sorted(fixed_ranges)[1:]):
+    design_residues: set = set()
+    sorted_ranges = sorted(fixed_ranges)
+    for a, b in zip(sorted_ranges, sorted_ranges[1:]):
         gap_start = a[1] + 1
         gap_end = b[0] - 1
         if gap_end >= gap_start:
