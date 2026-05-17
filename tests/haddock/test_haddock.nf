@@ -129,16 +129,6 @@ workflow {
         Channel.value(file("${projectDir}/bin/collect_haddock3_dock.py"))
     )
 
-    HADDOCK3_PLOTS(
-        HADDOCK3_DOCK.out.capri_scores,
-        HADDOCK3_DOCK.out.cluster_summary,
-        HADDOCK3_DOCK.out.run_dir,
-        HADDOCK3_PREPARE.out.restraints_summary,
-        params.haddock_contact_pairs,
-        params.haddock_effector_active_residues,
-        Channel.value(file("${projectDir}/bin/haddock3_plots.py"))
-    )
-
     HADDOCK_CLUSTER_METRICS(
         HADDOCK3_DOCK.out.haddock_report,
         HADDOCK3_DOCK.out.cluster_models,
@@ -154,6 +144,19 @@ workflow {
         HADDOCK3_DOCK.out.cluster_models,
         Channel.value(file("${projectDir}/bin/haddock_cluster_sc.py")),
         Channel.value(file("${projectDir}/bin"))
+    )
+
+    // PLOTS depends on cluster_metrics + cluster_sc, so it runs after them.
+    HADDOCK3_PLOTS(
+        HADDOCK3_DOCK.out.capri_scores,
+        HADDOCK3_DOCK.out.cluster_summary,
+        HADDOCK3_DOCK.out.run_dir,
+        HADDOCK3_PREPARE.out.restraints_summary,
+        HADDOCK_CLUSTER_METRICS.out.cluster_metrics,
+        HADDOCK_CLUSTER_SC.out.cluster_sc,
+        params.haddock_contact_pairs,
+        params.haddock_effector_active_residues,
+        Channel.value(file("${projectDir}/bin/haddock3_plots.py"))
     )
 
     SELECT_HADDOCK_CLUSTER(

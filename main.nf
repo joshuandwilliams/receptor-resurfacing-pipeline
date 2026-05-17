@@ -412,16 +412,6 @@ workflow {
             Channel.value(file("${projectDir}/bin/collect_haddock3_dock.py"))
         )
 
-        HADDOCK3_PLOTS(
-            HADDOCK3_DOCK.out.capri_scores,
-            HADDOCK3_DOCK.out.cluster_summary,
-            HADDOCK3_DOCK.out.run_dir,
-            HADDOCK3_PREPARE.out.restraints_summary,
-            params.haddock_contact_pairs,
-            params.haddock_effector_active_residues,
-            Channel.value(file("${projectDir}/bin/haddock3_plots.py"))
-        )
-
         // ── Per-cluster metrics (BSA, COM, AIR/pair satisfaction,
         //    clash counts) — runs in boltz2_container.
         HADDOCK_CLUSTER_METRICS(
@@ -441,6 +431,21 @@ workflow {
             HADDOCK3_DOCK.out.cluster_models,
             Channel.value(file("${projectDir}/bin/haddock_cluster_sc.py")),
             Channel.value(file("${projectDir}/bin"))
+        )
+
+        // HADDOCK3_PLOTS depends on cluster_metrics + cluster_sc for the
+        // overview / ranking / pair-satisfaction / clash-breakdown plots,
+        // so it lives AFTER the metric processes.
+        HADDOCK3_PLOTS(
+            HADDOCK3_DOCK.out.capri_scores,
+            HADDOCK3_DOCK.out.cluster_summary,
+            HADDOCK3_DOCK.out.run_dir,
+            HADDOCK3_PREPARE.out.restraints_summary,
+            HADDOCK_CLUSTER_METRICS.out.cluster_metrics,
+            HADDOCK_CLUSTER_SC.out.cluster_sc,
+            params.haddock_contact_pairs,
+            params.haddock_effector_active_residues,
+            Channel.value(file("${projectDir}/bin/haddock3_plots.py"))
         )
 
         // ── Stop-and-resume gate (per Session 7 A134) ───────────────────

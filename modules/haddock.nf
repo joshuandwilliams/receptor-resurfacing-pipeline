@@ -346,6 +346,8 @@ process HADDOCK3_PLOTS {
     path cluster_summary
     path run_dir
     path restraints_summary
+    path cluster_metrics
+    path cluster_sc
     val  contact_pairs
     val  effector_active_residues
     path plots_script
@@ -368,6 +370,8 @@ process HADDOCK3_PLOTS {
             --cluster-summary ${cluster_summary} \\
             --run-dir ${run_dir} \\
             --restraints-summary ${restraints_summary} \\
+            --cluster-metrics ${cluster_metrics} \\
+            --cluster-sc ${cluster_sc} \\
             --min-cluster-size ${params.haddock_min_cluster_size} \\
             ${pairs_arg} \\
             ${eff_arg}
