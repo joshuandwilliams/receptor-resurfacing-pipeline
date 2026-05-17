@@ -211,7 +211,6 @@ process HADDOCK_CLUSTER_METRICS {
 
     output:
     path "cluster_metrics.json", emit: cluster_metrics
-    path "best_cluster*.pdb",    emit: cluster_models_pass
 
     script:
     """
