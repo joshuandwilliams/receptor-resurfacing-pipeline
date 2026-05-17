@@ -72,8 +72,11 @@ def _run_rosetta_sc(
 ) -> Tuple[Optional[float], List[str]]:
     with tempfile.TemporaryDirectory(prefix=f"rosetta_c{cluster_id}_") as tmp:
         out_csv = Path(tmp) / "out.csv"
+        # sys.executable (not 'python3') so the subprocess uses the same
+        # interpreter the parent is running under — guarantees consistent
+        # site-packages across container environments.
         cmd = [
-            "python3", str(rosetta_script),
+            sys.executable, str(rosetta_script),
             "--seq-name", f"cluster_{cluster_id}",
             "--canonical-pdb", str(pdb),
             "--receptor-chain", receptor_chain,

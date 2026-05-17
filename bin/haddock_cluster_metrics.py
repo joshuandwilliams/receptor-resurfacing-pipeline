@@ -104,8 +104,12 @@ def _run_biophys(
     """Call run_biophysical_metrics.py; return (bsa, hbonds, failures)."""
     with tempfile.TemporaryDirectory(prefix=f"biophys_c{cluster_id}_") as tmp:
         out_csv = Path(tmp) / "out.csv"
+        # Use sys.executable, NOT 'python3' — some containers ship numpy
+        # under 'python' but not 'python3' (boltz2_negsteer.img is one).
+        # Matching the parent's interpreter guarantees the subprocess
+        # has access to the same site-packages.
         cmd = [
-            "python3", str(biophys_script),
+            sys.executable, str(biophys_script),
             "--seq-name", f"cluster_{cluster_id}",
             "--canonical-pdb", str(pdb),
             "--ground-truth", str(pdb),  # unused per the script's comment
