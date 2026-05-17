@@ -117,6 +117,7 @@ def save_fallback_plots(message):
                   "haddock_cluster_overview.png",
                   "haddock_cluster_ranking.png",
                   "haddock_pair_satisfaction.png",
+                  "haddock_hotspot_placement.png",
                   "haddock_clash_breakdown.png"]:
         make_empty_plot(message, name)
 
@@ -160,20 +161,11 @@ def plot_score_vs_bsa(scores, bsas, best_score, best_bsa,
                    edgecolors="white", linewidths=0.5,
                    label="Top-N per cluster (seletopclusts output)", zorder=3)
 
-    # Star: lowest-score model overall.  When best_cluster_id is given,
-    # outline the star in the cluster's colour so the link is visible.
-    star_edge = "black"
-    if cluster_ids is not None and best_cluster_id is not None and best_cluster_id != "-":
-        # Recompute palette to find the star's edge colour.
-        distinct = sorted({c for c in cluster_ids if c != "-"},
-                          key=lambda x: (str(x).isdigit() and int(x), str(x)))
-        cmap = plt.get_cmap("tab10")
-        for i, cid in enumerate(distinct):
-            if cid == best_cluster_id:
-                star_edge = cmap(i % 10)
-                break
+    # Star: lowest-score model overall.  Yellow fill + black outline
+    # (the cluster-coloured outline tried earlier looked muddy against
+    # the dot palette).
     ax.scatter(best_bsa, best_score, color="#FFD700", s=180, zorder=5,
-               edgecolors=star_edge, linewidths=1.5,
+               edgecolors="black", linewidths=1.2,
                label=f"Best model (BSA={best_bsa:.0f} Å²)", marker="*")
 
     saved_xlim = ax.get_xlim()
@@ -261,20 +253,34 @@ def plot_cluster_sizes(clusters, best_cluster, best_model_cluster):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
-# Metric columns shown in the cluster overview + their colour-mapping
-# rules.  Each tuple: (column_header, json_key, colourmap_name,
-# higher_is_better).  When higher_is_better is False the colourmap is
-# inverted so red = bad in both directions.
+# Metric columns shown in the cluster overview, grouped by colourmap
+# so visually-similar columns sit adjacent.  Each tuple:
+# (column_header, json_key, colourmap_name).  Cell shading is
+# magnitude-only (deeper = larger value); the column header tells the
+# reader whether high or low is the desirable direction.
+#
+# Group meanings:
+#   Blues   — interface quality / volume metrics (higher = better)
+#   Greens  — restraint-satisfaction fractions   (higher = better)
+#   Purples — chain-separation distance          (lower  = better)
+#   Oranges — design-region clashes (tolerated)  (informational)
+#   Reds    — out-of-design-region clashes       (lower  = better)
+#   Greys   — cluster size                       (informational)
 _OVERVIEW_COLUMNS = [
-    ("BSA (Å²)",         "bsa",                            "Blues",   True),
-    ("Sc",               "sc",                             "Blues",   True),
-    ("Pair contacts",    "pair_contact_fraction",          "Greens",  True),
-    ("AIR sat.",         "air_sat_frac",                   "Greens",  True),
-    ("COM (Å)",          "com_distance",                   "Purples", False),
-    ("H-bonds",          "interface_hbonds",               "Blues",   True),
-    ("Clashes in DR",    "clashes_in_design_region",       "Oranges", False),
-    ("Clashes out DR",   "clashes_outside_design_region",  "Reds",    False),
-    ("Members",          "size",                           "Greys",   True),
+    # Blues — volume / quality
+    ("BSA (Å²)",         "bsa",                            "Blues"),
+    ("Sc",               "sc",                             "Blues"),
+    ("H-bonds",          "interface_hbonds",               "Blues"),
+    # Greens — restraint satisfaction
+    ("Pair contacts",    "pair_contact_fraction",          "Greens"),
+    ("AIR sat.",         "air_sat_frac",                   "Greens"),
+    # Purples — separation
+    ("COM (Å)",          "com_distance",                   "Purples"),
+    # Oranges/Reds — clashes
+    ("Clashes in DR",    "clashes_in_design_region",       "Oranges"),
+    ("Clashes out DR",   "clashes_outside_design_region",  "Reds"),
+    # Greys — informational
+    ("Members",          "size",                           "Greys"),
 ]
 
 
@@ -319,7 +325,7 @@ def plot_cluster_overview(metrics_by_cid, sc_by_cid, sorted_cids,
 
     # Per-column value array.
     col_values = []
-    for _, key, _, _ in _OVERVIEW_COLUMNS:
+    for _, key, _ in _OVERVIEW_COLUMNS:
         col_values.append([r.get(key) for r in rows])
 
     n_rows = len(rows)
@@ -332,7 +338,7 @@ def plot_cluster_overview(metrics_by_cid, sc_by_cid, sorted_cids,
     ax.set_xlim(-0.5, n_cols - 0.5)
     ax.set_ylim(n_rows - 0.5, -0.5)
     ax.set_xticks(range(n_cols))
-    ax.set_xticklabels([h for (h, _, _, _) in _OVERVIEW_COLUMNS],
+    ax.set_xticklabels([h for (h, _, _) in _OVERVIEW_COLUMNS],
                        rotation=30, ha="right", fontsize=9)
     row_labels = []
     for cid in sorted_cids:
@@ -341,7 +347,7 @@ def plot_cluster_overview(metrics_by_cid, sc_by_cid, sorted_cids,
     ax.set_yticks(range(n_rows))
     ax.set_yticklabels(row_labels, fontsize=10)
 
-    for j, (header, key, cmap_name, _higher_better) in enumerate(_OVERVIEW_COLUMNS):
+    for j, (header, key, cmap_name) in enumerate(_OVERVIEW_COLUMNS):
         # Shade by magnitude only — deeper colour = more of the metric.
         # The column header / colourmap choice tells the reader whether
         # "more of this" is good (Blues/Greens) or bad (Oranges/Reds).
@@ -449,25 +455,41 @@ def plot_cluster_ranking(metrics_by_cid, sc_by_cid, sorted_cids, selected_cid,
         edge = "#222222" if is_selected else "white"
         lw = 1.5 if is_selected else 0.6
         adjusted_size = sz * 1.8 if is_selected else sz
+        # No per-cluster legend entry — cluster IDs are labelled directly
+        # on the plot via the adjacent text annotation; including them
+        # in the legend would duplicate the ★ for the selected cluster.
         ax.scatter(x, y, s=adjusted_size, c=[color], marker=marker,
-                   edgecolors=edge, linewidths=lw, zorder=5,
-                   label=f"Cluster {cid}" + (" ★" if is_selected else ""))
-        ax.text(x, y - 0.04, f"  {cid}", fontsize=9, ha="left", va="top",
-                color="#333333")
+                   edgecolors=edge, linewidths=lw, zorder=5)
+        ax.text(x, y - 0.04, f"  {cid}" + (" ★" if is_selected else ""),
+                fontsize=10, ha="left", va="top",
+                color="#222222",
+                fontweight="bold" if is_selected else "normal")
 
     ax.set_xlabel("Buried Surface Area (Å²)", fontsize=12)
     ax.set_ylabel("Pair contact fraction (user pins satisfied)", fontsize=12)
     ax.set_ylim(-0.05, 1.10)
     ax.axhline(1.0, color="#888888", linestyle=":", linewidth=1.0, alpha=0.6,
                zorder=1)
-    ax.axvline(BSA_WARN_CUTOFF, color=COLOUR_WARN, linestyle=":",
-               linewidth=1.0, alpha=0.7, zorder=1)
+    ax.axvline(BSA_WARN_CUTOFF, color=COLOUR_WARN, linestyle="--",
+               linewidth=1.2, alpha=0.85, zorder=1,
+               label=f"BSA = {BSA_WARN_CUTOFF:.0f} Å² (weak-interface threshold)")
+    n_clusters = len(sorted_cids)
+    qualifying_note = (
+        f"1 qualifying cluster — the ★ is the auto-pick (and the only "
+        f"option).  Add more HADDOCK sampling for cluster variety."
+        if n_clusters == 1 else
+        f"{n_clusters} qualifying clusters; ★ = auto-pick "
+        f"((−pair_contact_fraction, −BSA) lex sort)"
+    )
     ax.set_title(
-        "Cluster ranking — top-right = best on the auto-pick "
-        "(pair_contact_fraction first, BSA tie-breaker).  "
-        "Dot size = cluster members; colour = Sc.",
+        f"Cluster ranking — one dot per qualifying cluster.  "
+        f"Top-right = best.  Dot size = cluster members; colour = Sc.\n"
+        f"{qualifying_note}",
         fontsize=9, pad=10,
     )
+    # Threshold-line legend only (outside the plot area).
+    ax.legend(loc="upper left", bbox_to_anchor=(1.18, 1.0),
+              fontsize=8, framealpha=0.9, borderaxespad=0.0)
     # Sc colourbar.
     if valid_sc:
         sm = plt.cm.ScalarMappable(
@@ -618,7 +640,10 @@ def plot_pair_satisfaction(contact_pairs, pair_distance, pdb_index,
         Line2D([0], [0], marker="o", color="w", markerfacecolor="#DC2626",
                markeredgecolor="black", markersize=9, label="Outside window"),
     ]
-    ax.legend(handles=legend_elems, loc="lower right", fontsize=9, framealpha=0.9)
+    # Legend OUTSIDE the plot area so it doesn't overlap pair markers.
+    ax.legend(handles=legend_elems, fontsize=9, framealpha=0.9,
+              loc="upper left", bbox_to_anchor=(1.01, 1.0),
+              borderaxespad=0.0)
 
     ax.set_title(
         f"Pair contact satisfaction — green band = restraint window "
@@ -634,7 +659,180 @@ def plot_pair_satisfaction(contact_pairs, pair_distance, pdb_index,
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Plot 6: Clash bookkeeping breakdown
+# Plot 6: Target hotspot placement
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+def _hotspot_min_distance(pdb_path, hotspot_resnum, eff_chain, rec_chain):
+    """Min CA distance from the effector hotspot residue to any receptor
+    CA on the same PDB.  Returns None if either chain has no CAs or the
+    hotspot residue isn't present.
+    """
+    import gzip as _gzip
+    import numpy as _np
+    rec_cas = []
+    hotspot_ca = None
+    opener = _gzip.open if str(pdb_path).endswith(".gz") else open
+    with opener(pdb_path, "rt") as fh:
+        for line in fh:
+            if not line.startswith("ATOM"):
+                continue
+            if line[12:16].strip() != "CA":
+                continue
+            ch = line[21]
+            try:
+                rn = int(line[22:26].strip())
+                xyz = (float(line[30:38]), float(line[38:46]),
+                       float(line[46:54]))
+            except ValueError:
+                continue
+            if ch == rec_chain:
+                rec_cas.append(xyz)
+            elif ch == eff_chain and rn == hotspot_resnum:
+                hotspot_ca = _np.array(xyz)
+    if hotspot_ca is None or not rec_cas:
+        return None
+    rec_arr = _np.array(rec_cas)
+    diffs = rec_arr - hotspot_ca
+    return float(_np.min(_np.sqrt(_np.einsum("ij,ij->i", diffs, diffs))))
+
+
+def plot_hotspot_placement(effector_active_residues, pdb_index, clusters,
+                           sorted_cids, selected_cid, rec_chain, eff_chain,
+                           out_path="haddock_hotspot_placement.png"):
+    """Per cluster, per effector hotspot residue: scatter the min CA-CA
+    distance from the hotspot to any receptor CA on that cluster's best
+    model.  Clusters share the tab10 colour palette used in score-vs-BSA.
+
+    Three threshold zones for context:
+      < 5 Å    "contacting"   light green   (within heavy-atom contact range)
+      5-10 Å   "in window"    light orange  (within HADDOCK AIR restraint)
+      > 10 Å   "missed"       light red     (outside the AIR — failure)
+    """
+    if not effector_active_residues:
+        make_empty_plot(
+            "No effector active residues specified.\n"
+            "(pass --effector-active-residues to enable this plot)",
+            out_path,
+        )
+        print(f"Saved {out_path} (no effector active residues)")
+        return
+    if not sorted_cids:
+        make_empty_plot("No qualifying clusters", out_path)
+        print(f"Saved {out_path} (no clusters)")
+        return
+
+    hotspot_list = sorted(set(effector_active_residues))
+    n_hot = len(hotspot_list)
+    n_clusters = len(sorted_cids)
+
+    # Distance lookup: (cid, hotspot_resnum) -> Å or None.
+    distances = {}
+    for cid in sorted_cids:
+        members = clusters.get(cid, [])
+        if not members:
+            continue
+        scored = [(m, s) for (m, s) in members if s is not None]
+        best_member = (min(scored, key=lambda x: x[1])[0]
+                       if scored else members[0][0])
+        stem = model_stem(best_member)
+        pdb = pdb_index.get(stem)
+        if pdb is None:
+            continue
+        for hot in hotspot_list:
+            distances[(cid, hot)] = _hotspot_min_distance(
+                pdb, hot, eff_chain, rec_chain,
+            )
+
+    # Layout: one row per hotspot, x = distance.  Clusters get tab10
+    # colours so they match the score-vs-BSA plot.
+    distinct_cids = sorted(sorted_cids,
+                           key=lambda x: (str(x).isdigit() and int(x), str(x)))
+    cmap = plt.get_cmap("tab10")
+    colour_by_cid = {cid: cmap(i % 10) for i, cid in enumerate(distinct_cids)}
+
+    # Auto-scale x but ensure we always cover 0 to at least 15 Å.
+    all_d = [d for d in distances.values() if d is not None]
+    x_max = max(all_d + [15.0]) + 2.0 if all_d else 20.0
+
+    fig_w = max(8, x_max * 0.35 + 3)
+    fig_h = max(3, n_hot * 0.45 + 1.4)
+    fig, ax = plt.subplots(figsize=(fig_w, fig_h))
+
+    # Threshold bands.
+    ax.axvspan(0, 5, color="#A7F3D0", alpha=0.45, zorder=1,
+               label="< 5 Å (contacting)")
+    ax.axvspan(5, 10, color="#FDE68A", alpha=0.45, zorder=1,
+               label="5–10 Å (within AIR window)")
+    ax.axvspan(10, x_max, color="#FECACA", alpha=0.45, zorder=1,
+               label="> 10 Å (outside AIR)")
+
+    # Cluster-by-row jitter so multiple clusters at similar distance don't
+    # stack into a single blob — assign each cluster a small vertical offset.
+    if n_clusters > 1:
+        cluster_y_offsets = [-0.20 + 0.40 * (i / (n_clusters - 1))
+                             for i in range(n_clusters)]
+    else:
+        cluster_y_offsets = [0.0]
+    offset_by_cid = dict(zip(sorted_cids, cluster_y_offsets))
+
+    for i, hot in enumerate(hotspot_list):
+        for cid in sorted_cids:
+            d = distances.get((cid, hot))
+            if d is None:
+                continue
+            is_selected = (cid == selected_cid)
+            marker = "*" if is_selected else "o"
+            size = 150 if is_selected else 75
+            edge = "black"
+            ax.scatter(d, i + offset_by_cid[cid], s=size,
+                       c=[colour_by_cid[cid]], marker=marker,
+                       edgecolors=edge, linewidths=0.8 if not is_selected else 1.2,
+                       zorder=5)
+
+    ax.set_xlabel("Min CA–CA distance from hotspot to nearest receptor "
+                  "residue (Å)", fontsize=11)
+    ax.set_yticks(range(n_hot))
+    ax.set_yticklabels([f"{eff_chain}{r}" for r in hotspot_list], fontsize=10)
+    ax.set_ylim(n_hot - 0.5, -0.7)
+    ax.set_xlim(0, x_max)
+
+    # Two legends: thresholds (left) + clusters (right) — both outside.
+    from matplotlib.lines import Line2D
+    cluster_handles = [
+        Line2D([0], [0], marker="*" if cid == selected_cid else "o",
+               color="w", markerfacecolor=colour_by_cid[cid],
+               markeredgecolor="black", markersize=12 if cid == selected_cid else 8,
+               label=f"Cluster {cid}" + (" ★" if cid == selected_cid else ""))
+        for cid in sorted_cids
+    ]
+    threshold_legend = ax.legend(loc="upper left",
+                                 bbox_to_anchor=(1.01, 1.0),
+                                 fontsize=8, framealpha=0.9,
+                                 borderaxespad=0.0, title="Distance zones",
+                                 title_fontsize=9)
+    ax.add_artist(threshold_legend)
+    ax.legend(handles=cluster_handles, loc="upper left",
+              bbox_to_anchor=(1.01, 0.55),
+              fontsize=8, framealpha=0.9, borderaxespad=0.0,
+              title="Cluster", title_fontsize=9)
+
+    ax.set_title(
+        f"Target hotspot placement — per cluster, min distance from each "
+        f"effector active residue (chain {eff_chain}) to the receptor.  "
+        f"Hotspots in the red zone weren't reached by HADDOCK.",
+        fontsize=9, pad=10,
+    )
+    ax.grid(True, axis="x", linestyle=":", alpha=0.3, zorder=0)
+
+    plt.tight_layout()
+    plt.savefig(out_path, dpi=150, bbox_inches="tight")
+    plt.close()
+    print(f"Saved {out_path}")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Plot 7: Clash bookkeeping breakdown
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
@@ -1325,6 +1523,29 @@ def main():
     if contact_pairs:
         print(f"Contact pairs parsed: {len(contact_pairs)}")
 
+    # Parse effector active residues (used by hotspot plot AND heatmap
+    # active-residue bar).  Single source of truth.
+    eff_active = []
+    if args.effector_active_residues:
+        for token in args.effector_active_residues.split(","):
+            token = token.strip()
+            if not token:
+                continue
+            if "-" in token:
+                lo, hi = token.split("-", 1)
+                try:
+                    eff_active.extend(range(int(lo), int(hi) + 1))
+                except ValueError:
+                    pass
+            else:
+                try:
+                    eff_active.append(int(token))
+                except ValueError:
+                    pass
+    eff_active = sorted(set(eff_active))
+    if eff_active:
+        print(f"Effector active residues parsed: {len(eff_active)}")
+
     # ── Plot 1: Score vs BSA ─────────────────────────────────────────────
     if bsas is not None:
         plot_score_vs_bsa(scores, bsas, best_score, bsas[0],
@@ -1444,7 +1665,25 @@ def main():
             "No qualifying clusters", "haddock_pair_satisfaction.png",
         )
 
-    # ── Plot 6: Clash breakdown ─────────────────────────────────────────
+    # ── Plot 6: Target hotspot placement ────────────────────────────────
+    if eff_active and overview_sorted_cids:
+        if 'pdb_index' not in locals() or not pdb_index:
+            pdb_index = collect_pdb_index(complex_dir=args.complex_dir,
+                                          run_dir=args.run_dir)
+        plot_hotspot_placement(eff_active, pdb_index, clusters,
+                               overview_sorted_cids, selected_cid,
+                               args.receptor_chain, args.effector_chain)
+    elif not eff_active:
+        make_empty_plot(
+            "No effector active residues specified",
+            "haddock_hotspot_placement.png",
+        )
+    else:
+        make_empty_plot(
+            "No qualifying clusters", "haddock_hotspot_placement.png",
+        )
+
+    # ── Plot 7: Clash breakdown ─────────────────────────────────────────
     if metrics_by_cid:
         plot_clash_breakdown(metrics_by_cid, overview_sorted_cids, selected_cid)
     else:
@@ -1495,31 +1734,11 @@ def main():
     if best_model_name is None:
         best_model_name = data[0].get("model", data[0].get("structure", data[0].get("pdb")))
 
-    # Parse effector active residues for annotation bar
-    eff_active = []
-    if args.effector_active_residues:
-        for token in args.effector_active_residues.split(","):
-            token = token.strip()
-            if not token:
-                continue
-            if "-" in token:
-                parts = token.split("-", 1)
-                try:
-                    eff_active.extend(range(int(parts[0]), int(parts[1]) + 1))
-                except ValueError:
-                    pass
-            else:
-                try:
-                    eff_active.append(int(token))
-                except ValueError:
-                    pass
-    if eff_active:
-        print(f"Effector active residues for annotation: {len(eff_active)}")
-
+    # (eff_active parsed earlier in main() — see above.)
     plot_interface_heatmap(clusters, pdb_index, args.receptor_chain, args.effector_chain,
                            args.contact_cutoff, fixed_residues=fixed_residues,
                            best_model_name=best_model_name,
-                           effector_active_residues=sorted(set(eff_active)) if eff_active else None,
+                           effector_active_residues=eff_active if eff_active else None,
                            contact_pairs=contact_pairs)
 
 

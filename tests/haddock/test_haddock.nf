@@ -42,15 +42,15 @@ params.effector_chain    = "B"
 // design region (residues 33-49 + 69-78, 27 total) for clash bookkeeping.
 params.contigs           = "A1-32/10-30/A50-68/10-10 B"
 
-// HADDOCK sampling reduced for test runs; production default 10000.
-params.haddock_sampling  = 100
-params.haddock_seletop   = 20
-// Reduced from production default 4: with sampling=100 the clusters
-// produced by clustfcc are naturally smaller (1 cluster of ~3 models is
-// typical at this scale).  The test exists to exercise the pipeline
-// plumbing end-to-end; 2 is the floor that still demands real clustering
-// signal.  Production keeps haddock_min_cluster_size = 4 via nextflow.config.
-params.haddock_min_cluster_size = 2
+// Production-length sampling — the short (sampling=100) test only ever
+// produced one qualifying cluster, hiding multi-cluster behaviour.
+// At 10000 / 400 / min 4 we typically see 3-6 qualifying clusters
+// with distinct poses, which exercises the auto-pick logic and the
+// per-cluster plots properly.  Estimated runtime: ~30–60 min on
+// 64 CPUs at the jic-medium queue's typical wait time.
+params.haddock_sampling  = 10000
+params.haddock_seletop   = 400
+params.haddock_min_cluster_size = 4
 
 // Session 7 restraint params (post-commit-3 amendment: effector-only AIRs
 // are now valid, and the receptor design region comes from the contig).
