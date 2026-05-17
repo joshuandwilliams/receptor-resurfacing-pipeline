@@ -448,21 +448,27 @@ def plot_cluster_ranking(metrics_by_cid, sc_by_cid, sorted_cids, selected_cid,
     else:
         vmin, vmax, sc_cmap = 0.0, 1.0, plt.get_cmap("viridis")
 
-    for cid, x, y, sz, sc in zip(labels, xs, ys, sizes, scs):
+    # Draw biggest markers first so smaller ones land ON TOP and stay
+    # visible.  Selected cluster is drawn LAST (regardless of size) so
+    # the star sits on top of everything.
+    draw_order = sorted(zip(labels, xs, ys, sizes, scs),
+                        key=lambda t: (t[0] == selected_cid, -t[3]))
+    for cid, x, y, sz, sc in draw_order:
         is_selected = (cid == selected_cid)
         color = sc_cmap((sc - vmin) / (vmax - vmin)) if sc == sc else "#BBBBBB"
         marker = "*" if is_selected else "o"
         edge = "#222222" if is_selected else "white"
         lw = 1.5 if is_selected else 0.6
         adjusted_size = sz * 1.8 if is_selected else sz
-        # No per-cluster legend entry — cluster IDs are labelled directly
-        # on the plot via the adjacent text annotation; including them
-        # in the legend would duplicate the ★ for the selected cluster.
         ax.scatter(x, y, s=adjusted_size, c=[color], marker=marker,
                    edgecolors=edge, linewidths=lw, zorder=5)
+    # Text annotations drawn LAST + high zorder so they sit above every
+    # marker.  Done in a second pass to ensure correct layering.
+    for cid, x, y, sz, sc in zip(labels, xs, ys, sizes, scs):
+        is_selected = (cid == selected_cid)
         ax.text(x, y - 0.04, f"  {cid}" + (" ★" if is_selected else ""),
                 fontsize=10, ha="left", va="top",
-                color="#222222",
+                color="#222222", zorder=20,
                 fontweight="bold" if is_selected else "normal")
 
     ax.set_xlabel("Buried Surface Area (Å²)", fontsize=12)
@@ -474,18 +480,10 @@ def plot_cluster_ranking(metrics_by_cid, sc_by_cid, sorted_cids, selected_cid,
                linewidth=1.2, alpha=0.85, zorder=1,
                label=f"BSA = {BSA_WARN_CUTOFF:.0f} Å² (weak-interface threshold)")
     n_clusters = len(sorted_cids)
-    qualifying_note = (
-        f"1 qualifying cluster — the ★ is the auto-pick (and the only "
-        f"option).  Add more HADDOCK sampling for cluster variety."
-        if n_clusters == 1 else
-        f"{n_clusters} qualifying clusters; ★ = auto-pick "
-        f"((−pair_contact_fraction, −BSA) lex sort)"
-    )
     ax.set_title(
-        f"Cluster ranking — one dot per qualifying cluster.  "
-        f"Top-right = best.  Dot size = cluster members; colour = Sc.\n"
-        f"{qualifying_note}",
-        fontsize=9, pad=10,
+        f"Cluster ranking ({n_clusters} qualifying)  —  "
+        f"★ = auto-pick;  dot size = cluster members;  colour = Sc",
+        fontsize=10, pad=8,
     )
     # Threshold-line legend only (outside the plot area).
     ax.legend(loc="upper left", bbox_to_anchor=(1.18, 1.0),
@@ -767,14 +765,12 @@ def plot_hotspot_placement(effector_active_residues, pdb_index, clusters,
     ax.axvspan(10, x_max, color="#FECACA", alpha=0.45, zorder=1,
                label="> 10 Å (outside AIR)")
 
-    # Cluster-by-row jitter so multiple clusters at similar distance don't
-    # stack into a single blob — assign each cluster a small vertical offset.
-    if n_clusters > 1:
-        cluster_y_offsets = [-0.20 + 0.40 * (i / (n_clusters - 1))
-                             for i in range(n_clusters)]
-    else:
-        cluster_y_offsets = [0.0]
-    offset_by_cid = dict(zip(sorted_cids, cluster_y_offsets))
+    # No vertical jitter — the y axis is discrete (one row per hotspot)
+    # and adding offsets blurs that.  Markers from multiple clusters at
+    # the same distance will overlap; that overlap is informative.
+    # Faint gridlines at each hotspot row reinforce the discreteness.
+    for i in range(n_hot):
+        ax.axhline(i, color="#CCCCCC", linewidth=0.5, alpha=0.6, zorder=1)
 
     for i, hot in enumerate(hotspot_list):
         for cid in sorted_cids:
@@ -784,11 +780,11 @@ def plot_hotspot_placement(effector_active_residues, pdb_index, clusters,
             is_selected = (cid == selected_cid)
             marker = "*" if is_selected else "o"
             size = 150 if is_selected else 75
-            edge = "black"
-            ax.scatter(d, i + offset_by_cid[cid], s=size,
+            ax.scatter(d, i, s=size,
                        c=[colour_by_cid[cid]], marker=marker,
-                       edgecolors=edge, linewidths=0.8 if not is_selected else 1.2,
-                       zorder=5)
+                       edgecolors="black",
+                       linewidths=1.2 if is_selected else 0.8,
+                       zorder=5, alpha=0.85)
 
     ax.set_xlabel("Min CA–CA distance from hotspot to nearest receptor "
                   "residue (Å)", fontsize=11)
@@ -893,7 +889,10 @@ def plot_clash_breakdown(metrics_by_cid, sorted_cids, selected_cid,
     ax.xaxis.set_major_locator(MaxNLocator(integer=True))
     if max(a + b for a, b in zip(in_dr, out_dr)) == 0:
         ax.set_xlim(0, 1)
-    ax.legend(loc="lower right", fontsize=9, framealpha=0.9)
+    # Legend outside the plot — was overlapping cluster rows when bars
+    # extended toward the right edge.
+    ax.legend(loc="upper left", bbox_to_anchor=(1.01, 1.0),
+              fontsize=9, framealpha=0.9, borderaxespad=0.0)
     ax.set_title(
         "Clash bookkeeping — clashes inside the design region get "
         "redesigned away by RFDiffusion; clashes outside survive into the "
