@@ -221,3 +221,153 @@ def test_coverage_report_runs():
     text = vp.coverage_report()
     assert "Total spec entries" in text
     assert "any" in text  # the coverage-gap section is present
+
+
+# ── HADDOCK Session 7 restraint params ──────────────────────────────
+
+
+@pytest.mark.local_unit
+class TestHaddockContactPairsRegex:
+    spec = next(s for s in vp.PARAM_SPECS if s.name == "haddock_contact_pairs")
+    pat = spec.kwargs["pattern"]
+
+    def test_empty_ok(self):
+        assert vp._validate_regex("", {"pattern": self.pat}) is None
+
+    def test_single_pair(self):
+        assert vp._validate_regex("A25-C42", {"pattern": self.pat}) is None
+
+    def test_multiple_pairs(self):
+        assert vp._validate_regex("A25-C42 A13-C94", {"pattern": self.pat}) is None
+
+    def test_bad_missing_dash(self):
+        err = vp._validate_regex("A25 C42", {"pattern": self.pat})
+        assert err and "does not match" in err
+
+    def test_bad_missing_chain(self):
+        err = vp._validate_regex("25-C42", {"pattern": self.pat})
+        assert err and "does not match" in err
+
+
+@pytest.mark.local_unit
+class TestHaddockActiveResiduesRegex:
+    spec = next(s for s in vp.PARAM_SPECS
+                if s.name == "haddock_receptor_active_residues")
+    pat = spec.kwargs["pattern"]
+
+    def test_empty_ok(self):
+        assert vp._validate_regex("", {"pattern": self.pat}) is None
+
+    def test_singles(self):
+        assert vp._validate_regex("25,35,40", {"pattern": self.pat}) is None
+
+    def test_with_range(self):
+        assert vp._validate_regex("25,40-44", {"pattern": self.pat}) is None
+
+    def test_bad_letters(self):
+        err = vp._validate_regex("A25,A30", {"pattern": self.pat})
+        assert err and "does not match" in err
+
+
+@pytest.mark.local_unit
+class TestHaddockPairDistanceRegex:
+    spec = next(s for s in vp.PARAM_SPECS if s.name == "haddock_pair_distance")
+    pat = spec.kwargs["pattern"]
+
+    def test_default(self):
+        assert vp._validate_regex("2,2,4", {"pattern": self.pat}) is None
+
+    def test_floats(self):
+        assert vp._validate_regex("2.5,1.5,4.0", {"pattern": self.pat}) is None
+
+    def test_wrong_count(self):
+        err = vp._validate_regex("2,4", {"pattern": self.pat})
+        assert err and "does not match" in err
+
+    def test_no_plusminus(self):
+        err = vp._validate_regex("2±2±4", {"pattern": self.pat})
+        assert err and "does not match" in err
+
+
+@pytest.mark.local_unit
+class TestHaddockChosenClusterCustom:
+    # Pull the lambda dynamically per call so Python doesn't bind it as
+    # a method via the descriptor protocol when accessed on the class.
+    @staticmethod
+    def _fn():
+        spec = next(s for s in vp.PARAM_SPECS
+                    if s.name == "haddock_chosen_cluster")
+        return spec.kwargs["fn"]
+
+    def test_null_ok(self):
+        fn = self._fn()
+        assert fn(None) is None
+        assert fn("null") is None
+
+    def test_int_ok(self):
+        assert self._fn()(3) is None
+
+    def test_zero_rejected(self):
+        assert self._fn()(0) is not None
+
+    def test_string_rejected(self):
+        assert self._fn()("3") is not None
+
+
+@pytest.mark.local_unit
+class TestBranchACrossParamRule:
+    def test_no_branch_a_is_ok(self):
+        # Branch B (receptor_input absent) — no rule applies.
+        errors = vp.validate_params({"pdb_file": "/tmp/x.pdb"})
+        assert errors == []
+
+    def test_branch_a_with_no_restraints_fails(self):
+        errors = vp.validate_params({
+            "receptor_input": "/tmp/r.pdb",
+            "effector_input": "/tmp/e.pdb",
+        })
+        assert any("at least one of haddock_contact_pairs" in e for e in errors)
+
+    def test_branch_a_with_pairs_ok(self):
+        errors = vp.validate_params({
+            "receptor_input": "/tmp/r.pdb",
+            "effector_input": "/tmp/e.pdb",
+            "haddock_contact_pairs": "A25-C42",
+        })
+        assert errors == []
+
+    def test_branch_a_with_receptor_active_ok(self):
+        errors = vp.validate_params({
+            "receptor_input": "/tmp/r.pdb",
+            "effector_input": "/tmp/e.pdb",
+            "haddock_receptor_active_residues": "25,40-44",
+        })
+        assert errors == []
+
+    def test_branch_a_with_only_effector_active_fails(self):
+        # Effector-only doesn't define a receptor design region; rejected.
+        errors = vp.validate_params({
+            "receptor_input": "/tmp/r.pdb",
+            "effector_input": "/tmp/e.pdb",
+            "haddock_effector_active_residues": "42,94",
+        })
+        assert any("at least one of haddock_contact_pairs" in e for e in errors)
+
+
+@pytest.mark.local_unit
+class TestChosenClusterBranchAOnly:
+    def test_branch_b_with_chosen_fails(self):
+        errors = vp.validate_params({
+            "pdb_file": "/tmp/x.pdb",
+            "haddock_chosen_cluster": 2,
+        })
+        assert any("only applies in Branch A" in e for e in errors)
+
+    def test_branch_a_with_chosen_ok(self):
+        errors = vp.validate_params({
+            "receptor_input": "/tmp/r.pdb",
+            "effector_input": "/tmp/e.pdb",
+            "haddock_contact_pairs": "A25-C42",
+            "haddock_chosen_cluster": 2,
+        })
+        assert errors == []

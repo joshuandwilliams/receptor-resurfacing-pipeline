@@ -49,14 +49,40 @@ def parse_args():
     parser.add_argument("--effector-chain", default="B")
     parser.add_argument("--contact-cutoff", type=float, default=CONTACT_CUTOFF,
                         help=f"Heavy-atom distance cutoff in Å (default: {CONTACT_CUTOFF})")
-    parser.add_argument("--contigs", default=None,
-                        help="RFDiffusion contig string for design-region shading")
     parser.add_argument("--min-cluster-size", type=int, default=MIN_CLUSTER_SIZE,
                         help="Minimum cluster size to qualify (default: %(default)s). "
                              "Should match `min_population` in haddock.nf clustfcc block.")
+    parser.add_argument("--receptor-active-residues", default="",
+                        help="Comma-separated receptor active residues / ranges, used "
+                             "for design-region shading on the interface heatmap.  Empty "
+                             "= no shading.  (Session 7: replaces the old contig-driven "
+                             "shading; the contig is no longer a HADDOCK input.)")
     parser.add_argument("--effector-active-residues", default="",
                         help="Comma-separated effector active residues for AIR annotation bar")
     return parser.parse_args()
+
+
+def _parse_residue_spec(spec):
+    """Parse "25,40-44" into a set of residue numbers.  Empty -> empty set."""
+    if not spec or not spec.strip():
+        return set()
+    out = set()
+    for token in spec.split(","):
+        token = token.strip()
+        if not token:
+            continue
+        if "-" in token:
+            lo, hi = token.split("-", 1)
+            try:
+                out.update(range(int(lo), int(hi) + 1))
+            except ValueError:
+                pass
+        else:
+            try:
+                out.add(int(token))
+            except ValueError:
+                pass
+    return out
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -226,70 +252,36 @@ def _compute_contact_frequencies(clusters, pdb_index, rec_chain, eff_chain, cuto
             eff_freqs, sorted(eff_all), eff_found, eff_total)
 
 
-def _parse_fixed_residues(contigs, rec_chain):
-    """
-    Parse the contig string to extract the set of **fixed** receptor PDB
-    residue numbers.
-
-    Fixed segments are explicit ranges like A1-32, A46-72.  Everything
-    else in the receptor (de novo segments) will be replaced by RFDiffusion,
-    but those residues still exist in the pre-RFDiffusion PDB.
-
-    Returns a set of PDB residue numbers that are fixed, or None if no
-    contig is provided.
-    """
-    if not contigs:
-        return None
-
-    blocks = contigs.replace(",", " ").split()
-    rec_block = None
-    for block in blocks:
-        if any(seg.strip() and seg.strip()[0].upper() == rec_chain.upper()
-               for seg in block.split("/") if seg.strip() and seg.strip()[0].isalpha()):
-            rec_block = block
-            break
-    if rec_block is None:
-        return None
-
-    fixed = set()
-    for seg in rec_block.split("/"):
-        seg = seg.strip()
-        if not seg:
-            continue
-        if seg[0].isalpha() and seg[0].upper() == rec_chain.upper():
-            rest = seg[1:]
-            if "-" in rest:
-                parts = rest.split("-")
-                fixed.update(range(int(parts[0]), int(parts[1]) + 1))
-            else:
-                fixed.add(int(rest))
-    return fixed
-
-
-def _design_ranges_from_fixed(fixed_residues, all_pdb_residues):
-    """
-    Given the set of fixed residue numbers and the full set of receptor
-    residue numbers present in the PDB, return contiguous (start, end)
-    ranges for all non-fixed (design) residues.
-    """
-    if not fixed_residues or not all_pdb_residues:
+def _contiguous_ranges(residues):
+    """Group a set/list of residue numbers into contiguous (start, end) ranges."""
+    if not residues:
         return []
-
-    design_residues = sorted(set(all_pdb_residues) - fixed_residues)
-    if not design_residues:
-        return []
-
-    # Group into contiguous runs
+    sorted_r = sorted(set(residues))
     ranges = []
-    run_start = design_residues[0]
+    run_start = sorted_r[0]
     prev = run_start
-    for r in design_residues[1:]:
+    for r in sorted_r[1:]:
         if r != prev + 1:
             ranges.append((run_start, prev))
             run_start = r
         prev = r
     ranges.append((run_start, prev))
     return ranges
+
+
+def _design_ranges(design_residues, all_pdb_residues):
+    """Restrict ``design_residues`` to those actually present in the PDB and
+    return contiguous (start, end) ranges for heatmap shading.
+
+    Post-Session 7: ``design_residues`` is the HADDOCK design region
+    (= receptor_active_residues + receptor halves of contact_pairs).
+    Previously this function complemented a fixed-residues set; both
+    framings shade the same residues, just inverted in their input
+    semantics.
+    """
+    if not design_residues or not all_pdb_residues:
+        return []
+    return _contiguous_ranges(set(design_residues) & set(all_pdb_residues))
 
 
 def _build_heatmap_matrix(sorted_cids, cluster_freqs, all_resnums, res_range,
@@ -455,8 +447,8 @@ def plot_interface_heatmap(clusters, pdb_index, rec_chain, eff_chain, cutoff,
     fig_w = min(30, max(10, max(n_rec_res, n_eff_res if has_eff else 0) * 0.04 + 3))
     rec_res_to_col = {r: i for i, r in enumerate(rec_res_range)}
 
-    # Design regions = PDB residues that exist but are NOT fixed
-    denovo_ranges = _design_ranges_from_fixed(fixed_residues, set(rec_res_range)) \
+    # Design regions = user-supplied design residues intersected with PDB residues
+    denovo_ranges = _design_ranges(fixed_residues, set(rec_res_range)) \
                     if fixed_residues is not None else []
     has_denovo = bool(denovo_ranges)
     if has_denovo:
@@ -650,11 +642,14 @@ def main():
         else:
             print("WARNING: --run-dir or --complex-dir not provided; heatmap will be empty.")
 
-    fixed_residues = _parse_fixed_residues(args.contigs, args.receptor_chain)
-    if fixed_residues is not None:
-        print(f"Fixed receptor residues from contig: {len(fixed_residues)}")
+    # Design-region shading uses haddock_receptor_active_residues directly
+    # (Session 7: contig parsing removed from this script per A131).
+    design_residues = _parse_residue_spec(args.receptor_active_residues)
+    fixed_residues = design_residues if design_residues else None
+    if fixed_residues:
+        print(f"Design-region residues for shading: {len(fixed_residues)}")
     else:
-        print("No contig string provided; design region shading disabled.")
+        print("No --receptor-active-residues provided; design-region shading disabled.")
 
     # Best model: lowest-scoring member of pipeline-selected cluster
     best_model_name = None

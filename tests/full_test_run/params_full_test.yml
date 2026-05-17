@@ -44,7 +44,15 @@ effector_chain: "C"
 # spec's min/max.  Placeholder values, not run-time meaningful.
 haddock_sampling: 100
 haddock_seletop: 1
-effector_active_residues: ""
+# Session 7 restructure: new HADDOCK restraint param schema.  All empty in
+# mode 2 (no Branch A), Branch-A cross-param rule doesn't fire because
+# receptor_input is not set.
+haddock_contact_pairs: ""
+haddock_receptor_active_residues: ""
+haddock_effector_active_residues: ""
+haddock_pair_distance: "2,2,4"
+haddock_chosen_cluster: null
+stop_after_haddock: false
 
 # ── RFDiffusion ───────────────────────────────────────────────────────
 contigs: "A1-32/10-20/A46-72/6-6 C"

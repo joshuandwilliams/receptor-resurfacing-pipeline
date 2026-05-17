@@ -4,22 +4,28 @@ collect_haddock3_dock.py
 ------------------------
 Post-process a completed HADDOCK3 docking run.
 
-Locates the best-scoring model PDB from the best qualifying cluster, copies
-CAPRI and cluster summary files, and writes a JSON report.
+Locates the best-scoring model PDB for every qualifying cluster
+(>= ``--min-cluster-size`` members), copies CAPRI and cluster summary
+files, and writes ``haddock_report.json``.
 
-Cluster selection:
-    1. Only clusters with >= 4 models qualify.
-    2. Best cluster = lowest mean HADDOCK score among qualifying clusters.
-    3. Best model = lowest-scoring individual model within that cluster.
-    4. Fails if no cluster qualifies or best model score >= 0.
+Per Session 7 restructure (notes/design_audit.md A129/A130/A134):
+- No "best model" is selected here.  Cluster ranking by HADDOCK score has
+  been replaced by ranking on BSA + pair contact fraction, which is
+  computed by the downstream ``haddock_cluster_metrics.py`` step and
+  used by ``select_haddock_cluster.py`` to pick the chosen cluster.
+- The fail-if-best-score-positive guard has also been removed: with
+  multiple qualifying clusters reported and BSA driving the choice, a
+  single positive HADDOCK score isn't grounds to fail the whole run.
+  (Pipeline error if NO clusters qualify is preserved.)
 
 Outputs:
-    best_model.pdb        - best-scoring docked complex from best cluster
-    best_cluster{N}.pdb   - best model from each qualifying cluster
+    best_cluster{N}.pdb   - best model PDB from each qualifying cluster
     capri_scores.tsv      - CAPRI evaluation scores (copy)
     cluster_summary.txt   - cluster membership table (copy, optional)
     haddock_report.json   - run summary with per-cluster metadata
 """
+
+from __future__ import annotations
 
 import argparse
 import glob
@@ -70,6 +76,10 @@ def select_all_qualifying_clusters(clusters):
     excluding '-'), sorted by mean HADDOCK score (best first).
 
     Each dict: {cluster_id, size, mean_score, best_model_name, best_model_score}
+
+    The mean-HADDOCK-score sort here is purely cosmetic for the report
+    output order — the actual cluster ranking happens downstream on BSA +
+    pair contact fraction.
     """
     results = []
     for cid, members in clusters.items():
@@ -94,26 +104,7 @@ def select_all_qualifying_clusters(clusters):
     return results
 
 
-def select_best_cluster(clusters):
-    """
-    Select the single best qualifying cluster.
-    Returns (cluster_id, model_name, model_score, mean_score, size)
-    or exits if no cluster qualifies.
-    """
-    all_qual = select_all_qualifying_clusters(clusters)
-    if not all_qual:
-        sizes = {cid: len(m) for cid, m in clusters.items() if cid != "-"}
-        size_str = ", ".join(f"cluster {c}: {s}" for c, s in sorted(sizes.items()))
-        print(f"ERROR: No cluster has >= {MIN_CLUSTER_SIZE} models. "
-              f"Cluster sizes: {size_str or 'none'}", file=sys.stderr)
-        sys.exit(1)
-
-    best = all_qual[0]
-    return (best["cluster_id"], best["best_model_name"], best["best_model_score"],
-            best["mean_score"], best["size"])
-
-
-def extract_model_by_name(run_dir, target_model_name, output_name="best_model.pdb"):
+def extract_model_by_name(run_dir, target_model_name, output_name):
     """
     Locate a model PDB by stem match in seletopclusts/emref directories.
     Falls back to first available model, then summary.tgz.
@@ -167,22 +158,11 @@ def extract_model_by_name(run_dir, target_model_name, output_name="best_model.pd
 
 
 def _fail(report, message):
-    """Write failure report + placeholder PDB, then exit 1."""
+    """Write failure report, then exit 1."""
     print(f"ERROR: {message}", file=sys.stderr)
     with open("haddock_report.json", "w") as f:
         json.dump(report, f, indent=2)
-    with open("best_model.pdb", "w") as f:
-        f.write(f"REMARK HADDOCK3 failed - {message}\n")
     sys.exit(1)
-
-
-def _validate_score(score, report):
-    """Fail if score is missing or non-negative (repulsive dock)."""
-    if score is None:
-        _fail(report, "Best model has no HADDOCK score — cannot validate dock quality")
-    if score >= 0:
-        _fail(report, f"Best model HADDOCK score is {score:.2f} (>= 0). "
-              f"Positive scores indicate repulsive/non-specific docking poses.")
 
 
 def main():
@@ -195,10 +175,8 @@ def main():
     run_dir = args.run_dir
 
     report = {
-        "success": False, "best_model": None, "best_score": None,
-        "best_cluster_id": None, "best_cluster_size": 0,
-        "best_cluster_mean_score": None, "n_clusters": 0,
-        "n_qualifying_clusters": 0,
+        "success": False, "n_clusters": 0,
+        "n_qualifying_clusters": 0, "cluster_models": {},
     }
 
     # ── CAPRI scores ─────────────────────────────────────────────────────
@@ -222,59 +200,44 @@ def main():
         report["n_clusters"] = n_clusters
         print(f"Found {n_clusters} cluster(s) (excluding unclustered models)")
     else:
-        print("WARNING: No clustfcc.tsv found; cannot perform cluster-aware selection",
-              file=sys.stderr)
+        print("WARNING: No clustfcc.tsv found; cannot perform cluster-aware "
+              "selection — pipeline will halt", file=sys.stderr)
+        _fail(report, "No clustfcc.tsv found; HADDOCK3 must have crashed during "
+                      "clustering")
 
-    # ── Select best model ────────────────────────────────────────────────
-    if clusters:
-        (best_cid, best_model_name, best_model_score,
-         best_mean, best_size) = select_best_cluster(clusters)
+    qualifying = select_all_qualifying_clusters(clusters)
+    if not qualifying:
+        sizes = {cid: len(m) for cid, m in clusters.items() if cid != "-"}
+        size_str = ", ".join(f"cluster {c}: {s}" for c, s in sorted(sizes.items()))
+        _fail(report, f"No cluster has >= {MIN_CLUSTER_SIZE} models. "
+                      f"Cluster sizes: {size_str or 'none'}")
 
-        all_qual = select_all_qualifying_clusters(clusters)
-        report["n_qualifying_clusters"] = len(all_qual)
-        report["best_cluster_id"] = best_cid
-        report["best_cluster_size"] = best_size
-        report["best_cluster_mean_score"] = round(best_mean, 3)
-
-        print(f"Best cluster: {best_cid} (size={best_size}, mean score={best_mean:.2f})")
-        print(f"Best model in cluster: {best_model_name} (score={best_model_score})")
-
-        _validate_score(best_model_score, report)
-        report["best_model"] = best_model_name
-        report["best_score"] = best_model_score
-    else:
-        # No cluster file — fall back to best row in capri_ss.tsv
-        print("WARNING: No cluster data; selecting globally best model from capri_ss.tsv")
-        best_model_name = get_model_name(capri_rows[0])
-        best_model_score = get_score(capri_rows[0])
-        _validate_score(best_model_score, report)
-        report["best_model"] = best_model_name
-        report["best_score"] = best_model_score
-
-    # ── Extract best model PDB ───────────────────────────────────────────
-    if not extract_model_by_name(run_dir, best_model_name):
-        _fail(report, "Could not find best model PDB on disk")
+    report["n_qualifying_clusters"] = len(qualifying)
+    print(f"{len(qualifying)} qualifying cluster(s) "
+          f"(min size {MIN_CLUSTER_SIZE}); extracting best model from each")
 
     # ── Extract best model from every qualifying cluster ─────────────────
     cluster_models = {}
-    if clusters:
-        for info in select_all_qualifying_clusters(clusters):
-            cid = info["cluster_id"]
-            filename = f"best_cluster{cid}.pdb"
-            if extract_model_by_name(run_dir, info["best_model_name"], output_name=filename):
-                cluster_models[cid] = {
-                    "filename": filename,
-                    "model_name": info["best_model_name"],
-                    "score": info["best_model_score"],
-                    "mean_score": round(info["mean_score"], 3),
-                    "size": info["size"],
-                }
-                print(f"  Cluster {cid}: {filename} "
-                      f"(score={info['best_model_score']}, "
-                      f"mean={info['mean_score']:.2f}, N={info['size']})")
-            else:
-                print(f"  WARNING: Could not extract best model for cluster {cid}",
-                      file=sys.stderr)
+    for info in qualifying:
+        cid = info["cluster_id"]
+        filename = f"best_cluster{cid}.pdb"
+        if extract_model_by_name(run_dir, info["best_model_name"], output_name=filename):
+            cluster_models[cid] = {
+                "filename": filename,
+                "model_name": info["best_model_name"],
+                "score": info["best_model_score"],
+                "mean_score": round(info["mean_score"], 3),
+                "size": info["size"],
+            }
+            print(f"  Cluster {cid}: {filename} "
+                  f"(score={info['best_model_score']}, "
+                  f"mean={info['mean_score']:.2f}, N={info['size']})")
+        else:
+            print(f"  WARNING: Could not extract best model for cluster {cid}",
+                  file=sys.stderr)
+
+    if not cluster_models:
+        _fail(report, "Failed to extract any cluster's best-model PDB")
 
     report["success"] = True
     report["cluster_models"] = cluster_models
@@ -282,10 +245,9 @@ def main():
     with open("haddock_report.json", "w") as f:
         json.dump(report, f, indent=2)
 
-    print(f"SUCCESS: best_model.pdb written "
-          f"(cluster={report.get('best_cluster_id', 'N/A')}, "
-          f"score={report['best_score']:.2f}); "
-          f"{len(cluster_models)} per-cluster model(s) saved")
+    print(f"SUCCESS: {len(cluster_models)} per-cluster best model(s) "
+          f"saved; downstream haddock_cluster_metrics.py will rank by BSA + "
+          f"pair contact fraction")
 
 
 if __name__ == "__main__":

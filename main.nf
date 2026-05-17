@@ -246,12 +246,16 @@ params.max_pct_identity   = 100.0
 params.haddock_sampling   = 10000  // Rigid-body sampling (10000=semi-blind)
 params.haddock_seletop    = 400    // Top N rigid-body models passed to flexref
 params.rfdiff_contact_cutoff = 8.0 // Cα–Cα cutoff (Å) for rfdiffusion_filter contact
-                                   // detection; also reused as heavy-atom cutoff for
-                                   // HADDOCK hotspot extraction.
-params.effector_active_residues = ""  // Comma-separated effector residues for HADDOCK AIRs
-                                      // e.g. "24,25,26,40,41" to steer docking toward
-                                      // specific effector surface patches.  Leave empty to
-                                      // restrain against entire effector chain (default).
+                                   // detection on RFDiffusion-designed complexes.
+// HADDOCK restraints (per Session 7 grill-me, notes/design_audit.md Q137).
+// At least one of haddock_contact_pairs or haddock_receptor_active_residues
+// must be non-empty in Branch A; validate_params.py enforces this.
+params.haddock_contact_pairs            = ""    // Hard CA-CA pin pairs, e.g. "A25-C42 A13-C94"
+params.haddock_receptor_active_residues = ""    // Soft AIR receptor side, e.g. "25,35,40-44"
+params.haddock_effector_active_residues = ""    // Soft AIR effector side; empty = entire chain
+params.haddock_pair_distance            = "2,2,4"  // Global pair distance "target,lo_dev,hi_dev"
+params.haddock_chosen_cluster           = null  // Set to a cluster_id to override auto-pick
+params.stop_after_haddock               = false // Halt after HADDOCK_PLOTS for manual inspection
 
 // ── Infrastructure ──────────────────────────────────────────────────────
 // All container paths (rfdiff_container, rosetta_container, boltz2_container,
@@ -293,7 +297,8 @@ include { WRITE_DUMMY_MAPPING as WRITE_DUMMY_MAPPING_EFF } from './modules/prepr
 include { HADDOCK3_PREPARE                     } from './modules/haddock'
 include { HADDOCK3_DOCK                        } from './modules/haddock'
 include { HADDOCK3_PLOTS                       } from './modules/haddock'
-include { EXTRACT_HOTSPOTS                     } from './modules/haddock'
+include { HADDOCK_CLUSTER_METRICS              } from './modules/haddock'
+include { SELECT_HADDOCK_CLUSTER               } from './modules/haddock'
 include { BUILD_CONTIGS                        } from './modules/haddock'
 
 include { RFDIFFUSION                          } from './modules/rfdiffusion'
@@ -380,21 +385,26 @@ workflow {
         eff_trim_mapping_ch = WRITE_DUMMY_MAPPING_EFF.out.mapping
 
         // ── HADDOCK3 docking ────────────────────────────────────────────
-        // Always run HADDOCK when inputs are separate (we need a complex)
+        // Per Session 7 (notes/design_audit.md A131): the contig string
+        // is NOT a HADDOCK restraint source.  Restraints come from the
+        // user's contact_pairs + receptor/effector active residue params.
         HADDOCK3_PREPARE(
             receptor_pdb_ch,
             effector_pdb_ch,
             params.receptor_chain,
             params.effector_chain,
-            params.contigs,
-            params.effector_active_residues,
+            params.haddock_contact_pairs,
+            params.haddock_receptor_active_residues,
+            params.haddock_effector_active_residues,
+            params.haddock_pair_distance,
             Channel.value(file("${projectDir}/bin/haddock3_prepare.py"))
         )
 
         HADDOCK3_DOCK(
             HADDOCK3_PREPARE.out.receptor_pdb_out,
             HADDOCK3_PREPARE.out.effector_pdb_out,
-            HADDOCK3_PREPARE.out.restraints,
+            HADDOCK3_PREPARE.out.ambig_restraints,
+            HADDOCK3_PREPARE.out.unambig_restraints,
             params.haddock_sampling,
             params.haddock_seletop,
             Channel.value(file("${projectDir}/bin/collect_haddock3_dock.py"))
@@ -404,29 +414,62 @@ workflow {
             HADDOCK3_DOCK.out.capri_scores,
             HADDOCK3_DOCK.out.cluster_summary,
             HADDOCK3_DOCK.out.run_dir,
-            params.contigs,
-            params.receptor_chain,
-            params.effector_active_residues,
+            params.haddock_receptor_active_residues,
+            params.haddock_effector_active_residues,
             Channel.value(file("${projectDir}/bin/haddock3_plots.py"))
         )
 
-        // ── Extract hotspots from docked complex ────────────────────────
-        // Pass user-supplied sequences (if provided) as references for the
-        // chain-disambiguation fallback in extract_hotspots.py.  In the
-        // normal case where HADDOCK preserves chain IDs they're unused.
-        EXTRACT_HOTSPOTS(
-            HADDOCK3_DOCK.out.best_model,
-            params.receptor_chain,
-            params.effector_chain,
-            params.rfdiff_contact_cutoff,
-            params.receptor_seq ?: "",
-            params.effector_seq ?: "",
-            Channel.value(file("${projectDir}/bin/extract_hotspots.py"))
+        // ── Per-cluster metrics (BSA, Sc, COM, AIR/pair satisfaction,
+        //    clash counts) — computed once and consumed by SELECT below.
+        HADDOCK_CLUSTER_METRICS(
+            HADDOCK3_DOCK.out.haddock_report,
+            HADDOCK3_DOCK.out.cluster_models,
+            HADDOCK3_PREPARE.out.restraints_summary,
+            HADDOCK3_PREPARE.out.ambig_restraints,
+            HADDOCK3_PREPARE.out.unambig_restraints,
+            Channel.value(file("${projectDir}/bin/haddock_cluster_metrics.py")),
+            Channel.value(file("${projectDir}/bin"))
+        )
+
+        // ── Stop-and-resume gate (per Session 7 A134) ───────────────────
+        // When params.stop_after_haddock is true, halt before SELECT so
+        // the user can inspect plots + per-cluster best_cluster*.pdb files
+        // (already published to ${outdir}/haddock/) and pick a cluster.
+        // To resume after picking: re-run with
+        //     params.haddock_chosen_cluster: N
+        // (Nextflow -resume reuses cached HADDOCK_DOCK + HADDOCK_CLUSTER_METRICS
+        //  outputs; only SELECT and downstream re-execute.)
+        if (params.stop_after_haddock) {
+            log.warn(
+                "stop_after_haddock=true → pipeline will halt after HADDOCK_PLOTS.\n" +
+                "  Inspect ${params.outdir}/haddock/best_cluster*.pdb and\n" +
+                "  ${params.outdir}/haddock/cluster_metrics.json, then resume with\n" +
+                "  params.haddock_chosen_cluster: <id> in your params file and\n" +
+                "  re-run with --resume.\n" +
+                "  (Cleared by setting stop_after_haddock=false on resume.)"
+            )
+            return
+        }
+
+        // ── Select chosen cluster (auto or user-specified) ───────────────
+        SELECT_HADDOCK_CLUSTER(
+            HADDOCK3_DOCK.out.haddock_report,
+            HADDOCK_CLUSTER_METRICS.out.cluster_metrics,
+            HADDOCK3_PREPARE.out.restraints_summary,
+            HADDOCK3_DOCK.out.cluster_models,
+            receptor_pdb_ch,
+            effector_pdb_ch,
+            params.haddock_contact_pairs,
+            params.haddock_receptor_active_residues,
+            params.haddock_effector_active_residues,
+            params.haddock_pair_distance,
+            params.haddock_chosen_cluster,
+            Channel.value(file("${projectDir}/bin/select_haddock_cluster.py"))
         )
 
         // ── Build updated contigs & extract sequences ───────────────────
         BUILD_CONTIGS(
-            HADDOCK3_DOCK.out.best_model,
+            SELECT_HADDOCK_CLUSTER.out.selected_pdb,
             params.receptor_chain,
             params.effector_chain,
             params.contigs,
@@ -435,10 +478,14 @@ workflow {
             Channel.value(file("${projectDir}/bin/build_contigs.py"))
         )
 
-        // Read the auto-derived hotspot (use user's if provided)
-        hotspot_ch = params.hotspot
-            ? Channel.value(params.hotspot)
-            : EXTRACT_HOTSPOTS.out.hotspot_string.map { it.text.trim() }.first()
+        // Hotspot for RFDiffusion: user-only.  Auto-derivation from the
+        // docked complex was removed in Session 7 (A143/A145) because the
+        // contact pattern HADDOCK chose is already visible to RFDiffusion
+        // from the input PDB, so feeding it back as a hotspot bias just
+        // reinforces that pattern and reduces design diversity.  Set
+        // params.hotspot only when you have biological knowledge of
+        // target residues you want contacted (e.g. homologous binding sites).
+        hotspot_ch = Channel.value(params.hotspot ?: "")
 
         // Channels for downstream steps
         rfdiff_pdb_ch   = BUILD_CONTIGS.out.rfdiffusion_pdb

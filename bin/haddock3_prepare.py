@@ -4,255 +4,362 @@ haddock3_prepare.py
 -------------------
 Prepare inputs for HADDOCK3 docking.
 
-Parses the RFDiffusion contig string to identify de novo regions on the
-receptor as HADDOCK active residues. Generates ambiguous interaction
-restraints (AIRs) and copies PDBs with HADDOCK-friendly names.
+Per Session 7 grill-me (notes/design_audit.md Q131, Q133, Q137, Q138,
+Q142, Q147) this script no longer parses the RFDiffusion contig string
+to derive HADDOCK active residues.  At HADDOCK time the contig is
+abstract (the de novo regions don't exist on the input PDB yet), so
+restraints come from explicit user params instead.
+
+Two restraint files may be written:
+
+- ``ambig_restraints.tbl`` — ambiguous interaction restraints (AIRs).
+  Generated from ``--receptor-active-residues`` (and optionally
+  ``--effector-active-residues``).  AND-over-receptor / OR-over-effector
+  structure with 50% nrest tolerance (HADDOCK's [airs] block treats
+  this as "at least 50% must be satisfied").  Soft constraint.
+
+- ``unambig_restraints.tbl`` — unambiguous distance restraints.
+  Generated from ``--contact-pairs`` (format ``"A25-C42 A13-C94"``).
+  Each pair becomes one CA-CA distance restraint with the global
+  ``--pair-distance`` target/tolerance triple.  Hard pin.
+
+Either or both restraint sets may be empty; HADDOCK reads whichever
+files exist.  The pipeline validator (validate_params.py) enforces that
+at least one of contact pairs or receptor active residues is supplied
+in Branch A.
+
+Chain-ID contract (per A142):
+- Caller passes ``--receptor-chain`` / ``--effector-chain`` referring to
+  the chain IDs in the user's INPUT PDBs.
+- This script writes ``receptor_haddock.pdb`` / ``effector_haddock.pdb``
+  with the chain ID FORCED to A (receptor) and B (effector) regardless
+  of input chain letters.  Downstream HADDOCK + post-processing assume
+  A/B.
 
 Outputs:
-    receptor_haddock.pdb  - receptor PDB (renamed copy)
-    effector_haddock.pdb  - effector PDB (renamed copy)
-    ambig_restraints.tbl  - HADDOCK AIR restraints file
-    active_residues.json  - summary of active residues
+    receptor_haddock.pdb     - receptor PDB, chain forced to A
+    effector_haddock.pdb     - effector PDB, chain forced to B
+    ambig_restraints.tbl     - AIRs from active residues (may be empty)
+    unambig_restraints.tbl   - distance restraints from pairs (may be empty)
+    restraints_summary.json  - what was written and from which inputs
 """
+
+from __future__ import annotations
 
 import argparse
 import json
-import shutil
+import math
+import os
 import sys
+from pathlib import Path
+
+# Local imports — share parsers with haddock_run.HaddockRun so the user-
+# facing string formats round-trip identically.
+_BIN_DIR = os.path.dirname(os.path.abspath(__file__))
+if _BIN_DIR not in sys.path:
+    sys.path.insert(0, _BIN_DIR)
+from haddock_run import (  # noqa: E402
+    parse_active_residues,
+    parse_contact_pairs,
+    parse_pair_distance,
+)
+
+
+# Receptor/effector chains inside the HADDOCK workspace (post-relabel).
+HADDOCK_RECEPTOR_CHAIN = "A"
+HADDOCK_EFFECTOR_CHAIN = "B"
+
+# AIR satisfaction fraction — 50% per A146, hardcoded constant.
+AIR_SATISFACTION_FRACTION = 0.5
 
 
 def parse_args():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--receptor", required=True, help="Receptor PDB file")
-    parser.add_argument("--effector", required=True, help="Effector PDB file")
-    parser.add_argument("--contigs", required=True, help="RFDiffusion contig string")
-    parser.add_argument("--receptor-chain", default="A", help="Receptor chain ID")
-    parser.add_argument("--effector-chain", default="B", help="Effector chain ID")
+    parser.add_argument("--receptor", required=True,
+                        help="Receptor monomer PDB file")
+    parser.add_argument("--effector", required=True,
+                        help="Effector monomer PDB file")
+    parser.add_argument("--receptor-chain", default="A",
+                        help="Receptor chain ID in input PDB (default: A)")
+    parser.add_argument("--effector-chain", default="B",
+                        help="Effector chain ID in input PDB (default: B)")
+    # Contact-pair mode (case a) — primary workhorse per A136
+    parser.add_argument("--contact-pairs", default="",
+                        help='Pairwise CA-CA distance restraints, format '
+                             '"A25-C42 A13-C94".  Hard pin.  Empty by default.')
+    # Active-residues mode (case b)
+    parser.add_argument("--receptor-active-residues", default="",
+                        help='Comma-separated receptor residue numbers / ranges, '
+                             'e.g. "25,35,40-44".  Empty by default.')
     parser.add_argument("--effector-active-residues", default="",
-                        help="Comma-separated effector residues for two-sided AIRs "
-                             "(e.g. '24,25,26,40,41'). If empty, AIRs use entire effector.")
+                        help='Comma-separated effector residue numbers / ranges. '
+                             'Empty = restrain to entire effector chain.')
+    # Global pair distance
+    parser.add_argument("--pair-distance", default="2,2,4",
+                        help='Global distance triple "target,lo_dev,hi_dev" '
+                             'for all contact pairs (default 2,2,4).')
     return parser.parse_args()
 
 
-def parse_contig_segments(contigs, rec_chain):
+# ── PDB relabelling ─────────────────────────────────────────────────
+
+
+def write_pdb_with_chain(in_path: Path, out_path: Path,
+                         src_chain: str, dst_chain: str) -> int:
+    """Copy ``in_path`` to ``out_path``, restricting to ATOM records on
+    ``src_chain`` and rewriting the chain column to ``dst_chain``.
+    Returns the number of ATOM lines written.
+
+    Other record types (HEADER, TITLE, TER, END) are preserved but
+    re-written with the dst chain letter where applicable (TER lines).
     """
-    Parse the receptor block from a contig string into an ordered list of
-    (type, start, end) tuples where type is 'fixed' or 'denovo'.
+    src_chain = src_chain.upper()
+    dst_chain = dst_chain.upper()
+    n_written = 0
+    with open(in_path) as fin, open(out_path, "w") as fout:
+        for line in fin:
+            if line.startswith("ATOM") or line.startswith("HETATM"):
+                if line[21].upper() != src_chain:
+                    continue
+                # Rewrite chain column (index 21).
+                line = line[:21] + dst_chain + line[22:]
+                fout.write(line)
+                n_written += 1
+            elif line.startswith("TER"):
+                if len(line) > 21 and line[21].upper() == src_chain:
+                    line = line[:21] + dst_chain + line[22:]
+                fout.write(line)
+            elif line.startswith("END"):
+                fout.write(line)
+                break
+            else:
+                # HEADER / TITLE / SEQRES etc. — pass through.
+                fout.write(line)
+    return n_written
 
-    Thin adapter around :class:`contig_spec.ContigSpec` (Phase 4 Tier 0).
-    Fixed segments start with the receptor chain letter (e.g. A1-400).
-    De novo segments are bare numbers (e.g. 20-30) representing lengths.
-    Commas are tolerated for back-compat.
+
+# ── AIR generation ──────────────────────────────────────────────────
+
+
+def write_air_restraints(
+    path: Path,
+    receptor_active: list,
+    receptor_chain: str,
+    effector_chain: str,
+    effector_active: list,
+) -> None:
+    """Write the ambiguous interaction restraints file.
+
+    AND-over-receptor / OR-over-effector with a 2-sided 3.0 +- 3.0 +- 5.0 A
+    distance restraint when both sides are specified, or a one-sided
+    "receptor residue to entire effector chain" 5.0 +- 5.0 +- 5.0 A
+    restraint when only the receptor side is.
+
+    No-op when receptor_active is empty: nothing to restrain.
     """
-    import sys as _sys
-    from pathlib import Path as _Path
-    _sys.path.insert(0, str(_Path(__file__).resolve().parent))
-    from contig_spec import ContigSpec, FixedSegment, DeNovoSegment  # noqa: E402
+    if not receptor_active:
+        path.write_text("")
+        return
 
-    normalised = contigs.replace(",", " ")
-    spec = ContigSpec.from_string(normalised)
+    lines = ["! Ambiguous Interaction Restraints (HADDOCK AIRs)\n",
+             f"! Receptor active residues ({len(receptor_active)}): "
+             f"{','.join(str(r) for r in receptor_active)}\n"]
+    if effector_active:
+        lines.append(
+            f"! Effector active residues ({len(effector_active)}): "
+            f"{','.join(str(r) for r in effector_active)}\n"
+        )
+        for resnum in receptor_active:
+            lines.append(
+                f"assign (resid {resnum} and segid {receptor_chain})\n"
+            )
+            lines.append("       (\n")
+            for i, eff_res in enumerate(effector_active):
+                connector = "or" if i < len(effector_active) - 1 else "  "
+                lines.append(
+                    f"        (resid {eff_res} and segid {effector_chain}) "
+                    f"{connector}\n"
+                )
+            lines.append("       ) 3.0 3.0 5.0\n")
+    else:
+        lines.append(f"! Effector active residues: entire chain {effector_chain}\n")
+        for resnum in receptor_active:
+            lines.append(
+                f"assign (resid {resnum} and segid {receptor_chain})\n"
+                f"       ((segid {effector_chain})) 5.0 5.0 5.0\n"
+            )
+    path.write_text("".join(lines))
 
-    if rec_chain.upper() not in (c.upper() for c in spec.chain_ids):
-        sys.exit(f"ERROR: receptor chain '{rec_chain}' not found in contig "
-                 f"string '{contigs}'")
 
-    parsed = []
-    chain = next(c for c in spec.chains if c.chain_id.upper() == rec_chain.upper())
-    for seg in chain.segments:
-        if isinstance(seg, FixedSegment):
-            parsed.append(("fixed", seg.start, seg.end))
-        elif isinstance(seg, DeNovoSegment):
-            parsed.append(("denovo", seg.min_len, seg.max_len))
-    return parsed
+# ── Unambig (contact-pair) restraints ───────────────────────────────
 
 
-def find_denovo_residues(parsed_segments, receptor_pdb=None, rec_chain="A"):
+def write_unambig_restraints(
+    path: Path,
+    contact_pairs: list,
+    pair_distance: tuple,
+    receptor_chain: str,
+    effector_chain: str,
+) -> None:
+    """Write unambiguous CA-CA distance restraints, one per pair.
+
+    Format per HADDOCK CNS convention:
+        assign (name CA and resid R and segid A)
+               (name CA and resid E and segid B) target lo_dev hi_dev
+
+    No-op when contact_pairs is empty: nothing to restrain.
     """
-    Walk parsed segments sequentially to compute output PDB residue numbers
-    for de novo regions. De novo tokens specify LENGTHS, not residue numbers.
-    The output PDB is numbered contiguously from 1.
+    if not contact_pairs:
+        path.write_text("")
+        return
+    target, lo_dev, hi_dev = pair_distance
+    lines = [
+        "! Unambiguous CA-CA distance restraints (contact-pair mode)\n",
+        f"! Target {target} A, lower dev {lo_dev} A, upper dev {hi_dev} A "
+        f"=> distance window [{max(0.0, target - lo_dev):.2f}, "
+        f"{target + hi_dev:.2f}] A\n",
+    ]
+    for _src_rec_chain, rec_resnum, _src_eff_chain, eff_resnum in contact_pairs:
+        # NOTE: the chain letters in the pair string refer to the USER'S
+        # input PDB chains.  The .tbl file uses HADDOCK_RECEPTOR_CHAIN /
+        # HADDOCK_EFFECTOR_CHAIN (A/B) because we relabel to A/B above.
+        lines.append(
+            f"assign (name CA and resid {rec_resnum} and segid {receptor_chain})\n"
+            f"       (name CA and resid {eff_resnum} and segid {effector_chain}) "
+            f"{target:.2f} {lo_dev:.2f} {hi_dev:.2f}\n"
+        )
+    path.write_text("".join(lines))
 
-    Variable-length segments (min != max) are resolved from the receptor PDB
-    total residue count for the receptor chain.
+
+# ── nrest tolerance hint ────────────────────────────────────────────
+
+
+def air_nrest(n_active: int) -> int:
+    """How many of the N AIRs HADDOCK should require satisfied.
+
+    50% per A146; HADDOCK's [airs] block reads this as "at least this
+    many must satisfy."  Returned for callers to plumb into docking.cfg
+    (the HADDOCK3 noecv / nrest knob).
     """
-    # Count fixed residues and identify variable-length de novo segments
-    total_fixed = 0
-    known_denovo = 0
-    variable_indices = []
-
-    for i, (seg_type, seg_min, seg_max) in enumerate(parsed_segments):
-        if seg_type == "fixed":
-            total_fixed += seg_max - seg_min + 1
-        elif seg_min == seg_max:
-            known_denovo += seg_min
-        else:
-            variable_indices.append(i)
-
-    # Resolve variable-length de novo segments via PDB residue count
-    resolved_lengths = {}
-    if variable_indices:
-        if receptor_pdb is None:
-            sys.exit("ERROR: variable-length de novo segment(s) detected but "
-                     "no receptor PDB provided to determine actual length.")
-        pdb_residues = set()
-        with open(receptor_pdb) as fh:
-            for line in fh:
-                # Filter by receptor chain to avoid overcounting in PDBs
-                # that contain additional chains (e.g. cofactors).
-                if line.startswith("ATOM") and line[21] == rec_chain.upper():
-                    pdb_residues.add(int(line[22:26].strip()))
-        remaining = len(pdb_residues) - total_fixed - known_denovo
-
-        if len(variable_indices) == 1:
-            idx = variable_indices[0]
-            seg_min, seg_max = parsed_segments[idx][1], parsed_segments[idx][2]
-            if not (seg_min <= remaining <= seg_max):
-                print(f"WARNING: inferred de novo length {remaining} outside "
-                      f"contig range {seg_min}-{seg_max}", file=sys.stderr)
-            resolved_lengths[idx] = remaining
-        else:
-            print(f"WARNING: {len(variable_indices)} variable-length de novo segments; "
-                  f"using minimum lengths.", file=sys.stderr)
-            for idx in variable_indices:
-                resolved_lengths[idx] = parsed_segments[idx][1]
-
-    # Walk segments and assign output residue numbers
-    pos = 1
-    active_residues = []
-    for i, (seg_type, seg_min, seg_max) in enumerate(parsed_segments):
-        if seg_type == "fixed":
-            pos += seg_max - seg_min + 1
-        else:
-            length = seg_min if seg_min == seg_max else resolved_lengths[i]
-            active_residues.extend(range(pos, pos + length))
-            pos += length
-
-    return sorted(active_residues)
+    if n_active <= 0:
+        return 0
+    return max(1, math.ceil(AIR_SATISFACTION_FRACTION * n_active))
 
 
-def format_ranges(residue_list):
-    """Convert a sorted list of residue numbers to compact range strings."""
-    if not residue_list:
-        return []
-    ranges = []
-    start = prev = residue_list[0]
-    for r in residue_list[1:]:
-        if r != prev + 1:
-            ranges.append(f"{start}-{prev}" if start != prev else str(start))
-            start = r
-        prev = r
-    ranges.append(f"{start}-{prev}" if start != prev else str(start))
-    return ranges
-
-
-def write_air_restraints(path, active_residues, rec_chain, eff_chain, eff_active_residues=None):
-    """
-    Write HADDOCK3 ambiguous interaction restraint (AIR) file.
-
-    If eff_active_residues is provided, each receptor active residue is
-    restrained to only those effector residues. Otherwise, restrained
-    to the entire effector chain.
-    """
-    with open(path, "w") as f:
-        f.write("! Ambiguous Interaction Restraints\n")
-        if eff_active_residues:
-            f.write(f"! Effector active residues ({len(eff_active_residues)}):\n")
-            for i in range(0, len(eff_active_residues), 20):
-                chunk = eff_active_residues[i:i+20]
-                f.write(f"!   {','.join(str(r) for r in chunk)}\n")
-            for resnum in active_residues:
-                f.write(f"assign (resid {resnum} and segid {rec_chain})\n")
-                f.write("       (\n")
-                for i, eff_res in enumerate(eff_active_residues):
-                    connector = "or" if i < len(eff_active_residues) - 1 else "  "
-                    f.write(f"        (resid {eff_res} and segid {eff_chain}) {connector}\n")
-                f.write("       ) 2.0 2.0 2.0\n")
-        else:
-            for resnum in active_residues:
-                f.write(f"assign (resid {resnum} and segid {rec_chain})\n")
-                f.write(f"       ((segid {eff_chain})) 2.0 2.0 0.0\n")
-
-
-def parse_effector_residue_spec(spec):
-    """Parse '1-80,90,95-100' into a sorted list of residue numbers."""
-    if not spec or not spec.strip():
-        return []
-    residues = set()
-    for token in spec.split(","):
-        token = token.strip()
-        if not token:
-            continue
-        if "-" in token:
-            start, end = token.split("-", 1)
-            residues.update(range(int(start), int(end) + 1))
-        else:
-            residues.add(int(token))
-    return sorted(residues)
+# ── Main ────────────────────────────────────────────────────────────
 
 
 def main():
     args = parse_args()
 
-    # ── Parse contig string ──────────────────────────────────────────────
-    parsed_segments = parse_contig_segments(args.contigs, args.receptor_chain)
-    active_residues = find_denovo_residues(parsed_segments,
-                                           receptor_pdb=args.receptor,
-                                           rec_chain=args.receptor_chain)
+    # ── Parse restraint params ───────────────────────────────────────
+    contact_pairs = parse_contact_pairs(args.contact_pairs)
+    receptor_active = list(parse_active_residues(args.receptor_active_residues))
+    effector_active = list(parse_active_residues(args.effector_active_residues))
+    pair_distance = parse_pair_distance(args.pair_distance)
 
-    # Diagnostics
-    all_fixed = set()
-    n_denovo = 0
-    for seg_type, seg_min, seg_max in parsed_segments:
-        if seg_type == "fixed":
-            all_fixed.update(range(seg_min, seg_max + 1))
-        else:
-            n_denovo += 1
+    # Validation — at least one restraint mode must be active.
+    # (The pipeline validator should have caught this already; defensive.)
+    if not contact_pairs and not receptor_active:
+        sys.exit(
+            "ERROR: HADDOCK requires at least one of --contact-pairs or "
+            "--receptor-active-residues to be non-empty.  Blind docking is "
+            "not supported by this pipeline; see notes/design_audit.md A135 "
+            "for the workflow when you don't have a target interface in mind."
+        )
 
-    print("Contig parse summary:")
-    print(f"  Total fixed receptor residues : {len(all_fixed)}")
-    print(f"  De novo segments              : {n_denovo}")
-    print(f"  Active residues for HADDOCK   : {len(active_residues)}")
-    if active_residues:
-        print(f"  Active segments               : {', '.join(format_ranges(active_residues))}")
-
-    # ── Parse effector active residues ───────────────────────────────────
-    eff_active_residues = parse_effector_residue_spec(args.effector_active_residues)
-    if eff_active_residues:
-        print(f"  Effector active residues    : {len(eff_active_residues)}")
-        print(f"  Effector active segments    : {', '.join(format_ranges(eff_active_residues))}")
-
-    if not active_residues:
-        print("ERROR: No active residues identified. Check contig string.", file=sys.stderr)
-        sys.exit(1)
-
-    # ── Write restraints ─────────────────────────────────────────────────
-    write_air_restraints(
-        "ambig_restraints.tbl", active_residues,
-        args.receptor_chain, args.effector_chain,
-        eff_active_residues if eff_active_residues else None,
+    # ── Relabel input PDBs to chains A / B ───────────────────────────
+    n_rec_atoms = write_pdb_with_chain(
+        Path(args.receptor),
+        Path("receptor_haddock.pdb"),
+        src_chain=args.receptor_chain,
+        dst_chain=HADDOCK_RECEPTOR_CHAIN,
     )
-    if eff_active_residues:
-        print(f"Generated {len(active_residues)} two-sided AIR restraints "
-              f"(receptor ↔ {len(eff_active_residues)} effector residues) -> ambig_restraints.tbl")
+    n_eff_atoms = write_pdb_with_chain(
+        Path(args.effector),
+        Path("effector_haddock.pdb"),
+        src_chain=args.effector_chain,
+        dst_chain=HADDOCK_EFFECTOR_CHAIN,
+    )
+    if n_rec_atoms == 0:
+        sys.exit(
+            f"ERROR: no ATOM records found on receptor chain "
+            f"'{args.receptor_chain}' in {args.receptor}"
+        )
+    if n_eff_atoms == 0:
+        sys.exit(
+            f"ERROR: no ATOM records found on effector chain "
+            f"'{args.effector_chain}' in {args.effector}"
+        )
+    print(f"Relabelled receptor chain {args.receptor_chain} -> "
+          f"{HADDOCK_RECEPTOR_CHAIN} ({n_rec_atoms} atoms) "
+          f"-> receptor_haddock.pdb")
+    print(f"Relabelled effector chain {args.effector_chain} -> "
+          f"{HADDOCK_EFFECTOR_CHAIN} ({n_eff_atoms} atoms) "
+          f"-> effector_haddock.pdb")
+
+    # ── Write restraint files ────────────────────────────────────────
+    write_air_restraints(
+        Path("ambig_restraints.tbl"),
+        receptor_active,
+        HADDOCK_RECEPTOR_CHAIN,
+        HADDOCK_EFFECTOR_CHAIN,
+        effector_active,
+    )
+    write_unambig_restraints(
+        Path("unambig_restraints.tbl"),
+        contact_pairs,
+        pair_distance,
+        HADDOCK_RECEPTOR_CHAIN,
+        HADDOCK_EFFECTOR_CHAIN,
+    )
+
+    # ── Summary JSON for haddock.nf to consume ───────────────────────
+    nrest = air_nrest(len(receptor_active))
+    summary = {
+        "receptor_chain": HADDOCK_RECEPTOR_CHAIN,
+        "effector_chain": HADDOCK_EFFECTOR_CHAIN,
+        "src_receptor_chain": args.receptor_chain,
+        "src_effector_chain": args.effector_chain,
+        "n_receptor_atoms": n_rec_atoms,
+        "n_effector_atoms": n_eff_atoms,
+        "contact_pairs": [
+            {"rec_chain": rc, "rec_resnum": rn,
+             "eff_chain": ec, "eff_resnum": en}
+            for rc, rn, ec, en in contact_pairs
+        ],
+        "n_contact_pairs": len(contact_pairs),
+        "receptor_active_residues": receptor_active,
+        "effector_active_residues": effector_active,
+        "pair_distance": list(pair_distance),
+        "air_nrest": nrest,
+        "air_satisfaction_fraction": AIR_SATISFACTION_FRACTION,
+        "ambig_restraints_present": bool(receptor_active),
+        "unambig_restraints_present": bool(contact_pairs),
+    }
+    Path("restraints_summary.json").write_text(json.dumps(summary, indent=2))
+
+    # ── Diagnostic output ────────────────────────────────────────────
+    if contact_pairs:
+        print(f"Wrote {len(contact_pairs)} unambig pair restraint(s) "
+              f"-> unambig_restraints.tbl  "
+              f"(target {pair_distance[0]}, "
+              f"window [{max(0.0, pair_distance[0] - pair_distance[1]):.2f}, "
+              f"{pair_distance[0] + pair_distance[2]:.2f}] A)")
     else:
-        print(f"Generated {len(active_residues)} AIR restraints -> ambig_restraints.tbl")
-
-    # ── Save active residues JSON ────────────────────────────────────────
-    with open("active_residues.json", "w") as f:
-        json.dump({
-            "receptor_chain": args.receptor_chain,
-            "active_residues": active_residues,
-            "n_active": len(active_residues),
-            "all_fixed_count": len(all_fixed),
-            "effector_active_residues": eff_active_residues,
-            "n_effector_active": len(eff_active_residues),
-        }, f, indent=2)
-
-    # ── Copy PDBs ────────────────────────────────────────────────────────
-    shutil.copy(args.receptor, "receptor_haddock.pdb")
-    shutil.copy(args.effector, "effector_haddock.pdb")
-    print(f"Copied {args.receptor} -> receptor_haddock.pdb")
-    print(f"Copied {args.effector} -> effector_haddock.pdb")
+        print("No contact pairs -> unambig_restraints.tbl is empty")
+    if receptor_active:
+        print(f"Wrote AIRs for {len(receptor_active)} receptor active "
+              f"residue(s) -> ambig_restraints.tbl "
+              f"(nrest = {nrest}, "
+              f"{AIR_SATISFACTION_FRACTION*100:.0f}% satisfaction required)")
+        if effector_active:
+            print(f"  Effector active residues: {len(effector_active)}")
+        else:
+            print(f"  Effector active residues: entire chain "
+                  f"{HADDOCK_EFFECTOR_CHAIN}")
+    else:
+        print("No receptor active residues -> ambig_restraints.tbl is empty")
 
 
 if __name__ == "__main__":

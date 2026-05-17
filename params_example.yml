@@ -58,9 +58,18 @@ effector_chain: "B"
 # In mode 4, you can write "B1-123" explicitly or use "B" if the PDB
 # contains the effector chain.
 contigs: "B A1-400/20-30/A426-435"
-hotspot: ""            # auto-derived from HADDOCK3 in modes 1-3; set manually in mode 2
-                       # e.g. "B45,B67,B89" — soft hint, not exhaustive; RFDiffusion
-                       # aims for these residues but may also contact neighbours
+hotspot: ""            # OPTIONAL RFDiffusion soft bias toward specific target residues.
+                       # e.g. "B45,B67,B89" — RFDiffusion aims for these residues
+                       # but may also contact neighbours.  Use this when biological
+                       # knowledge tells you certain target residues are critical
+                       # (e.g. homologous binding sites that aren't in close contact
+                       # in the current docked complex).  Leave empty to let
+                       # RFDiffusion explore freely based on input PDB geometry.
+                       # (Session 7: auto-derivation from HADDOCK was removed —
+                       # the docked complex's interface is already visible to
+                       # RFDiffusion from the input PDB, so the auto-derived
+                       # hotspot bias reinforces the docked pose and reduces
+                       # design diversity.  See notes/design_audit.md A143/A145.)
 num_designs: 64                            # RFDiffusion backbone designs per run (32 for tests, 64+ for production)
 rfdiff_iterations: 100                     # Diffusion denoising steps (50 for tests, 100 for production)
 rfdiff_checkpoint: "Complex_beta_ckpt.pt"  # Checkpoint filename in /opt/RFdiffusion/models/
@@ -68,8 +77,7 @@ rfdiff_checkpoint: "Complex_beta_ckpt.pt"  # Checkpoint filename in /opt/RFdiffu
                                            # Other options (Base_ckpt.pt, Complex_base_ckpt.pt) are rarely needed.
 min_hotspot_frac: 0.5      # Min fraction of effector contacts inside design region to keep a design (0.0 = no filter)
 rfdiff_contact_cutoff: 8.0 # Cα–Cα distance cutoff (Å) for receptor–effector contact
-                           # detection in rfdiffusion_filter.py.  Also reused as the
-                           # heavy-atom cutoff for HADDOCK hotspot extraction.
+                           # detection in rfdiffusion_filter.py.
 
 # ── RFDiffusion guiding potentials ───────────────────────────────────
 # Soft energy terms applied at each denoising step to bias diffusion
@@ -87,16 +95,59 @@ rfdiff_rog_min_dist: 5             # monomer_ROG minimum Rg floor (Å) — Rg va
                                    # this are not penalised (prevents over-collapsing short loops)
 
 # ── HADDOCK3 (modes 1-3 only) ────────────────────────────────────────
+# HADDOCK's job in this pipeline is GEOMETRIC PLACEMENT — placing the two
+# monomers in a compact, clash-free arrangement that gives RFDiffusion a
+# good starting point.  Energetics will be redesigned downstream, so the
+# original HADDOCK score is not the ranking criterion; clusters are
+# ranked by pair contact fraction first, then BSA (highest first).
+#
+# Two restraint modes (use either or both; at least one is REQUIRED in
+# Branch A — the validator will reject an empty config):
+#
+#   1. contact-pair mode (HARD pin) — use when you know specific
+#      residue pairs that must contact, e.g. from a homologous complex
+#      or a ChimeraX alignment of conserved beta-strand contacts.
+#      Format: "RECCHAIN+RESNUM-EFFCHAIN+RESNUM ..." (CA-CA pairs only,
+#      no plus-minus syntax).  Just 2-3 pairs is usually enough to
+#      orient the docking; HADDOCK is free to wiggle everything else.
+#
+#   2. active-residues mode (SOFT preference) — use when you know
+#      which receptor (and optionally effector) FACE should be at the
+#      interface but not specific pair contacts.  HADDOCK requires
+#      at least 50% of the listed receptor residues to contact the
+#      effector side (the active residue list when both are set, or
+#      the entire effector chain when only the receptor is set).
 haddock_sampling: 10000    # 10000 = semi-blind, 1000 = targeted
 haddock_seletop: 400       # Top N rigid-body models passed to flexref
-effector_active_residues: ""  # Comma-separated effector residue numbers to steer
-                              # HADDOCK docking toward specific effector surface patches.
-                              # e.g. "24,25,26,40,41,42,43,44,45,46,47" for AVR-PikD
-                              # binding epitope.  Leave empty ("") to restrain against
-                              # the entire effector chain (default semi-blind behaviour).
-                              # NOTE: This only affects HADDOCK3 docking restraints.
-                              # RFDiffusion hotspots are still auto-derived from the
-                              # docked interface (or set via the hotspot param).
+
+# Contact-pair mode (hard pin via unambig_restraints.tbl, CA-CA distance):
+haddock_contact_pairs: ""
+# Examples:
+#   haddock_contact_pairs: "A258-C42"                      # 1 pair
+#   haddock_contact_pairs: "A258-C42 A266-C45 A270-C94"    # 3 pairs
+
+# Active-residues mode (soft AIRs via ambig_restraints.tbl, AND-of-OR
+# with 50% nrest tolerance):
+haddock_receptor_active_residues: ""   # e.g. "258-274"   (the receptor de novo region)
+haddock_effector_active_residues: ""   # e.g. "24-47"     (the effector binding face)
+                                       # empty = restrain to entire effector chain
+
+# Global pair distance for unambig restraints.  Three positive floats
+# "target,lower_deviation,upper_deviation".  Default 2,2,4 gives a
+# distance window [0, 6] A.  No plus-minus syntax.
+haddock_pair_distance: "2,2,4"
+
+# Stop-and-resume gate for manual cluster inspection (see notes/SESSION_HANDOFF
+# for the workflow):
+#   1. First run with stop_after_haddock: true.
+#   2. Inspect cluster_metrics_table.csv + best_cluster*.pdb files under
+#      ${outdir}/haddock/ — open them in ChimeraX, pick a cluster.
+#   3. Re-run with stop_after_haddock: false AND haddock_chosen_cluster: <N>;
+#      Nextflow -resume reuses the cached HADDOCK run, only the downstream
+#      stages re-execute.
+stop_after_haddock: false
+haddock_chosen_cluster: null   # null = auto-pick by (pair_contact_fraction, BSA)
+                               # integer = override with that cluster ID
 
 # ── Rosetta pre-validation physics filter ────────────────────────────
 sc_threshold: 0.62

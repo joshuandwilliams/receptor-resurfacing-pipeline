@@ -4,11 +4,21 @@
  * =============================================================================
  * test_haddock.nf — Isolated test for the HADDOCK3 module
  * =============================================================================
- * Runs HADDOCK3_PREPARE → HADDOCK3_DOCK → HADDOCK3_PLOTS → EXTRACT_HOTSPOTS
- * → BUILD_CONTIGS in isolation from the rest of the pipeline.
+ * Per Session 7 restructure (notes/design_audit.md A149), one combined
+ * test on real biological inputs exercises both restraint modes
+ * simultaneously:
+ *   - contact-pair mode (haddock_contact_pairs)
+ *   - active-residues mode (haddock_receptor_active_residues
+ *     + haddock_effector_active_residues)
+ *
+ * Pipeline exercised:
+ *   HADDOCK3_PREPARE → HADDOCK3_DOCK → HADDOCK3_PLOTS →
+ *   HADDOCK_CLUSTER_METRICS → SELECT_HADDOCK_CLUSTER → BUILD_CONTIGS
+ *
+ * (EXTRACT_HOTSPOTS deleted in Session 7 / commit 3 of the restructure.)
  *
  * Usage:
- *   sbatch tests/haddock/run_test_haddock.sh
+ *   sbatch tests/haddock/run_test_haddock.slurm.sh
  *
  * =============================================================================
  */
@@ -24,33 +34,47 @@ params.effector_input    = "${projectDir}/data/pwl2.pdb"
 params.receptor_chain    = "A"
 params.effector_chain    = "B"
 params.contigs           = "B A1-390/20-40/A421-438"
-params.haddock_sampling  = 100    // reduced from 10000 for faster test runs
+
+// HADDOCK sampling reduced for test runs; production default 10000.
+params.haddock_sampling  = 100
 params.haddock_seletop   = 20
-// Reduced from production default of 4: with sampling=100 the clusters
+// Reduced from production default 4: with sampling=100 the clusters
 // produced by clustfcc are naturally smaller (1 cluster of ~3 models is
 // typical at this scale).  The test exists to exercise the pipeline
 // plumbing end-to-end; 2 is the floor that still demands real clustering
 // signal.  Production keeps haddock_min_cluster_size = 4 via nextflow.config.
 params.haddock_min_cluster_size = 2
-params.rfdiff_contact_cutoff = 8.0
-params.effector_active_residues = ""   // Comma-separated effector residues for HADDOCK AIRs
-params.receptor_seq      = null   // Optional: reference sequence for chain disambiguation
-params.effector_seq      = null   // Optional: reference sequence for chain disambiguation
-params.project_name      = "test_haddock"
-params.outdir            = "${projectDir}/results"
 
-// Infrastructure — params.rfdiff_container is inherited from nextflow.config
-// (single source of truth across the main pipeline and per-module tests).
+// Session 7 restraint params — exercise BOTH modes in the same test.
+// Contact-pair mode: 2 hard CA-CA pins on plausible interface residues
+// (chosen to exercise the plumbing, not to recover a known interface —
+// the sr50/pwl2 interface biology isn't required for this test).
+params.haddock_contact_pairs            = "A395-B45 A415-B70"
+// Active-residues mode: receptor design region + effector face.  The
+// receptor active list covers residues 391-420 (the de novo gap region
+// from the contig string) plus a few flanking anchors.  The effector
+// list covers a contiguous run on chain B.
+params.haddock_receptor_active_residues = "391-420"
+params.haddock_effector_active_residues = "40-80"
+params.haddock_pair_distance            = "2,2,4"
+params.haddock_chosen_cluster           = null   // auto-pick
+
+params.rfdiff_contact_cutoff = 8.0
+params.project_name          = "test_haddock"
+params.outdir                = "${projectDir}/results"
+
+// Infrastructure — params.rfdiff_container is inherited from nextflow.config.
 
 // ---------------------------------------------------------------------------
 // Includes
 // ---------------------------------------------------------------------------
 
-include { HADDOCK3_PREPARE     } from '../../modules/haddock'
-include { HADDOCK3_DOCK        } from '../../modules/haddock'
-include { HADDOCK3_PLOTS       } from '../../modules/haddock'
-include { EXTRACT_HOTSPOTS     } from '../../modules/haddock'
-include { BUILD_CONTIGS        } from '../../modules/haddock'
+include { HADDOCK3_PREPARE         } from '../../modules/haddock'
+include { HADDOCK3_DOCK            } from '../../modules/haddock'
+include { HADDOCK3_PLOTS           } from '../../modules/haddock'
+include { HADDOCK_CLUSTER_METRICS  } from '../../modules/haddock'
+include { SELECT_HADDOCK_CLUSTER   } from '../../modules/haddock'
+include { BUILD_CONTIGS            } from '../../modules/haddock'
 include { WRITE_DUMMY_MAPPING as WRITE_DUMMY_MAPPING_REC } from '../../modules/preprocessing'
 include { WRITE_DUMMY_MAPPING as WRITE_DUMMY_MAPPING_EFF } from '../../modules/preprocessing'
 
@@ -60,8 +84,8 @@ include { WRITE_DUMMY_MAPPING as WRITE_DUMMY_MAPPING_EFF } from '../../modules/p
 
 workflow {
 
-    receptor_ch    = Channel.fromPath(params.receptor_input, checkIfExists: true)
-    effector_ch    = Channel.fromPath(params.effector_input, checkIfExists: true)
+    receptor_ch = Channel.fromPath(params.receptor_input, checkIfExists: true)
+    effector_ch = Channel.fromPath(params.effector_input, checkIfExists: true)
 
     // Generate empty trim mappings (placeholder for the BUILD_CONTIGS API).
     WRITE_DUMMY_MAPPING_REC(Channel.value("receptor"))
@@ -72,15 +96,18 @@ workflow {
         effector_ch,
         params.receptor_chain,
         params.effector_chain,
-        params.contigs,
-        params.effector_active_residues,
+        params.haddock_contact_pairs,
+        params.haddock_receptor_active_residues,
+        params.haddock_effector_active_residues,
+        params.haddock_pair_distance,
         Channel.value(file("${projectDir}/bin/haddock3_prepare.py"))
     )
 
     HADDOCK3_DOCK(
         HADDOCK3_PREPARE.out.receptor_pdb_out,
         HADDOCK3_PREPARE.out.effector_pdb_out,
-        HADDOCK3_PREPARE.out.restraints,
+        HADDOCK3_PREPARE.out.ambig_restraints,
+        HADDOCK3_PREPARE.out.unambig_restraints,
         params.haddock_sampling,
         params.haddock_seletop,
         Channel.value(file("${projectDir}/bin/collect_haddock3_dock.py"))
@@ -90,24 +117,38 @@ workflow {
         HADDOCK3_DOCK.out.capri_scores,
         HADDOCK3_DOCK.out.cluster_summary,
         HADDOCK3_DOCK.out.run_dir,
-        params.contigs,
-        params.receptor_chain,
-        params.effector_active_residues,
+        params.haddock_receptor_active_residues,
+        params.haddock_effector_active_residues,
         Channel.value(file("${projectDir}/bin/haddock3_plots.py"))
     )
 
-    EXTRACT_HOTSPOTS(
-        HADDOCK3_DOCK.out.best_model,
-        params.receptor_chain,
-        params.effector_chain,
-        params.rfdiff_contact_cutoff,
-        params.receptor_seq ?: "",
-        params.effector_seq ?: "",
-        Channel.value(file("${projectDir}/bin/extract_hotspots.py"))
+    HADDOCK_CLUSTER_METRICS(
+        HADDOCK3_DOCK.out.haddock_report,
+        HADDOCK3_DOCK.out.cluster_models,
+        HADDOCK3_PREPARE.out.restraints_summary,
+        HADDOCK3_PREPARE.out.ambig_restraints,
+        HADDOCK3_PREPARE.out.unambig_restraints,
+        Channel.value(file("${projectDir}/bin/haddock_cluster_metrics.py")),
+        Channel.value(file("${projectDir}/bin"))
+    )
+
+    SELECT_HADDOCK_CLUSTER(
+        HADDOCK3_DOCK.out.haddock_report,
+        HADDOCK_CLUSTER_METRICS.out.cluster_metrics,
+        HADDOCK3_PREPARE.out.restraints_summary,
+        HADDOCK3_DOCK.out.cluster_models,
+        receptor_ch,
+        effector_ch,
+        params.haddock_contact_pairs,
+        params.haddock_receptor_active_residues,
+        params.haddock_effector_active_residues,
+        params.haddock_pair_distance,
+        params.haddock_chosen_cluster,
+        Channel.value(file("${projectDir}/bin/select_haddock_cluster.py"))
     )
 
     BUILD_CONTIGS(
-        HADDOCK3_DOCK.out.best_model,
+        SELECT_HADDOCK_CLUSTER.out.selected_pdb,
         params.receptor_chain,
         params.effector_chain,
         params.contigs,

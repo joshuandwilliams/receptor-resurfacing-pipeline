@@ -328,6 +328,30 @@ PARAM_SPECS: List[ParamSpec] = [
               "production default 4, test override 2"),
     ParamSpec("rfdiff_contact_cutoff","float_range", {"min": 0.0, "max": 30.0}),
 
+    # Session 7 restructure: restraint params for HADDOCK.  Empty string
+    # allowed everywhere; cross-param "at least one non-empty in Branch A"
+    # is enforced in _branch_a_restraints_present_check below.
+    ParamSpec("haddock_contact_pairs", "regex",
+              {"pattern": r"^(\s*[A-Za-z]\d+-[A-Za-z]\d+(?:\s+|$))*\s*$"},
+              "contact-pair mode: space-separated 'CHAIN+RES-CHAIN+RES' pairs"),
+    ParamSpec("haddock_receptor_active_residues", "regex",
+              {"pattern": r"^(\d+(-\d+)?(,\s*\d+(-\d+)?)*)?$"},
+              "active-residues mode: comma-separated receptor residue numbers + ranges"),
+    ParamSpec("haddock_effector_active_residues", "regex",
+              {"pattern": r"^(\d+(-\d+)?(,\s*\d+(-\d+)?)*)?$"},
+              "active-residues mode: comma-separated effector residue numbers + ranges"),
+    ParamSpec("haddock_pair_distance", "regex",
+              {"pattern": r"^\d+(\.\d+)?,\d+(\.\d+)?,\d+(\.\d+)?$"},
+              "pair distance triple 'target,lo_dev,hi_dev' (defaults to 2,2,4)"),
+    ParamSpec("haddock_chosen_cluster", "custom",
+              {"fn": lambda v: None if (v is None or v == "null") else (
+                  None if (isinstance(v, int) and v >= 1) else
+                  f"expected int >= 1 or null, got {v!r}"
+              )},
+              "manual cluster override; null = auto-pick by (pair_contact_fraction, BSA)"),
+    ParamSpec("stop_after_haddock", "bool", {},
+              "halt after HADDOCK_PLOTS for manual cluster inspection"),
+
     # ── Orthogonal cascade ──────────────────────────────────────────
     # Which cross_tier values get the AF3 + biophysical + Rosetta
     # cascade.  Default 'all' includes tier-none failed designs
@@ -371,11 +395,46 @@ PARAM_SPECS: List[ParamSpec] = [
     ParamSpec("negsteer_protected_set_source", "any", {},
               "protected-set source mode — TODO spec"),
     ParamSpec("af3_nomsa_seeds",        "any", {}, "list of 3 ints"),
-    ParamSpec("effector_active_residues","any", {}, "comma-separated residue list"),
 ]
 
 
 # ── Validation engine ────────────────────────────────────────────────
+
+
+def _branch_a_restraints_present(params: dict) -> Optional[str]:
+    """Cross-param rule (Session 7 A137): when Branch A is active
+    (params.receptor_input set), the user MUST supply at least one
+    HADDOCK restraint — either contact pairs or receptor active residues.
+    Returns an error message if violated, else None.
+    """
+    if not params.get("receptor_input"):
+        return None  # Not Branch A; no HADDOCK at all.
+    contact_pairs = (params.get("haddock_contact_pairs") or "").strip()
+    receptor_active = (params.get("haddock_receptor_active_residues") or "").strip()
+    if not contact_pairs and not receptor_active:
+        return (
+            "Branch A (params.receptor_input set) requires at least one of "
+            "haddock_contact_pairs or haddock_receptor_active_residues to be "
+            "non-empty.  Blind docking is not supported by this pipeline; see "
+            "notes/design_audit.md A135 for the manual workflow.  Common cases:\n"
+            "    haddock_contact_pairs: \"A25-C42 A13-C94\"            # hard pin\n"
+            "    haddock_receptor_active_residues: \"25,35,40-44\"    # soft AIR"
+        )
+    return None
+
+
+def _chosen_cluster_branch_a_only(params: dict) -> Optional[str]:
+    """params.haddock_chosen_cluster only makes sense in Branch A."""
+    chosen = params.get("haddock_chosen_cluster")
+    if chosen is None or chosen == "null":
+        return None
+    if not params.get("receptor_input"):
+        return (
+            "params.haddock_chosen_cluster only applies in Branch A "
+            "(when receptor_input is set); mode 2 (pre-docked complex) "
+            "already takes a fixed complex."
+        )
+    return None
 
 
 def validate_params(params: dict) -> List[str]:
@@ -392,6 +451,12 @@ def validate_params(params: dict) -> List[str]:
         err = validator(params[spec.name], spec.kwargs)
         if err is not None:
             errors.append(f"  - params.{spec.name}: {err}")
+
+    # Cross-param rules — only meaningful once per-param shapes are valid.
+    for rule in (_branch_a_restraints_present, _chosen_cluster_branch_a_only):
+        msg = rule(params)
+        if msg is not None:
+            errors.append(f"  - {msg}")
 
     # Unknown params: warn but don't fail.
     unknown = sorted(k for k in params.keys() if k not in spec_names)
