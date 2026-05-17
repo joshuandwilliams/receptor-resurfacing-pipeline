@@ -21,6 +21,29 @@ redesign) and an effector (the target it must bind). Branch B takes a
 pre-docked complex directly; Branch A docks a receptor + effector pair
 with HADDOCK3 first.
 
+### Branch A — HADDOCK input contract
+
+When you supply `params.receptor_input` + `params.effector_input`,
+each must be a **monomer PDB** (not a pre-aligned complex split into
+chains).  HADDOCK regenerates the complex using your restraint
+parameters.  Internally the HADDOCK stage relabels your input chains
+to `A` (receptor) and `B` (effector) regardless of what chain letters
+your input PDBs use; downstream stages assume the A/B convention.
+You still set `params.receptor_chain` / `params.effector_chain` to
+the letters in *your* input PDBs so HADDOCK_PREPARE can find the
+right atoms to relabel.
+
+HADDOCK's job in this pipeline is **geometric placement** — placing
+the two monomers in a compact, clash-free arrangement that gives
+RFDiffusion a good starting point.  Energetics are redesigned
+downstream, so cluster ranking is driven by pair contact fraction
+(highest first) with BSA as the tiebreaker, not the original HADDOCK
+score.  See `params_example.yml` and `notes/design_audit.md` Session 7
+for the full restraint vocabulary (contact-pair mode vs
+active-residues mode) and the optional manual-pick checkpoint
+(`params.stop_after_haddock` → inspect → resume with
+`params.haddock_chosen_cluster: N`).
+
 From the complex, RFDiffusion generates candidate receptor backbones
 around the fixed effector pose, Rosetta filters them by interface
 shape complementarity, and ProteinMPNN designs amino-acid sequences for
