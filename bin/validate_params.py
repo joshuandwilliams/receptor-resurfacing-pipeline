@@ -402,23 +402,28 @@ PARAM_SPECS: List[ParamSpec] = [
 
 
 def _branch_a_restraints_present(params: dict) -> Optional[str]:
-    """Cross-param rule (Session 7 A137): when Branch A is active
-    (params.receptor_input set), the user MUST supply at least one
-    HADDOCK restraint — either contact pairs or receptor active residues.
-    Returns an error message if violated, else None.
+    """Cross-param rule (Session 7 A137, post-commit-3 amendment): when
+    Branch A is active (params.receptor_input set), the user MUST supply
+    at least ONE HADDOCK restraint — contact pairs, receptor active
+    residues, or effector active residues.  Returns an error message
+    if violated, else None.
     """
     if not params.get("receptor_input"):
         return None  # Not Branch A; no HADDOCK at all.
     contact_pairs = (params.get("haddock_contact_pairs") or "").strip()
     receptor_active = (params.get("haddock_receptor_active_residues") or "").strip()
-    if not contact_pairs and not receptor_active:
+    effector_active = (params.get("haddock_effector_active_residues") or "").strip()
+    if not contact_pairs and not receptor_active and not effector_active:
         return (
-            "Branch A (params.receptor_input set) requires at least one of "
-            "haddock_contact_pairs or haddock_receptor_active_residues to be "
-            "non-empty.  Blind docking is not supported by this pipeline; see "
-            "notes/design_audit.md A135 for the manual workflow.  Common cases:\n"
-            "    haddock_contact_pairs: \"A25-C42 A13-C94\"            # hard pin\n"
-            "    haddock_receptor_active_residues: \"25,35,40-44\"    # soft AIR"
+            "Branch A (params.receptor_input set) requires at least one HADDOCK "
+            "restraint — contact pairs, receptor active residues, or effector "
+            "active residues.  Blind docking is not supported by this pipeline; "
+            "see notes/design_audit.md A135 for the manual workflow.  Common cases:\n"
+            "    haddock_contact_pairs: \"A25-C42 A13-C94\"             # hard pin\n"
+            "    haddock_receptor_active_residues: \"25,35,40-44\"     # soft AIR\n"
+            "    haddock_effector_active_residues: \"20-26\"           # 'I want\n"
+            "                                                          # this target\n"
+            "                                                          # face involved'"
         )
     return None
 

@@ -326,7 +326,7 @@ class TestBranchACrossParamRule:
             "receptor_input": "/tmp/r.pdb",
             "effector_input": "/tmp/e.pdb",
         })
-        assert any("at least one of haddock_contact_pairs" in e for e in errors)
+        assert any("at least one HADDOCK restraint" in e for e in errors)
 
     def test_branch_a_with_pairs_ok(self):
         errors = vp.validate_params({
@@ -344,14 +344,25 @@ class TestBranchACrossParamRule:
         })
         assert errors == []
 
-    def test_branch_a_with_only_effector_active_fails(self):
-        # Effector-only doesn't define a receptor design region; rejected.
+    def test_branch_a_with_only_effector_active_ok(self):
+        # Post-commit-3 amendment: effector-only is valid (the "I want
+        # this target face involved" mode).  Receptor design region for
+        # clash bookkeeping comes from the contig at HADDOCK time.
         errors = vp.validate_params({
             "receptor_input": "/tmp/r.pdb",
             "effector_input": "/tmp/e.pdb",
             "haddock_effector_active_residues": "42,94",
         })
-        assert any("at least one of haddock_contact_pairs" in e for e in errors)
+        assert errors == []
+
+    def test_branch_a_with_pairs_and_effector_active_ok(self):
+        errors = vp.validate_params({
+            "receptor_input": "/tmp/r.pdb",
+            "effector_input": "/tmp/e.pdb",
+            "haddock_contact_pairs": "A73-B31 A72-B32 A71-B33",
+            "haddock_effector_active_residues": "20-26",
+        })
+        assert errors == []
 
 
 @pytest.mark.local_unit

@@ -58,6 +58,7 @@ from pathlib import Path
 _BIN_DIR = os.path.dirname(os.path.abspath(__file__))
 if _BIN_DIR not in sys.path:
     sys.path.insert(0, _BIN_DIR)
+from contig_spec import ContigSpec, FixedSegment  # noqa: E402
 from haddock_run import (  # noqa: E402
     parse_active_residues,
     parse_contact_pairs,
@@ -98,6 +99,16 @@ def parse_args():
     parser.add_argument("--pair-distance", default="2,2,4",
                         help='Global distance triple "target,lo_dev,hi_dev" '
                              'for all contact pairs (default 2,2,4).')
+    # Contig string — for receptor design region derivation (clash bookkeeping
+    # only; AIRs still come from --receptor-active-residues).  Per Session 7
+    # post-commit-3 amendment in notes/design_audit.md.
+    parser.add_argument("--contigs", default="",
+                        help='RFDiffusion contig string (e.g. '
+                             '"A1-32/10-30/A50-68/10-10 B").  Used at HADDOCK '
+                             'time to derive the receptor design region for '
+                             'clash bookkeeping — receptor residues NOT in '
+                             'fixed contig segments are considered design '
+                             'region.  Does NOT drive AIR generation.')
     return parser.parse_args()
 
 
@@ -138,6 +149,78 @@ def write_pdb_with_chain(in_path: Path, out_path: Path,
     return n_written
 
 
+# ── Contig-derived design region (for clash bookkeeping) ───────────
+
+
+def read_pdb_residues(pdb_path: Path, chain: str) -> set:
+    """Return the set of receptor residue numbers present in the chain."""
+    out = set()
+    chain = chain.upper()
+    with open(pdb_path) as fh:
+        for line in fh:
+            if not line.startswith("ATOM"):
+                continue
+            if line[21].upper() != chain:
+                continue
+            try:
+                out.add(int(line[22:26].strip()))
+            except ValueError:
+                continue
+    return out
+
+
+def receptor_design_region_from_contig(
+    contig_string: str,
+    receptor_pdb: Path,
+    receptor_chain_in_pdb: str,
+) -> list:
+    """Compute the set of receptor PDB residues that fall in de novo
+    (non-fixed) regions of the contig.  Returns a sorted list.
+
+    Algorithm: parse contig → collect FixedSegment residue ranges on
+    the receptor chain → subtract from the set of residues actually
+    present in the receptor PDB.
+
+    Notes:
+    - The chain letter inside the contig MUST match the receptor's
+      chain in the user's input PDB (e.g. "A" if the receptor PDB
+      uses chain A).  HADDOCK_PREPARE relabels to A/B for HADDOCK
+      input, but the contig still references the USER's chain letters.
+    - Returns [] when the contig is empty (caller decides whether
+      that's an error — the validator should have rejected empty in
+      Branch A already).
+    - Returns the entire receptor PDB residue list if no FixedSegment
+      references the receptor chain (degenerate "everything is de novo"
+      case).
+    """
+    contig_string = (contig_string or "").strip()
+    if not contig_string:
+        return []
+    try:
+        spec = ContigSpec.from_string(contig_string)
+    except ValueError as e:
+        print(f"WARNING: cannot parse contig {contig_string!r}: {e}; "
+              f"design region empty.", file=sys.stderr)
+        return []
+
+    chain_letter = receptor_chain_in_pdb.upper()
+    fixed_residues: set = set()
+    chain_present = False
+    for ch in spec.chains:
+        if ch.chain_id.upper() == chain_letter:
+            chain_present = True
+            for seg in ch.segments:
+                if isinstance(seg, FixedSegment):
+                    fixed_residues.update(range(seg.start, seg.end + 1))
+    if not chain_present:
+        print(f"WARNING: receptor chain {chain_letter!r} not in contig "
+              f"{contig_string!r}; design region empty.", file=sys.stderr)
+        return []
+
+    pdb_residues = read_pdb_residues(receptor_pdb, chain_letter)
+    return sorted(pdb_residues - fixed_residues)
+
+
 # ── AIR generation ──────────────────────────────────────────────────
 
 
@@ -150,21 +233,33 @@ def write_air_restraints(
 ) -> None:
     """Write the ambiguous interaction restraints file.
 
-    AND-over-receptor / OR-over-effector with a 2-sided 3.0 +- 3.0 +- 5.0 A
-    distance restraint when both sides are specified, or a one-sided
-    "receptor residue to entire effector chain" 5.0 +- 5.0 +- 5.0 A
-    restraint when only the receptor side is.
+    Four cases (per Session 7 A133, plus the post-commit-3 amendment
+    that adds the effector-only case):
 
-    No-op when receptor_active is empty: nothing to restrain.
+    - **Both sides specified**: two-sided AIR, distance 3.0 +- 3.0 +- 5.0 A.
+      Each receptor active residue must contact (OR-of-every) effector
+      active residue.
+    - **Receptor only**: one-sided AIR, distance 5.0 +- 5.0 +- 5.0 A.
+      Each receptor active residue must contact any residue on the
+      effector chain.
+    - **Effector only**: one-sided AIR, distance 5.0 +- 5.0 +- 5.0 A.
+      Each effector active residue must contact any residue on the
+      receptor chain.  The "I want this effector face involved but
+      I don't know which receptor residues" mode.
+    - **Neither**: empty file.
     """
-    if not receptor_active:
+    if not receptor_active and not effector_active:
         path.write_text("")
         return
 
-    lines = ["! Ambiguous Interaction Restraints (HADDOCK AIRs)\n",
-             f"! Receptor active residues ({len(receptor_active)}): "
-             f"{','.join(str(r) for r in receptor_active)}\n"]
-    if effector_active:
+    lines = ["! Ambiguous Interaction Restraints (HADDOCK AIRs)\n"]
+
+    if receptor_active and effector_active:
+        # Two-sided: each receptor active → OR of every effector active.
+        lines.append(
+            f"! Receptor active residues ({len(receptor_active)}): "
+            f"{','.join(str(r) for r in receptor_active)}\n"
+        )
         lines.append(
             f"! Effector active residues ({len(effector_active)}): "
             f"{','.join(str(r) for r in effector_active)}\n"
@@ -181,12 +276,29 @@ def write_air_restraints(
                     f"{connector}\n"
                 )
             lines.append("       ) 3.0 3.0 5.0\n")
-    else:
-        lines.append(f"! Effector active residues: entire chain {effector_chain}\n")
+    elif receptor_active:
+        # Receptor-only: each receptor active → entire effector chain.
+        lines.append(
+            f"! Receptor active residues ({len(receptor_active)}): "
+            f"{','.join(str(r) for r in receptor_active)}\n"
+        )
+        lines.append(f"! Effector side: entire chain {effector_chain}\n")
         for resnum in receptor_active:
             lines.append(
                 f"assign (resid {resnum} and segid {receptor_chain})\n"
                 f"       ((segid {effector_chain})) 5.0 5.0 5.0\n"
+            )
+    else:
+        # Effector-only: each effector active → entire receptor chain.
+        lines.append(f"! Receptor side: entire chain {receptor_chain}\n")
+        lines.append(
+            f"! Effector active residues ({len(effector_active)}): "
+            f"{','.join(str(r) for r in effector_active)}\n"
+        )
+        for resnum in effector_active:
+            lines.append(
+                f"assign (resid {resnum} and segid {effector_chain})\n"
+                f"       ((segid {receptor_chain})) 5.0 5.0 5.0\n"
             )
     path.write_text("".join(lines))
 
@@ -234,16 +346,18 @@ def write_unambig_restraints(
 # ── nrest tolerance hint ────────────────────────────────────────────
 
 
-def air_nrest(n_active: int) -> int:
+def air_nrest(receptor_active: list, effector_active: list) -> int:
     """How many of the N AIRs HADDOCK should require satisfied.
 
     50% per A146; HADDOCK's [airs] block reads this as "at least this
-    many must satisfy."  Returned for callers to plumb into docking.cfg
-    (the HADDOCK3 noecv / nrest knob).
+    many must satisfy."  The total AIR count is whichever side has
+    active residues (one assign-block per receptor active in two-sided
+    or receptor-only mode; one per effector active in effector-only).
     """
-    if n_active <= 0:
+    total = len(receptor_active) if receptor_active else len(effector_active)
+    if total <= 0:
         return 0
-    return max(1, math.ceil(AIR_SATISFACTION_FRACTION * n_active))
+    return max(1, math.ceil(AIR_SATISFACTION_FRACTION * total))
 
 
 # ── Main ────────────────────────────────────────────────────────────
@@ -260,13 +374,23 @@ def main():
 
     # Validation — at least one restraint mode must be active.
     # (The pipeline validator should have caught this already; defensive.)
-    if not contact_pairs and not receptor_active:
+    if not contact_pairs and not receptor_active and not effector_active:
         sys.exit(
-            "ERROR: HADDOCK requires at least one of --contact-pairs or "
-            "--receptor-active-residues to be non-empty.  Blind docking is "
-            "not supported by this pipeline; see notes/design_audit.md A135 "
-            "for the workflow when you don't have a target interface in mind."
+            "ERROR: HADDOCK requires at least one of --contact-pairs, "
+            "--receptor-active-residues, or --effector-active-residues to be "
+            "non-empty.  Blind docking is not supported by this pipeline; see "
+            "notes/design_audit.md A135 for the workflow when you don't have "
+            "a target interface in mind."
         )
+
+    # ── Derive receptor design region from contig (clash bookkeeping) ────
+    # Used only by haddock_cluster_metrics.py to classify clashes as
+    # "in design region" (tolerated; will be redesigned by RFDiffusion)
+    # vs "outside design region" (real geometric problems).  Does NOT
+    # affect AIR generation.  Per Session 7 post-commit-3 amendment.
+    contig_design_region = receptor_design_region_from_contig(
+        args.contigs, Path(args.receptor), args.receptor_chain,
+    )
 
     # ── Relabel input PDBs to chains A / B ───────────────────────────
     n_rec_atoms = write_pdb_with_chain(
@@ -315,7 +439,7 @@ def main():
     )
 
     # ── Summary JSON for haddock.nf to consume ───────────────────────
-    nrest = air_nrest(len(receptor_active))
+    nrest = air_nrest(receptor_active, effector_active)
     summary = {
         "receptor_chain": HADDOCK_RECEPTOR_CHAIN,
         "effector_chain": HADDOCK_EFFECTOR_CHAIN,
@@ -334,8 +458,14 @@ def main():
         "pair_distance": list(pair_distance),
         "air_nrest": nrest,
         "air_satisfaction_fraction": AIR_SATISFACTION_FRACTION,
-        "ambig_restraints_present": bool(receptor_active),
+        "ambig_restraints_present": bool(receptor_active) or bool(effector_active),
         "unambig_restraints_present": bool(contact_pairs),
+        # Contig-derived receptor design region for clash bookkeeping.
+        # The receptor PDB chain letter under USER's numbering — not the
+        # HADDOCK A/B relabel — because contig + native PDB share a frame.
+        "contig": args.contigs,
+        "receptor_chain_in_pdb": args.receptor_chain,
+        "contig_design_region": contig_design_region,
     }
     Path("restraints_summary.json").write_text(json.dumps(summary, indent=2))
 
@@ -348,18 +478,40 @@ def main():
               f"{pair_distance[0] + pair_distance[2]:.2f}] A)")
     else:
         print("No contact pairs -> unambig_restraints.tbl is empty")
-    if receptor_active:
-        print(f"Wrote AIRs for {len(receptor_active)} receptor active "
-              f"residue(s) -> ambig_restraints.tbl "
+    if receptor_active and effector_active:
+        print(f"Wrote AIRs: two-sided ({len(receptor_active)} receptor "
+              f"active x {len(effector_active)} effector active) -> "
+              f"ambig_restraints.tbl  "
               f"(nrest = {nrest}, "
               f"{AIR_SATISFACTION_FRACTION*100:.0f}% satisfaction required)")
-        if effector_active:
-            print(f"  Effector active residues: {len(effector_active)}")
-        else:
-            print(f"  Effector active residues: entire chain "
-                  f"{HADDOCK_EFFECTOR_CHAIN}")
+    elif receptor_active:
+        print(f"Wrote AIRs: receptor-only ({len(receptor_active)} receptor "
+              f"active -> entire effector chain) -> ambig_restraints.tbl  "
+              f"(nrest = {nrest})")
+    elif effector_active:
+        print(f"Wrote AIRs: effector-only ({len(effector_active)} effector "
+              f"active -> entire receptor chain) -> ambig_restraints.tbl  "
+              f"(nrest = {nrest})")
     else:
-        print("No receptor active residues -> ambig_restraints.tbl is empty")
+        print("No active residues -> ambig_restraints.tbl is empty")
+    if contig_design_region:
+        ranges = []
+        run_start = prev = contig_design_region[0]
+        for r in contig_design_region[1:]:
+            if r != prev + 1:
+                ranges.append(f"{run_start}-{prev}" if run_start != prev else str(run_start))
+                run_start = r
+            prev = r
+        ranges.append(f"{run_start}-{prev}" if run_start != prev else str(run_start))
+        print(f"Receptor design region from contig ({len(contig_design_region)} "
+              f"residues): {','.join(ranges)}")
+    elif args.contigs:
+        print("Contig provided but receptor design region is empty "
+              "(check that the contig's receptor chain matches "
+              f"--receptor-chain '{args.receptor_chain}')")
+    else:
+        print("No contig provided -> contig_design_region is empty "
+              "-> clash bookkeeping falls back to pair + receptor-active set")
 
 
 if __name__ == "__main__":

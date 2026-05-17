@@ -279,9 +279,17 @@ def _air_satisfaction(
 
 
 def _design_region(restraints: dict) -> Set[int]:
-    """Mirror HaddockRun.design_region: union of receptor halves of
-    contact pairs and receptor active residues.
+    """Receptor residues counted as "in design region" for clash bookkeeping.
+
+    Per Session 7 post-commit-3 amendment: prefer the contig-derived
+    design region (computed by haddock3_prepare.py from the contig
+    string + receptor PDB).  Falls back to pair receptor halves +
+    receptor_active_residues when the contig wasn't provided (e.g. a
+    test invocation that hand-rolled a restraints_summary.json).
     """
+    contig_dr = restraints.get("contig_design_region")
+    if contig_dr:
+        return set(int(r) for r in contig_dr)
     rec_from_pairs = {int(p["rec_resnum"]) for p in restraints.get("contact_pairs", [])}
     rec_active = set(int(r) for r in restraints.get("receptor_active_residues", []))
     return rec_from_pairs | rec_active

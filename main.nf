@@ -397,6 +397,7 @@ workflow {
             params.haddock_receptor_active_residues,
             params.haddock_effector_active_residues,
             params.haddock_pair_distance,
+            params.contigs,
             Channel.value(file("${projectDir}/bin/haddock3_prepare.py"))
         )
 

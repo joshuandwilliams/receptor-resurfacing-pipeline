@@ -3711,6 +3711,97 @@ Eight more decisions landed.  Key new outcomes:
 
 ---
 
+## Session 7 — Post-implementation amendment (2026-05-17)
+
+The first end-to-end exercise of the new HADDOCK code against real bio
+inputs (Pikp-1_HMA + avr-Pia monomers) surfaced two spec gaps that A137,
+A139, and A148 had under-specified.  Both are now corrected; the change
+lands as Commit 4/3 of the HADDOCK restructure.
+
+### Gap 1 — Effector-only AIR mode was missing
+
+The user's natural intent for the avr-Pia hotspots `B20-26` was *"I want
+HADDOCK to dock the receptor toward this effector face, but I don't care
+which receptor residues it uses — if I knew which receptor residues
+mattered they'd be in `haddock_contact_pairs`."*  The original A137
+schema required at least one of `haddock_contact_pairs` or
+`haddock_receptor_active_residues` to be non-empty in Branch A.  A
+user supplying only `haddock_effector_active_residues` had their
+effector list silently dropped (the AIR file came out empty because
+`haddock3_prepare.py` only wrote AIRs when `receptor_active` was
+non-empty).
+
+**Resolution**: add the symmetric "effector-only" branch to
+`write_air_restraints` — each effector active residue restrained to
+"any residue on the receptor chain" at `5.0 ± 5.0 ± 5.0` (mirroring
+the existing receptor-only one-sided branch).  Loosen the Branch-A
+validator rule to require at least one of `haddock_contact_pairs`,
+`haddock_receptor_active_residues`, or `haddock_effector_active_residues`.
+
+The four AIR cases now handled symmetrically in `write_air_restraints`:
+
+| receptor_active | effector_active | AIR file content |
+|---|---|---|
+| empty | empty | empty (no AIRs) |
+| set   | empty | one-sided: each receptor active → entire effector chain |
+| empty | set   | one-sided: each effector active → entire receptor chain  ← **new** |
+| set   | set   | two-sided: each receptor active → OR-of-every effector active |
+
+`air_nrest` updated to size against whichever side is set.
+
+### Gap 2 — "Design region at HADDOCK time" was needlessly duplicated
+
+A139 specified the design region for clash bookkeeping as
+`pair receptor halves ∪ haddock_receptor_active_residues`.  The user's
+question post-implementation made the gap explicit: when supplying
+only `haddock_contact_pairs` (3 pairs), the design region was 3 receptor
+residues, so any clash on the actual de novo region (17+10 = 27
+receptor residues per their contig `A1-32/10-30/A50-68/10-10 B`) would
+be counted as "outside design region" — wrong.
+
+The user's mental model is correct: the receptor design region is
+**defined by the contig** and there's no good reason to re-state it as
+a separate `haddock_receptor_active_residues` param when the contig
+is already authoritative.  Q131 originally rejected feeding the contig
+into HADDOCK_PREPARE — but that rejection was about deriving AIR
+*active residues* from the contig (the bug being that contig de novo
+regions reference phantom residues that don't exist on the input PDB).
+For clash bookkeeping at HADDOCK time the contig + receptor PDB are
+both authoritative and well-defined: parse the contig, find the
+receptor chain's `FixedSegment`s, the PDB residues NOT in fixed
+segments are the design region.
+
+**Resolution**: `haddock3_prepare.py` gains a `--contigs` CLI arg.
+At prep time it computes
+`contig_design_region = pdb_receptor_residues - fixed_segment_residues`
+and writes it into `restraints_summary.json`.  `haddock_cluster_metrics.py`
+and `HaddockRun.design_region` both prefer this contig-derived set
+when present; they fall back to `pair receptor halves ∪ receptor_active`
+for legacy / synthetic fixtures with no contig.
+
+This DOES NOT undo the Q131 ban on contig-driven AIR derivation — the
+contig only ever drives clash bookkeeping; AIRs still come exclusively
+from the explicit restraint params.  The chain letter inside the
+contig refers to the USER's chain letters (matches the input PDB
+numbering), distinct from the HADDOCK A/B relabel applied to the
+restraint files.
+
+### Updated locked-decisions table (replaces rows 10 and 11 of the index)
+
+| # | Decision | Q ref |
+|---:|---|---|
+| 10 | Validator rule: when Branch A is selected, at least one of `haddock_contact_pairs`, `haddock_receptor_active_residues`, OR `haddock_effector_active_residues` MUST be non-empty.  All three empty = error pointing at workflow. | A137 amended |
+| 11 | Receptor design region (for clash bookkeeping) is derived from the contig string at HADDOCK time: PDB receptor residues NOT in `FixedSegment`s.  Optional `receptor halves of contact_pairs ∪ receptor_active_residues` fallback when contig unavailable.  AIRs still NOT derived from contig (Q131 holds). | A139 amended |
+
+### Updated AIR table semantics (replaces Q133 case (b))
+
+Case (b) is now three sub-modes, all valid:
+- **(b1)** receptor active only: one-sided AIR, each receptor active → entire effector chain.
+- **(b2)** effector active only: one-sided AIR, each effector active → entire receptor chain.  ← new
+- **(b3)** both sides: two-sided AIR, each receptor active → OR of every effector active.
+
+---
+
 ## Session 7 — Close
 
 Grill-me complete.  Q129–Q157 (29 questions across 4 batches) landed every decision needed to implement the HADDOCK restructure.  The architectural change is substantial: HADDOCK pivots from "energy-driven docking with contig-derived active residues" to "geometry-driven docking with user-supplied restraints, a per-cluster metric table, manual checkpoint capability, and BSA-primary auto-pick."  EXTRACT_HOTSPOTS is deleted; the parameter split flagged in `SESSION_HANDOFF.md` is resolved.  Two new deep-module types (`HaddockRun`, `HaddockCluster`) and one shared helper (`bin/structure_metrics.py`) join the Phase 4 catalogue.

@@ -145,6 +145,12 @@ class HaddockRun:
     receptor_active_residues: Tuple[int, ...] = ()
     effector_active_residues: Tuple[int, ...] = ()
     pair_distance: Tuple[float, float, float] = (2.0, 2.0, 4.0)
+    # Contig-derived design region (post-commit-3 amendment): the
+    # canonical source of "which receptor residues are in the design
+    # region" for clash bookkeeping.  Empty tuple means "no contig was
+    # supplied to haddock3_prepare.py" and design_region falls back to
+    # pair receptor halves + receptor_active_residues.
+    contig_design_region: Tuple[int, ...] = ()
     # ── Outputs ─────────────────────────────────────────────────────
     qualifying_clusters: Tuple[HaddockCluster, ...] = field(default_factory=tuple)
     chosen_cluster_id: Optional[int] = None
@@ -167,6 +173,11 @@ class HaddockRun:
             object.__setattr__(
                 self, "effector_active_residues",
                 tuple(self.effector_active_residues),
+            )
+        if not isinstance(self.contig_design_region, tuple):
+            object.__setattr__(
+                self, "contig_design_region",
+                tuple(self.contig_design_region),
             )
 
         for c in self.qualifying_clusters:
@@ -191,9 +202,15 @@ class HaddockRun:
     @property
     def design_region(self) -> Set[int]:
         """Receptor residues that count as "in the design region" for
-        clash bookkeeping.  Union of receptor halves of contact pairs
-        and the user-specified receptor active residues.
+        clash bookkeeping.
+
+        Preferred source (post-commit-3 amendment): contig_design_region,
+        derived by haddock3_prepare.py from the contig string + receptor
+        PDB.  Falls back to ``receptor halves of contact_pairs ∪
+        receptor_active_residues`` when no contig was passed in.
         """
+        if self.contig_design_region:
+            return set(self.contig_design_region)
         rec_from_pairs = {p[1] for p in self.contact_pairs}
         return rec_from_pairs | set(self.receptor_active_residues)
 
@@ -261,6 +278,7 @@ class HaddockRun:
         workdir = Path(workdir)
         report_path = workdir / "haddock_report.json"
         metrics_path = workdir / "cluster_metrics.json"
+        restraints_path = workdir / "restraints_summary.json"
         if not report_path.is_file():
             raise FileNotFoundError(
                 f"HaddockRun.from_workdir: {report_path} not found"
@@ -274,6 +292,12 @@ class HaddockRun:
             report = json.load(f)
         with open(metrics_path) as f:
             metrics = json.load(f)
+        # restraints_summary.json may be absent for legacy / synthetic fixtures.
+        contig_design_region: Tuple[int, ...] = ()
+        if restraints_path.is_file():
+            with open(restraints_path) as f:
+                restraints = json.load(f)
+            contig_design_region = tuple(restraints.get("contig_design_region", ()))
 
         cluster_models = report.get("cluster_models", {})
         clusters: List[HaddockCluster] = []
@@ -310,6 +334,7 @@ class HaddockRun:
             receptor_active_residues=parse_active_residues(receptor_active_residues),
             effector_active_residues=parse_active_residues(effector_active_residues),
             pair_distance=parse_pair_distance(pair_distance),
+            contig_design_region=contig_design_region,
             qualifying_clusters=tuple(clusters),
             chosen_cluster_id=chosen_cluster_id,
         )

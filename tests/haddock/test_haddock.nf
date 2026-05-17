@@ -29,11 +29,18 @@ nextflow.enable.dsl = 2
 // Parameter defaults — override via params.yml or --param on the command line
 // ---------------------------------------------------------------------------
 
-params.receptor_input    = "${projectDir}/data/sr50_3bi_lrr.pdb"
-params.effector_input    = "${projectDir}/data/pwl2.pdb"
+// Real biological inputs: Pikp-1_HMA (78-residue HMA domain, chain A)
+// and avr-Pia (68-residue MAX-fold effector, chain B) as monomer PDBs.
+// Both renumbered to start at residue 1 in ChimeraX before saving.
+params.receptor_input    = "${projectDir}/data/Pikp-1_HMA.pdb"
+params.effector_input    = "${projectDir}/data/avr-pia.pdb"
 params.receptor_chain    = "A"
 params.effector_chain    = "B"
-params.contigs           = "B A1-390/20-40/A421-438"
+// Contig: A1-32 + A50-68 are fixed (51 native residues kept), with two
+// de novo regions (33-49 → length 10-30, 69-78 → length 10).  The contig's
+// fixed segments are what HADDOCK_PREPARE uses to derive the receptor
+// design region (residues 33-49 + 69-78, 27 total) for clash bookkeeping.
+params.contigs           = "A1-32/10-30/A50-68/10-10 B"
 
 // HADDOCK sampling reduced for test runs; production default 10000.
 params.haddock_sampling  = 100
@@ -45,17 +52,24 @@ params.haddock_seletop   = 20
 // signal.  Production keeps haddock_min_cluster_size = 4 via nextflow.config.
 params.haddock_min_cluster_size = 2
 
-// Session 7 restraint params — exercise BOTH modes in the same test.
-// Contact-pair mode: 2 hard CA-CA pins on plausible interface residues
-// (chosen to exercise the plumbing, not to recover a known interface —
-// the sr50/pwl2 interface biology isn't required for this test).
-params.haddock_contact_pairs            = "A395-B45 A415-B70"
-// Active-residues mode: receptor design region + effector face.  The
-// receptor active list covers residues 391-420 (the de novo gap region
-// from the contig string) plus a few flanking anchors.  The effector
-// list covers a contiguous run on chain B.
-params.haddock_receptor_active_residues = "391-420"
-params.haddock_effector_active_residues = "40-80"
+// Session 7 restraint params (post-commit-3 amendment: effector-only AIRs
+// are now valid, and the receptor design region comes from the contig).
+//
+// Contact-pair mode: 3 hard CA-CA pins on antiparallel beta strand
+// contacts the user wants locked in place (core of the intended
+// receptor:effector interface; the receptor halves fall in the second
+// de novo region, which is the expected "HADDOCK pins to native coords;
+// RFDiffusion redesigns the residue identities" workflow).
+params.haddock_contact_pairs            = "A73-B31 A72-B32 A71-B33"
+// No receptor active list — the contig-derived design region (33-49,
+// 69-78) handles clash bookkeeping.  Per A139 post-commit-3 amendment.
+params.haddock_receptor_active_residues = ""
+// Effector hotspot: a beta strand on avr-Pia (B20-26) that the user
+// wants HADDOCK to dock the receptor toward, without specifying which
+// receptor residues should contact it (effector-only AIR mode: each
+// effector active residue is restrained to any receptor residue, AIR
+// 5.0 +- 5.0 +- 5.0).
+params.haddock_effector_active_residues = "20-26"
 params.haddock_pair_distance            = "2,2,4"
 params.haddock_chosen_cluster           = null   // auto-pick
 
@@ -100,6 +114,7 @@ workflow {
         params.haddock_receptor_active_residues,
         params.haddock_effector_active_residues,
         params.haddock_pair_distance,
+        params.contigs,
         Channel.value(file("${projectDir}/bin/haddock3_prepare.py"))
     )
 
