@@ -2965,4 +2965,1005 @@ Authoritative inputs (re-read at the start of every session):
 
 ## Session 6 — Migration strategy and success criteria (meta-decisions before per-module design)
 
+(Session 6 working notes folded into `notes/phase4_architecture_spec.md` rather than transcribed here.  The spec is the contract; this header is kept as a placeholder so the session-number sequence remains intact.)
+
+---
+
+## Session 7 — HADDOCK module restructure
+
+Opened 2026-05-17 against `phase4-impl` commit `d61a8aa`.  Sessions 1–6 closed the receptor-resurfacing core; Session 7 targets the one upstream module that was explicitly de-scoped during the inventory ("HADDOCK work is going to come later") and that the user has flagged in `SESSION_HANDOFF.md` as the next planned grill-me.
+
+Authoritative inputs already read for this session:
+- `bin/haddock3_prepare.py` (AIR generation, receptor active-residue derivation from contigs)
+- `bin/collect_haddock3_dock.py` (cluster qualification, best-cluster + best-model selection, per-cluster best models emitted)
+- `bin/build_contigs.py` (HADDOCK → RFDiffusion handoff)
+- `modules/haddock.nf` (HADDOCK3_PREPARE, HADDOCK3_DOCK, HADDOCK3_PLOTS, EXTRACT_HOTSPOTS, BUILD_CONTIGS)
+- `main.nf` Branch A wiring (lines 362–448)
+- `SESSION_HANDOFF.md` § "HADDOCK code surface" (six initial question candidates)
+
+### User-stated session intent (verbatim, 2026-05-17)
+
+> The HADDOCK module is intended to take two monomer structures and place them together in an energetically favourable but also compact way for the RFDiffusion input. There is a slight paradox in that the contacts that are likely to appear from HADDOCK are the same ones that will be redesigned by RFDiffusion, but the idea is that HADDOCK should place them close enough that RFDiffusion doesn't have to build long connecting bridges. When I try to place them in ChimeraX, I can create something that looks reasonable, but there are often clashes I haven't accounted for or overlaps, or even just minor changes that would make it much more energetically favourable. I want to be able to specify some residues I want to be interacting (which I think is the point of the AIR tables), to restrict HADDOCK to a certain interface, but essentially allow it to wiggle the two proteins around to place them as best as they can. At the end of the HADDOCK phase, I want to be able to stop the pipeline like I do with RFDiffusion, so that I can look at the representative docking placements from each of the HADDOCK clusters and choose the one which best represents my intention to go forward for RFDiffusion and the rest of the pipeline. Of course it may also be possible that I don't have a specific pose in mind, in which case I'll let HADDOCK choose the interface which might work best / be easiest to design. It doesn't necessarily matter if the binding energy isn't perfect at first, because the whole point is RFDiffusion will redesign the interface.
+
+### Implications already extractable from the intent (no grill needed)
+
+- HADDOCK's role is **geometric / clash-resolution**, not **affinity prediction**.  This reframes how to evaluate output quality — the right metric set is closer to "BSA, no clashes, COM distance, AIR satisfaction" than to "HADDOCK score / vdW energy."
+- A **stop-and-resume checkpoint** after `HADDOCK3_DOCK` (or after `HADDOCK3_PLOTS`) is required.  Pattern already exists in the pipeline: `params.stop_after_rosetta`.  Implementation should follow that pattern.
+- Two operating modes must be supported: **(a) target interface known** (use AIRs to constrain) and **(b) target interface unknown** (let HADDOCK find a reasonable one).  Mode (b) is currently degenerate — the "empty `effector_active_residues`" path gives an extremely loose AIR ("every receptor de novo residue must touch any effector residue") that is neither truly blind nor truly constrained.
+
+The questions below probe the parts of the intent that are NOT yet locked: what "compact" means operationally, how the user wants to specify partial constraints, what the checkpoint hand-off looks like in practice, and what the output contract to RFDiffusion needs to provide.
+
+### Batch 1 — Intent + restraint semantics (Q129–Q135)
+
+---
+
+**Q129 [VERIFY]** — Architectural framing.  My read of your intent: HADDOCK's job in this pipeline is **geometric placement** (compact, no clashes, contacting at the intended interface) and emphatically NOT **affinity prediction**.  That means the right "best cluster" objective is closer to "tight, well-packed, AIR-satisfying interface" than to "lowest HADDOCK score."  Concretely: a cluster with mean HADDOCK score −80 with the effector hovering 6 Å off the receptor (sparse contact) is WORSE for our purposes than a cluster with mean score −40 packed in tight contact (because RFD will redesign the energetics anyway, but it can't redesign across a 6 Å gap).  Is this the right framing?
+
+**A129:** That is exactly the correct framing.  The intention is to make the redesign as simple as possible for RFDiffusion.
+
+**Synthesis note**: Confirmed.  HADDOCK is a geometric-placement step whose output is judged by "how easy it is for RFDiffusion to build a binder across this interface," not by HADDOCK's own energy function.  Implication: every place in the codebase that currently uses HADDOCK score as a quality signal (cluster pick in `collect_haddock3_dock.py:select_best_cluster`, fail-if-score-≥-0 guard in `_validate_score`) needs to be re-evaluated against the new objective.  The fail-on-positive-score guard probably stays (positive HADDOCK score = repulsive pose, geometrically bad too); the cluster pick changes per Q130.
+
+---
+
+**Q130 [UNKNOWN]** — Operationalising "compact."  The current cluster selection in `collect_haddock3_dock.py` picks the qualifying cluster with the lowest mean HADDOCK score (vdW + electrostatic + AIR penalty + buried-SA term).  If Q129's framing is right, this objective is mis-aligned.  What's the right surrogate for "RFD-ready" placement?  Some candidates worth ranking:
+- (a) Maximum buried surface area (BSA) above some minimum.
+- (b) Minimum centre-of-mass distance between the two chains.
+- (c) Maximum number of receptor de novo residues within X Å of any effector atom (i.e. AIR-satisfaction count).
+- (d) Minimum "bridge length": shortest gap any de novo region would need to span to reach the effector from its anchoring fixed residue.
+- (e) Some hybrid (e.g. BSA ≥ threshold AND clash count = 0).
+- (f) Leave the metric to user manual inspection at the checkpoint (Q134).
+
+**A130:** You're right that the original HADDOCK score is misaligned with the objective.  The hybrid metric mixing BSA and no clashes is great.  It could be that BSA is used for ranking the clusters, and centre-of-mass and air-satisfaction could be reported.  I guess the minimum bridge distance could also be reported, but the design regions tend to be quite large so some of the distances might be very large.  Worth having all the information there for manual inspection, but ranking by BSA.  There doesn't necessarily have to be a cutoff, because sometimes the shapes won't be particularly complimentary and that will be the whole point of the RFDiffusion redesign.  You could actually compute shape complimentarity too like in the orthogonal metrics stage - it shouldn't take too long to calculate all these metrics right?  I thought about ranking on COM, but that only really works if both proteins are roughly spherical - if any have long pointy bits then COM ranking doesn't really work, so let's stick with BSA.
+
+**Synthesis note**: Ranking primary = BSA (descending).  No hard cutoff — RFDiffusion is the equaliser.  Report alongside (for manual inspection at the Q134 checkpoint): COM distance, AIR-satisfaction count, minimum bridge distance, shape complementarity (Sc), clash count (with sub-question on clash region scope deferred to Q132's add-on).  All cheap to compute on a single best-per-cluster PDB — BSA via FreeSASA (already in `bin/run_biophysical_metrics.py`), Sc via RosettaScripts (already in `bin/run_rosetta_metrics.py`'s FastRelax+InterfaceAnalyzer protocol), COM by direct atomic-coordinate arithmetic, AIR satisfaction by reading the AIR table + measuring distances on the docked complex.  Reuse of orthogonal-metrics code is the right architectural move; specifics in Batch 2 (Q140).
+
+---
+
+**Q131 [VERIFY+INVESTIGATION]** — Receptor PDB content at HADDOCK input.  `bin/haddock3_prepare.py:find_denovo_residues` computes the receptor active residues by walking the contig string and assigning **contiguous output-PDB residue numbers starting from 1** — so for a contig `A1-32/10-20/A46-72/6-6`, the active residues are 33–52 and 80–85 (assuming the variable region resolves to length 20).  But it also reads the receptor PDB to count residues and infer the variable de novo length.  This only works if the receptor PDB on disk has its residues numbered 1..N contiguously, with the de novo regions PRESENT as residues (with placeholder backbone coords) — because the AIRs emitted reference exactly those output-numbering residue numbers.
+
+Two scenarios for what your receptor input actually contains:
+
+- **Scenario A**: full native receptor PDB, numbered 1..N contiguously, with the de novo regions present as real native residues (so HADDOCK is docking the native receptor including the regions RFD will later redesign).
+- **Scenario B**: receptor PDB containing only the fixed regions (A1-32 + A46-72 from the contig), either re-numbered contiguously 1..59 OR keeping native gapped numbering — in which case the de novo "active residues" (33–52, 80–85) DON'T EXIST on the PDB at HADDOCK time, and the AIRs reference phantom residue numbers.
+
+Which scenario describes your real workflow?  (And if Scenario A, is the implicit assumption "your fixed contig segments cover the entirety of the native receptor and the de novo lengths happen to match exactly the gap residues you want replaced"?  That's a fragile assumption worth making explicit.)
+
+**A131:** The HADDOCK code is old code and I know we've developed better ways at looking at variable design regions, but the input to HADDOCK should be two PDBs: one for each protein.  It should be the whole protein.  It doesn't necessarily need to be numbered starting at 1 - it handle any number.  Also at this point the design region doesn't mean anything because RFDiffusion has not run - it's just the two native input structures, so no need to overcomplicate with those issues.  Can you look at the contig frames in the updated code and make sure this would fit in effectively.  After all the refactoring we did, the way this HADDOCK code is written will need to take into consideration the changes to code structure.  There may already be a lot of code present to necessitate what we're trying to do.
+
+**Synthesis note + ContigSpec fit-check**: This is the load-bearing answer for the whole module restructure.  At HADDOCK time:
+- Input is always two MONOMER PDBs (per Q136 too) — whole native receptor + whole native effector.
+- Residue numbering is whatever the user's PDB uses (no requirement to be 1-based contiguous).
+- The contig string's de novo regions DO NOT MEAN ANYTHING at HADDOCK time — they're abstract length placeholders for what RFDiffusion will build later.  Trying to derive "receptor active residues for HADDOCK AIRs" from the contig de novo regions (as `bin/haddock3_prepare.py:find_denovo_residues` does today) is the original architectural mistake.
+
+ContigSpec (`bin/contig_spec.py`, Phase 4 Tier 0) is the right place to confirm this.  It models a RESOLVED contig (post-RFDiffusion-sampling, with de novo lengths known) as `(FixedSegment, DeNovoSegment, BreakSegment, PassthroughSegment)` per chain.  Its frame-conversion methods (`designed_to_native`, `native_to_designed`) explicitly return `None` for positions inside de novo segments — because there IS no native counterpart.  At HADDOCK time the contig is also unresolved (`DeNovoSegment.min_len != max_len` is allowed via `from_string`), and the very methods that would map "designed-frame de novo positions" to anything concrete return None by design.  So ContigSpec doesn't help the current `find_denovo_residues` logic — it explicitly REFUSES to.  That's correct: the right architectural move is to STOP feeding the contig string into HADDOCK_PREPARE for restraint derivation.
+
+What HADDOCK_PREPARE actually needs at restraint-generation time: a set of NATIVE residue numbers on the input PDBs that the user wants restrained — supplied via user params (Q132, Q133), NOT via the contig.  The contig still needs to flow through HADDOCK as metadata for BUILD_CONTIGS downstream (which has the legitimate job of updating contig numbering against the docked PDB), but it should NOT drive AIRs.
+
+Action item for Phase 4 HADDOCK restructure: remove `find_denovo_residues` and `parse_contig_segments` from `haddock3_prepare.py` entirely.  Replace with user-param-driven residue lists.  Keep `contig_utils.parse_block_segments` for BUILD_CONTIGS only.
+
+Flagged: Q131 is now CLOSED (no further investigation needed) — the answer is that the current derivation was based on an incorrect model and is being removed wholesale.
+
+---
+
+**Q132 [UNKNOWN]** — Intended-pose specification mechanism.  You said: *"I want to be able to specify some residues I want to be interacting … to restrict HADDOCK to a certain interface, but essentially allow it to wiggle the two proteins around."*  The pipeline currently exposes `params.effector_active_residues` (a comma/range string of effector residue numbers).  When you specify these AND the receptor active residues come from the contig de novo regions, the AIR table says "every receptor de novo residue must contact at least one of these effector residues."
+
+That's one specification mode.  Two others you might want:
+
+- **Pairwise mode**: "receptor residue 35 should be near effector residue 47" — encoded as HADDOCK *unambiguous* restraints (a separate `.tbl` file with explicit residue-pair distances and tolerances).  Lets you pin specific contacts.
+- **Receptor-restricted mode**: "I don't trust the contig's de novo region as the binding face — instead, restrain receptor residues X, Y, Z (from a different list I provide) to the effector active set."  Currently the receptor active residues are 100% derived from contig de novo segments; you can't override.
+
+Which of these (effector-only AIRs, pairwise distances, user-specified receptor residues, or some combination) reflects what you actually need?  Or is the current "effector active residues + contig de novo derives receptor side" sufficient if the active-residue derivation in Q131 is correct?
+
+**A132:** The user should have the option to be more in control.  I want to be able to say "these specific pairs of residues should be in contact".  You could come up with some input format like R25E42 R13E94 for pairs that need to be in contact.  Just two of these should be enough to place most pairs correctly.  For example, all of my current campaigns involve two anti-parallel beta strands (one on each protein).  So if I could give two pairs of residues from that interface, and allow HADDOCK to do what it wants with the rest, then that would be perfect.  I've also realised that maybe 0 clashes might be a poor framing for HADDOCK - maybe it should be "0 clashes outside of the design region" and "report the number of clashes inside the design region".  Because the design region will change, and maybe allowing clashes inside the design region will allow the target to build a stronger interface which RFDiffusion will then accomodate.  Does HADDOCK even allow clashes in the first place?
+
+**Synthesis note**: Two decisions landed in this answer.
+
+(1) **Pairwise-contact specification is the primary mode.**  Format like `"A25-C42 A13-C94"` (chain-prefixed-residue, dash-joined pair, space-separated pairs) — encoded in HADDOCK via `unambig_restraints.tbl` (unambiguous distance restraints), NOT as AIRs.  AIR is "this list must contact at least one of that list" (combinatorial); unambiguous is "this specific atom-pair must be within this distance" (pointwise).  Pairwise is the right primitive for anchor-pair pinning.  Just 2–3 pairs are enough to fix orientation; HADDOCK is free to wiggle everything else.
+
+(2) **Clash-region distinction matters.**  Clashes WITHIN the user's intended binding face are tolerated (RFDiffusion will redesign those residues anyway); clashes OUTSIDE that face are real geometric problems.  This is consistent with the larger framing: HADDOCK's job is geometric placement of the *fixed* regions, not the redesigned regions.
+
+(3) **Sub-question: "Does HADDOCK even allow clashes in the first place?"**  Answer: HADDOCK's rigid-body sampling stage (CNS) doesn't strictly prohibit clashes — initial poses may have severe vdW overlaps — but the scoring function penalizes them via the vdW term, so clashy poses rank low.  The subsequent `flexref` (semi-flexible refinement) and `emref` (energy minimization) stages typically resolve all but the most stubborn overlaps.  So by the time you're picking a "best model" from a cluster, clashes are mostly gone; what remains is sidechain-level overlap, which is exactly what you can ignore inside the design region (residues will be replaced).  Concretely: we'll count heavy-atom pairs closer than 2.0 Å on the best-per-cluster PDB, classify each by whether either atom belongs to the "design region at HADDOCK time" (= user-specified receptor active residues OR receptor halves of contact pairs — defined fully in Q133/Q139), and report two numbers per cluster: `clashes_in_design_region` and `clashes_outside_design_region`.  The latter participates in the cluster filter; the former is informational.
+
+Action items: introduce new param `haddock_contact_pairs` (string).  Define the "design region at HADDOCK time" as the union of receptor residues mentioned in `haddock_contact_pairs` + `haddock_receptor_active_residues` (introduced in Q133 below).
+
+---
+
+**Q133 [VERIFY]** — AIR logical structure.  The current `write_air_restraints` produces an AND-over-receptor / OR-over-effector restraint set:  *every* receptor active residue must contact (OR-of-every) effector active residue, with distance 2.0 Å ± 2.0 Å ± 0.0 Å one-sided (when no effector list) or 2.0 Å ± 2.0 Å ± 2.0 Å two-sided.  That distance triple in HADDOCK is `(target, lower-bound-deviation, upper-bound-deviation)` — so 2.0 ± 2.0 ± 0.0 means "distance must be in [0, 2]" (no upper slack), and 2.0 ± 2.0 ± 2.0 means "distance must be in [0, 4]" (2 Å upper slack).
+
+Two things to check:
+- (a) The **AND-over-receptor** structure means a 20-residue de novo region must have ALL 20 residues in contact.  For a small effector that's geometrically infeasible.  HADDOCK normally tolerates ~50% AIR violations by default, but the AIR violation tolerance has not been tuned in this pipeline.  Is this the right structure, or should it be relaxed to "at least K of N receptor residues must satisfy"?
+- (b) The **2.0 Å target with 0 or 2 Å upper slack** is very tight — typical HADDOCK examples use 2.0 ± 2.0 ± 2.0 or even looser.  Is the tight upper bound intentional, or an accident of "I copy-pasted from a default and didn't tune"?
+
+**A133:** Please take into account my answers to the previous questions and propose a more appropriate way of handling the air tables in the cases a) specific pairs necessary to contact are chosen b) no specific pairs are chosen, but a specific interface is chosen on one or both of the proteins and c) no interface is chosen on either protein.
+
+**Synthesis note + proposal**: Three cases, three restraint files.  All driven by user params, NONE by the contig string.
+
+**Case (a) — specific pairs.**  Param: `haddock_contact_pairs = "A25-C42 A13-C94"`.  Encoded as `unambig_restraints.tbl`:
+```
+assign (resid 25 and segid A) (resid 42 and segid C) 2.0 2.0 4.0
+assign (resid 13 and segid A) (resid 94 and segid C) 2.0 2.0 4.0
+```
+Each pair is a CA-CA distance restraint, target 2.0 Å (≈ closest possible for backbone-backbone contact), lower-bound deviation 2.0 (allowing as close as touching), upper-bound deviation 4.0 (allowing up to 6 Å between CAs — which on antiparallel beta strands typically means side-chain contact through backbone H-bonding).  Two anchor pairs are usually enough to lock orientation.  No AIR table needed; HADDOCK can wiggle everything else freely.
+
+**Case (b) — known interface on one or both sides, no specific pairs.**  Params: `haddock_receptor_active_residues = "25,35,40-44"` and/or `haddock_effector_active_residues = "42,90-94"` (the second already exists).  Encoded as `ambig_restraints.tbl`:
+- If both specified: each receptor active residue is restrained to (OR-of-every effector active residue), distance 3.0 ± 3.0 ± 5.0.  This is a real two-sided AIR — "any receptor residue in this list should be within 8 Å of any effector residue in that list," looser than the current 2.0 ± 2.0 ± 2.0 to let HADDOCK find an arrangement.
+- If only receptor specified: each receptor active residue to (OR-of-every effector residue, entire chain), distance 5.0 ± 5.0 ± 5.0.  Looser still, because we have less information about where on the effector to bind.
+- If only effector specified: symmetric — each effector active residue to (OR-of-every receptor residue).  (Less common — typical case is "I know my receptor face but want HADDOCK to find the effector face").
+
+In all of case (b), HADDOCK's AIR-violation tolerance should be relaxed so that "K of N residues satisfying" passes instead of "all N must satisfy."  HADDOCK supports this via the `[airs]` block's `nrest` parameter — set to ~50% of the active residue count.
+
+If BOTH case (a) and case (b) params are supplied (user pins 2 pairs AND lists a broader receptor face), write both files.  HADDOCK applies both restraint sets; pairs are hard pins, AIRs are soft preferences.
+
+**Case (c) — nothing specified.**  Per A135, this case is deferred (the user wouldn't have a meaningful design contig anyway, and would split the workflow: blind-dock first, manually pick a face, then start a new pipeline run with case (a)/(b) params).  Validator should reject `params.haddock_contact_pairs = "" AND haddock_receptor_active_residues = "" AND haddock_effector_active_residues = ""` with a clear error message pointing to the deferred-mode note.
+
+Open design question deferred to Batch 2: should the distance numbers in cases (a)/(b) be themselves user-tunable (per-pair distances?  global distance defaults?), or hardcoded in `haddock3_prepare.py` with the values above?  See Q138 in Batch 2.
+
+---
+
+**Q134 [UNKNOWN]** — Cluster-pick checkpoint mechanics.  You want a stop-and-resume gate after HADDOCK.  Pipeline already has `params.stop_after_rosetta: false` as a pattern.  The minimum-viable checkpoint design:
+
+- HADDOCK_DOCK emits `best_cluster1.pdb`, `best_cluster2.pdb`, … (one best model per qualifying cluster — already implemented).
+- HADDOCK_PLOTS emits the diagnostic plots (already implemented).
+- New `params.stop_after_haddock: false`.  When true, pipeline halts after HADDOCK_PLOTS.
+- User manually inspects, picks a cluster, then resumes by supplying the chosen PDB explicitly.
+
+Two design choices for the resume mechanism:
+
+- **(a) Direct file handoff**: resume run takes a new param `params.docked_complex_pdb` pointing at the user's chosen PDB.  This BYPASSES HADDOCK on resume (using mode 2 / pre-docked path).  Simple, but loses the link to the HADDOCK run dir (cluster_summary, capri scores, …).
+- **(b) Cluster-ID param**: resume run takes `params.haddock_chosen_cluster: 3`.  Re-runs HADDOCK in resume mode (or reads the cached HADDOCK output dir) and selects `best_cluster3.pdb` instead of `best_model.pdb` for downstream.  Preserves provenance; more plumbing.
+
+Which do you prefer?  And: should the auto-pick (cluster with lowest mean score) be kept as the default-when-`stop_after_haddock=false`, or replaced with the Q130 surrogate?
+
+**A134:** Option b - re-runs HADDOCK in resume mode, and cluster-ID param.  Default to largest BSA cluster representative if stop after haddock is false.
+
+**Synthesis note**: Resume mechanism via `params.haddock_chosen_cluster: N`.  Implementation:
+- HADDOCK_DOCK process unchanged from a sampling perspective.  It always emits `best_cluster1.pdb`, `best_cluster2.pdb`, … (already does this).
+- New post-HADDOCK process `SELECT_HADDOCK_CLUSTER` (CPU, trivial cost) that takes (a) the `cluster_models` channel from HADDOCK_DOCK, (b) the cluster metrics (BSA et al., see Q130), and (c) `params.haddock_chosen_cluster` (default `null`).  Emits `selected_complex.pdb` and `selected_cluster_id.txt`.
+- If `params.haddock_chosen_cluster` is `null` AND `params.stop_after_haddock` is `false`: pick the cluster with maximum BSA among qualifying clusters (the new default per A130).
+- If `params.haddock_chosen_cluster: N` is set: pick `best_clusterN.pdb` from the cached HADDOCK_DOCK output.
+- Downstream consumers (EXTRACT_HOTSPOTS, BUILD_CONTIGS) take `selected_complex.pdb` always — no other changes.
+
+Default-not-stopped pick changes from "lowest mean HADDOCK score cluster" to "largest BSA cluster representative" per A130.
+
+The `params.stop_after_haddock: false` flag controls whether pipeline halts after HADDOCK_PLOTS or proceeds through SELECT_HADDOCK_CLUSTER → downstream automatically.  Implementation pattern same as `params.stop_after_rosetta`.
+
+Open design question deferred: how does the user actually inspect cluster outputs at the checkpoint?  The Nextflow `publishDir "${params.outdir}/haddock"` already lands `best_cluster*.pdb` + metrics where the user can open them in ChimeraX.  No additional checkpoint-UI work needed beyond that.  Resume after picking: `sbatch run_pipeline.slurm.sh params.yml --resume` (Nextflow resume), with `params.haddock_chosen_cluster: 3` added to params.yml.  Caching works because HADDOCK_DOCK's inputs (receptor PDB, effector PDB, restraints, sampling, seletop) are unchanged on resume — only SELECT_HADDOCK_CLUSTER's `haddock_chosen_cluster` input changes, which invalidates that process only.  Clean.
+
+---
+
+**Q135 [UNKNOWN]** — "No specific pose" mode.  You said: *"It may also be possible that I don't have a specific pose in mind, in which case I'll let HADDOCK choose the interface which might work best / be easiest to design."*  The current behaviour when `effector_active_residues=""` is NOT genuinely blind — it still constrains every receptor de novo residue to "any effector residue" with a 2 Å target distance.  That's a "must touch somewhere on the effector" constraint, which biases toward the closest effector face but doesn't let HADDOCK explore symmetric or distant alternatives.
+
+For "I have no target interface" mode, three options:
+
+- **(a) Loosen the AIR**: keep "must touch somewhere" but increase distance + tolerance to something like 5.0 ± 3.0 ± 5.0, so multiple effector faces remain accessible.
+- **(b) Drop AIRs entirely** and run blind ab initio docking.  HADDOCK supports this via `[rigidbody] randremoval` or `[rigidbody] cmrest`.  Cluster across all generated poses; let the user pick the interface they want at the Q134 checkpoint.
+- **(c) Keep current behaviour** but document it as "loosely-blind toward the closest effector face."
+
+Which do you want?  And: would you ever use mode (b) without a checkpoint (i.e. auto-pick by cluster size or some other heuristic for full-auto runs), or is the checkpoint mandatory in the no-target case?
+
+**A135:** For completely blind docking, I don't know what interface I even want on the receptor, so I wouldn't have a meaningful design contig anyway.  For this, I would need to stop after HADDOCK, see what options it has idenfitied, and choose a design contig myself before continuing.  This is a very unlikely scenario though unless it's two completely unrelated proteins.  For all my current designs I know the binding interface I want on the receptor, so maybe this step can be deferred, and we just cut down to two options a) specific pairs of contacts and b) known receptor interface, unspecified target interface.
+
+**Synthesis note**: Case (c) (truly blind, no interface specified on either side) is **deferred** as a first-class mode.  The workflow for that case is: run HADDOCK separately with whatever blind-mode settings the user prefers, choose a face manually, then start a new pipeline run with a meaningful contig + case-(a)-or-(b) params.  The pipeline validator should reject "no contact pairs, no receptor active residues, no effector active residues" with a clear error message that points to this workflow.
+
+This simplifies Q133's case (c) to "validator rejection only — not implemented."  Worth removing from the implementation scope entirely.
+
+The bigger takeaway: HADDOCK is invoked only when the user already has a target interface (on at least the receptor side).  So the AIR generation always has at least one anchor set, and the "loosely-blind" current default behaviour (every receptor de novo residue must contact something on the effector) is wrong on two counts: it derives receptor active residues from the contig (wrong per Q131), and it imposes a constraint when one is required to exist via user param (wrong per A135).
+
+---
+
+**Q136 [UNKNOWN]** — What "intended pose" means operationally.  When you DO have a specific pose in mind for a campaign, where does it come from in practice?  Three plausible sources:
+
+- **(a) A manually-built ChimeraX complex** that you've already placed by hand (with some clashes / overlaps, per your session intent) and want HADDOCK to refine.
+- **(b) An AF3 (or other predictor) prediction** of a related native complex, e.g. PikP1-AvrPikF as a template for the AvrPikA campaign.
+- **(c) A published crystal structure** of a homologous receptor–effector pair.
+
+The answer matters because if you've already got a hand-built pose, HADDOCK's role isn't "find a good pose from scratch" — it's "refine this pose to fix the clashes."  That's a different operating mode: start from the user pose with `[rigidbody] sampling=1`, then run `flexref` + `emref` only.  Much cheaper, much more targeted.  If the pose source is (b) or (c), it's closer to "use the related complex as a strong AIR set" rather than supplying the complex itself.  Which of these are you actually doing today, and which would you want supported as a first-class workflow?
+
+**A136:** Normally the intended pose is known from homologues or a ChimeraX complex.  But I can for example align targets to match part of the intended interface (like the beta strands), but differences elsewhere in the target mean that the actual interface is pretty much limited to that small region - I want haddock to wriggle the rest of the protein to build a better interface with the existing interface regions maintained.  The HADDOCK input will ALWAYS be two monomer PDBs.
+
+**Synthesis note**: Two firm contracts.
+
+(1) **Input is always two monomer PDBs.**  Even when the user has a pre-aligned ChimeraX complex, they split it back into chains and feed both PDBs separately.  HADDOCK regenerates the complex.  This kills any temptation to support a "complex-PDB-as-input refine-only mode" — the abstraction stays clean.
+
+(2) **The "intended pose" is conveyed entirely through restraint specification, not through input geometry.**  When the user has done a ChimeraX alignment that locks part of the intended interface (e.g. anti-parallel beta strands from a homologue), they translate that into `haddock_contact_pairs` (case a) — the specific residue pairs they want maintained.  HADDOCK then wiggles everything outside those pairs.  This is exactly the workflow case (a) is designed for.
+
+This further validates the Q133 proposal: case (a) (pairwise) is the workhorse mode for the user's current campaigns.  Case (b) (one-sided interface only) handles the less-common case where the user knows the receptor face but doesn't have a homologue-derived pair set.
+
+Note for documentation: the README / parameter docs should explicitly say "your HADDOCK input PDBs should be monomers — if you have a pre-aligned complex, split it into chain-A.pdb and chain-B.pdb first."  Avoids the user-supplied-complex confusion.
+
+---
+
+### Batch 1 — close
+
+Q129–Q136 collectively redefine HADDOCK's role from "energetic placement" to "geometric placement of two monomers with user-driven restraints, with a manual cluster-pick checkpoint and BSA-based default ranking."  The single most consequential change is **removing contig-driven restraint derivation entirely** (Q131): at HADDOCK time the contig is just metadata to flow forward to BUILD_CONTIGS, not a source of AIR positions.  This makes the module much smaller (no `find_denovo_residues`, no `parse_contig_segments` inside `haddock3_prepare.py`) and architecturally cleaner.
+
+Locked decisions:
+- **Restraint specification**: case (a) `haddock_contact_pairs` → unambig restraints (workhorse); case (b) `haddock_receptor_active_residues` + `haddock_effector_active_residues` → AIRs (one-sided or two-sided); case (c) blind = validator rejection.
+- **Cluster ranking**: BSA (descending), no cutoff.  Report alongside: COM distance, AIR-satisfaction count, min bridge distance, Sc, clash count (split in/out design region).
+- **"Design region" at HADDOCK time** = union of receptor residues in `haddock_contact_pairs` + `haddock_receptor_active_residues`.
+- **Checkpoint**: `params.stop_after_haddock: false`; resume with `params.haddock_chosen_cluster: N`.  New process `SELECT_HADDOCK_CLUSTER` between HADDOCK_DOCK and downstream consumers.
+- **Input contract**: always two monomer PDBs.  Intended pose conveyed via restraint params, never via complex-PDB input.
+
+Open design questions for Batch 2:
+- Pair-restraint string format details (per-pair distances or global default?  parser shape?).
+- Metric-library reuse — share `bin/run_biophysical_metrics.py` and `bin/run_rosetta_metrics.py` with the orthogonal-metrics stage, or pull into a shared `bin/structure_metrics.py`?
+- Nextflow `-resume` mechanics for `SELECT_HADDOCK_CLUSTER` — caching semantics and process boundaries.
+- `BUILD_CONTIGS` and `EXTRACT_HOTSPOTS` implications in the new world.
+- Phase 4 module type — does a `HaddockRun` deep-module type analogous to `NegativeSteeringRun` make sense here, or is the HADDOCK stage too stateless to need one?
+- HADDOCK violation tolerance plumbing (the `[airs] nrest` parameter) — exposed to user or hardcoded at ~50%?
+- Validator changes — the new restraint param schema needs validation rules in `bin/validate_params.py`.
+- AIR distance defaults — locked at the values proposed in A133's synthesis, or user-tunable?
+
+### Batch 2 — Implementation shape (Q137–Q144)
+
+---
+
+**Q137 [VERIFY]** — Restraint parameter schema.  The Batch 1 conclusions imply three new (or renamed) top-level params on `nextflow.config` + `params_example.yml`:
+
+- `haddock_contact_pairs: ""` — case (a).  String like `"A25-C42 A13-C94"`.
+- `haddock_receptor_active_residues: ""` — case (b) one-sided receptor.  String like `"25,35,40-44"` (no chain prefix needed since the receptor chain is identified by `params.receptor_chain`).
+- `haddock_effector_active_residues: ""` — case (b) one-sided effector.  Already exists; semantics unchanged but the validator gains a new rule (see below).
+- Validator rule in `bin/validate_params.py`: when Branch A is selected (i.e. `params.receptor_input` set), at least one of `haddock_contact_pairs` or `haddock_receptor_active_residues` MUST be non-empty.  All three empty = case (c) blind = error with message "blind docking is not supported by this pipeline; run HADDOCK separately, pick an interface, then resume with case (a) or (b) params."
+
+Three changes to existing params:
+- `params.contigs` no longer drives HADDOCK active residues.  It still drives RFDiffusion downstream; BUILD_CONTIGS still updates it against the docked PDB.  Nothing to remove from the user-facing param, only from the HADDOCK code path.
+- `params.effector_active_residues` (current) renames to `params.haddock_effector_active_residues` for naming consistency with the two new params.  Old name removed (Phase-4-era rename pattern; back-compat shim NOT carried forward per `notes/codebase_remediation_plan.md` Part 3).
+- The auto-rename of `find_denovo_residues` etc. inside `haddock3_prepare.py` becomes wholesale deletion (Q131).
+
+Is this schema the right shape, or do you want a more compact representation (e.g. a single nested YAML `haddock_restraints:` block with sub-keys)?
+
+**A137:** That looks like the correct shape.
+
+**Synthesis note**: Schema locked.  Three top-level params for restraints:
+- `haddock_contact_pairs: ""` (new) — case (a).
+- `haddock_receptor_active_residues: ""` (new) — case (b) receptor side.
+- `haddock_effector_active_residues: ""` (renamed from `effector_active_residues`) — case (b) effector side.
+
+Per A139 below, the case (a)/(b) framing tightens further: there is ALWAYS a receptor design region, so at minimum either `haddock_contact_pairs` or `haddock_receptor_active_residues` is non-empty.  The case-(c) "blind" mode is a validator rejection.
+
+Action items: add the three params to `nextflow.config` defaults; add ParamSpec entries to `bin/validate_params.py` (range/format validation per Q138 + Q133); document in `params_example.yml`; delete `params.effector_active_residues` reference path with the rename.
+
+---
+
+**Q138 [UNKNOWN]** — Pair-restraint string format.  The proposed format `"A25-C42 A13-C94"` carries:
+- Chain letter + residue number for each half of the pair.
+- Dash joins the two halves.
+- Space separates pairs.
+
+Two extensions worth deciding on now:
+
+(a) **Per-pair distance/tolerance**: should the format allow `"A25-C42@3.0±2.0 A13-C94"` (`@` = target distance, `±` = symmetric tolerance) for pairs that need tighter or looser bounds than the global default?  Or is one global default (2.0 ± 2.0 ± 4.0 per A133) sufficient for all anchor pairs?
+
+(b) **Atom-level specification**: HADDOCK can restrain CA-CA, CB-CB, or any-atom-to-any-atom.  CA-CA is the simplest and adequate for orientation locking on beta strands.  Should we allow `"A25CB-C42CG"` syntax for cases where the user wants sidechain-level contact, or is CA-CA-only enough?
+
+The implementation simplicity argument is for "CA-CA only with one global distance default" — minimum surface area, minimum failure modes.  The flexibility argument is for "per-pair tunable distance, atom-level optional."  Which trade-off?
+
+**A138:** The pair-restraint string format looks good.  I don't want these things to become overcomplicated though.  Maybe it's best to just keep the alpha-carbon distance, since the side chains might change with RFDiffusion -> ProteinMPNN?  And for the distance, we can have a global default but add it as a parameter.  I don't want to have to type plusminus symbols anywhere.  Maybe you could just include a pair distance parameter which takes somehting like "2,2,4" as input?
+
+**Synthesis note**: Locked.
+
+- **Atom level**: CA-CA only.  No CB/sidechain specification.  Reason: sidechains will be redesigned by RFDiffusion → ProteinMPNN, so restraining sidechain atoms wouldn't survive the redesign anyway.  Simplifies the parser dramatically: pair format is `"A25-C42"` (chain+resnum dash chain+resnum), nothing more.
+- **Distance default + override**: one global parameter applies to all pairs.  New param `haddock_pair_distance: "2,2,4"` — comma-separated three-tuple parsed as `(target, lower-deviation, upper-deviation)`, matching HADDOCK's distance restraint convention.  Default `"2,2,4"` = 2.0 Å target, allowing 0–6 Å (target ± deviations).  No per-pair tuning — if the user needs different distances for different pairs, they split into multiple runs.
+- **Format**: clean ASCII, no `±` or `@` symbols.
+
+Implementation: a small parser in (the to-be-rewritten) `haddock3_prepare.py` that turns `"2,2,4"` into the three floats and rejects malformed input early.  ParamSpec entry validates the shape.
+
+---
+
+**Q139 [VERIFY]** — Clash-region definition at HADDOCK time.  The "design region at HADDOCK time" for clash bookkeeping = union of:
+- All receptor residues mentioned in `haddock_contact_pairs` (the user-supplied anchor pairs' receptor halves).
+- All residues in `haddock_receptor_active_residues`.
+
+A heavy-atom pair within 2.0 Å is a clash.  Each clash is classified as "in design region" iff either atom belongs to a residue in the design region set above.  The cluster filter / ranking only counts clashes-OUTSIDE-design-region as real problems; clashes-inside are reported alongside as informational (their existence may even be a positive signal that RFDiffusion has real work to do in that region).
+
+Is this the right operational definition?  In particular: when the user specifies pairs `A25-C42 A13-C94`, the design region at HADDOCK time = `{25, 13}` (just two residues).  That's a very tight scope.  Should the design region also expand by some radius around those anchor residues (e.g. residues 13, 25 plus everything within 4 Å of either on the receptor), since RFDiffusion's redesign will inevitably touch a broader region than just the literal contact residues?
+
+**A139:** The design region is only ever on the receptor side.  The design region is defined for RFDiffusion.  I get that there's a paradox here, and it's confusing so I'll clarify.  Previously I talked about the receptor interface either a) being chosen or b) being selected as part of the HADDOCK process.  That was incorrect of me.  The intention here is that there should always be an intended receptor interface, since it relies on known biology.  There should always be a user-defined design region, which will be used to assess if HADDOCK clashes are in the design region.  The target may or may not have a defined interface, depending on whether the user specified specific target residues to be involved in contacts, but the receptor always will.  The 2 angstrom cutoff for clashes is fine.
+
+**Synthesis note + schema tightening**: This collapses the case (a)/(b) distinction further than I'd captured.
+
+**The receptor design region is ALWAYS user-defined.**  It exists for RFDiffusion (where the de novo regions get built) and is the canonical "where to redesign" set.  It must exist at HADDOCK time too, even though HADDOCK isn't itself doing any redesigning, because:
+- It defines which clashes are tolerated (clashes-inside-receptor-design-region are RFDiffusion's job to fix, not HADDOCK's).
+- It anchors the user's biological knowledge about which receptor face matters.
+
+The cleanest mental model:
+
+- **Receptor design region**: always specified.  Conveyed either implicitly via the receptor halves of `haddock_contact_pairs` (case a), or explicitly via `haddock_receptor_active_residues` (case b), or both (case a+b).  Validator rule: at least one of these is non-empty.
+- **Effector active residues**: optional.  When specified, narrows the AIR target.  When absent, AIRs go to the entire effector chain.
+- **Case (c) blind** is now formally rejected: no receptor design region = no pipeline.
+
+Updated **"design region at HADDOCK time"** for the clash bookkeeping (Q139 main question): set is the union of:
+- `parse_pairs(haddock_contact_pairs).receptor_residues`  (e.g. `{25, 13}` for `"A25-C42 A13-C94"`)
+- `parse_residue_list(haddock_receptor_active_residues)`  (e.g. `{25, 35, 40..44}` for `"25,35,40-44"`)
+
+The radius-expansion idea from Q139 is dropped — the user defines the design region exactly; we don't add 4 Å buffer because that would silently change which clashes count.  If they want a broader region, they specify a broader `haddock_receptor_active_residues`.  Clash counting at 2.0 Å heavy-atom cutoff confirmed.
+
+**Documentation knock-on**: the docs need a clear note that `haddock_receptor_active_residues` and the receptor design region for RFDiffusion are CLOSELY RELATED but distinct concepts.  HADDOCK's "receptor active residues" are residues we use to define AIRs and to bookkeep clashes; RFDiffusion's "receptor design region" (encoded in `params.contigs` as the de novo segments) is what gets redesigned.  In practice the user supplies them coherently — the de novo regions in the contig string are essentially the same residues as `haddock_receptor_active_residues` — but the abstractions are NOT identical and conflating them was the original sin of `find_denovo_residues`.
+
+---
+
+**Q140 [UNKNOWN]** — Metric-library reuse.  The cluster metrics from A130 (BSA, Sc, COM distance, AIR satisfaction, min bridge distance, clash counts) overlap substantially with the orthogonal-metrics stage:
+- BSA: already computed in `bin/run_biophysical_metrics.py` via FreeSASA.
+- Sc: already computed in `bin/run_rosetta_metrics.py` via RosettaScripts InterfaceAnalyzer.
+- Interface hbonds (also from `run_biophysical_metrics.py`) is potentially useful as another cluster metric.
+
+Three implementation paths:
+
+- **(a) Direct invocation**: HADDOCK_DOCK's post-processing calls `bin/run_biophysical_metrics.py` and `bin/run_rosetta_metrics.py` as subprocesses, once per cluster representative.  Each script already takes a single PDB + chain IDs.  Minimal change.
+- **(b) Shared library**: extract the BSA + Sc primitives into a new `bin/structure_metrics.py` module that both HADDOCK and the orthogonal-metrics stage import.  Cleaner factoring; one new file; some risk of breaking the orthogonal stage.
+- **(c) New HADDOCK-specific module**: write a new `bin/haddock_cluster_metrics.py` that computes all six metrics in one pass, duplicating logic with `run_biophysical_metrics.py` / `run_rosetta_metrics.py`.  No risk to orthogonal stage; some code duplication.
+
+Which fits your sensibilities about Phase 4 architecture?  My weak lean is (a) — minimal code movement, clear reuse, and the per-cluster call cost is negligible (handful of clusters max).  But you might want (b) if the deep-module discipline of Phase 4 should also apply here.
+
+**A140:** For the time being, let's just reuse existing code.  Also the COM calculations should be present somewhere in the RFDiffusion code, since they were needed to calculate COM displacement from the native design region to the designed design region.  If you can reuse that go ahead, or you may need to modify it so that it can be used for both - I don't want duplicate or semi-duplicate functions.
+
+**Synthesis note + COM code audit**: Locked.
+
+- **BSA + interface hbonds**: invoke `bin/run_biophysical_metrics.py` per cluster representative (option a).
+- **Sc**: invoke `bin/run_rosetta_metrics.py` per cluster representative.  This also computes ΔΔG, which is HADDOCK-irrelevant; the invocation accepts that overhead since `run_rosetta_metrics.py`'s --no-ddg flag (if it exists) would be added, otherwise we just discard the ΔΔG.  Worth a small Q in Batch 3 to confirm we want to incur the FastRelax cost (Rosetta InterfaceAnalyzer is the slow bit) — flagged as Q150.
+- **COM calculation**: currently lives inside `bin/rfdiffusion_filter.py:calc_motif_and_region_metrics` (lines 558, 559, 626, 669, 676) as inline `.mean(axis=0)` calls on numpy arrays of CA coordinates.  Not a standalone function.  To avoid duplication, extract a small helper `def chain_centre_of_mass(pdb_path, chain_id) -> np.ndarray` into a shared location.  Candidate homes:
+  - `bin/structure_metrics.py` (new file, the future home of any other small structure-geometry helpers).
+  - `bin/contig_utils.py` (existing utility module — but COM has nothing to do with contigs, so this would be a poor name fit).
+  - `bin/haddock_utils.py` (existing utility for HADDOCK helpers — but the consumer in `rfdiffusion_filter.py` would then weirdly depend on a HADDOCK-namespaced module).
+  - `bin/protein_structure_prediction.py` (Phase 4 Tier 2 type) — this already owns "chain/Cα geometry" per its spec.  But adding a free function to a dataclass module would be stylistically inconsistent.
+
+My lean: new `bin/structure_metrics.py` for free geometry helpers (`chain_centre_of_mass`, `chain_com_distance`, `clash_count_in_set` etc.).  Cleanest naming, no surprise dependencies.  Refactor `rfdiffusion_filter.py` to import it; HADDOCK cluster-metrics code consumes the same primitive.  Flagged for Batch 3 confirmation as Q151.
+
+---
+
+**Q141 [UNKNOWN]** — Resume-mode mechanics for SELECT_HADDOCK_CLUSTER.  Nextflow `-resume` caches each process by its inputs.  Two cleanly-cacheable patterns:
+
+- **(i) Param-driven selection inside SELECT_HADDOCK_CLUSTER**: process inputs are `(cluster_models, cluster_metrics, chosen_cluster_id)`.  When `chosen_cluster_id` changes between runs (null → 3), Nextflow re-executes SELECT_HADDOCK_CLUSTER but not HADDOCK_DOCK.  Clean.  But: on the first run with `chosen_cluster_id = null`, SELECT picks max-BSA and downstream proceeds; on resume with `chosen_cluster_id = 3` and `--resume`, SELECT re-executes with the new input, downstream re-executes because its input PDB changed.  This is correct behaviour.
+- **(ii) Two separate processes**: SELECT_HADDOCK_AUTO (picks max-BSA, runs always) and SELECT_HADDOCK_USER (runs only when chosen_cluster_id is set).  Downstream takes from whichever is active via a Nextflow `mix` or a guard.  More plumbing; clearer mental model for "the user explicitly intervened."
+
+Lean is (i) — simpler.  But (ii) is more debuggable when something goes wrong with resume.  Which?
+
+**A141:** The first, simpler option is fine.  I don't see why it would need a lot of debugging.  There should be gates in place to stop the user breaking things through the input, and they should catch anything rather than the follow-on just failing mysteriously.
+
+**Synthesis note**: Locked.  Option (i) — single `SELECT_HADDOCK_CLUSTER` process with `chosen_cluster_id` as one of its inputs.  Validator catches the failure modes BEFORE the pipeline runs:
+- `params.haddock_chosen_cluster: 3` but only 2 qualifying clusters → validator error message listing the available cluster IDs from the cached `haddock_report.json`.  (The `haddock_report.json` already records `cluster_models` keyed by cluster ID; SELECT can read it.)
+- `params.haddock_chosen_cluster` set but no cached HADDOCK_DOCK output present → validator error pointing the user at "run the pipeline once first without `haddock_chosen_cluster`, inspect the published `best_cluster*.pdb` files, then re-run with the chosen ID."
+- `params.haddock_chosen_cluster` set on a non-Branch-A run (mode 2 pre-docked complex) → validator error: "haddock_chosen_cluster is only meaningful when running HADDOCK; mode 2 already takes a fixed complex."
+
+All three are clear, actionable user errors, not mysterious downstream failures.
+
+---
+
+**Q142 [VERIFY]** — BUILD_CONTIGS post-restructure.  After SELECT_HADDOCK_CLUSTER lands the chosen complex PDB, BUILD_CONTIGS' job is unchanged: take the chosen complex + the user's original contig string, update the contig to match the docked PDB's chain lengths and numbering, emit `updated_contigs.txt` + `rfdiffusion_input.pdb`.  No behaviour change inside BUILD_CONTIGS itself — it just operates on `selected_complex.pdb` instead of `best_model.pdb`.  Confirm.
+
+(Sub-check: BUILD_CONTIGS' fourth contig parser was migrated to `ContigSpec.from_string` in commit `babd5d4` per `notes/remediation_state.md`, so it's already Phase-4-clean.  Nothing in the HADDOCK restructure should break it.)
+
+**A142:** This makes me question - does the HADDOCK process change Chain IDs or residue numberings?  You need to make sure this fits in with the frames concept and also that the RFDiffusion downstream step knows which chain IDs to expect with and without the HADDOCK input.  Should it be clear that, for example, the user must always select chain A for receptor and chain B for target when they're using HADDOCK-derived complex inputs?
+
+**Synthesis note + chain-ID audit**: Real concern, with evidence in the existing code.
+
+**HADDOCK chain ID behaviour (from code, not from spec)**:
+- `bin/extract_hotspots.py` has a full sequence-identity-based chain-disambiguation fallback (`resolve_chains`, `_best_identity`).  Comments explicitly say *"Used to disambiguate chains if HADDOCK has relabelled them."*  So **HADDOCK can and does sometimes relabel chains** — at minimum the project has been bitten by this before.
+- `bin/build_contigs.py:resolve_chains` has a parallel fallback: if expected chain IDs aren't present in the docked PDB, it picks the first two chains alphabetically as receptor/effector.
+- The user passes the original receptor/effector single-chain sequences into `EXTRACT_HOTSPOTS` (lines 422–424 of main.nf) so the fallback has reference material.
+
+**Residue numbering**: HADDOCK preserves the input PDB numbering for atoms it doesn't move (rigid-body sampling + refinement keeps residue numbers; flexref doesn't renumber).  But if the input PDBs had non-contiguous numbering, the output keeps that.  `bin/build_contigs.py:parse_contig_receptor_refs` exists specifically to remap fixed contig segment numbers to wherever they ended up in the docked PDB — confirming this is already a known concern.
+
+**Contract for the restructure**:
+- HADDOCK is given two monomer PDBs.  The pipeline relabels them to chains `A` (receptor) and `B` (effector) BEFORE handing to HADDOCK_PREPARE.  `params.receptor_chain` / `params.effector_chain` always refer to the chain IDs ON THE PRE-HADDOCK INPUT PDBS (whatever the user supplied), and HADDOCK_PREPARE writes out renamed-to-A/B copies (`receptor_haddock.pdb`, `effector_haddock.pdb`) which is what HADDOCK actually docks.
+- Downstream of HADDOCK_DOCK, everything assumes receptor=A, effector=B.  EXTRACT_HOTSPOTS' sequence-identity disambiguation becomes belt-and-braces (it'll detect the rare case where HADDOCK does still relabel something).
+- For Branch B (pre-docked complex), `params.receptor_chain` / `params.effector_chain` refer to the chains in the user's complex PDB.  Downstream uses those directly; no relabelling happens.
+
+**Documentation**: README must explicitly state "the receptor chain ID and effector chain ID in `params_example.yml` should match what's in your INPUT PDBs (or input complex PDB).  Internally the HADDOCK stage relabels to A/B."  This makes the chain-ID contract explicit.
+
+**Q142 itself**: confirmed — BUILD_CONTIGS' job is unchanged; it just operates on `selected_complex.pdb`.  The chain-ID handling it currently does (via `resolve_chains` fallback) stays as-is.
+
+---
+
+**Q143 [UNKNOWN]** — EXTRACT_HOTSPOTS in the new world.  Currently EXTRACT_HOTSPOTS reads the docked complex and finds effector residues at the interface, emitting an `"B24,B25,..."`-format hotspot string for RFDiffusion.
+
+In case (b) (known receptor interface, unknown effector face), EXTRACT_HOTSPOTS is the step that discovers the effector face from the docked complex — its output is genuinely new information used by RFDiffusion.
+
+In case (a) (user supplied pairs), the effector halves of the pairs (e.g. `C42, C94` from `"A25-C42 A13-C94"`) are already known.  Two options:
+
+- **(i) Always run EXTRACT_HOTSPOTS** (discover from docked complex).  Output may include MORE residues than the user-specified pair effector halves — those are the additional effector residues that ended up within contact distance after HADDOCK wiggled things around.  Useful: RFDiffusion gets a richer hotspot set.
+- **(ii) In case (a), skip EXTRACT_HOTSPOTS** and use the pair effector halves verbatim.  Cleaner provenance ("the user said C42 and C94 were the hotspots") but loses RFDiffusion-relevant information about which other effector residues are actually nearby.
+
+I'd lean (i) for both cases — always discover from the docked complex.  The user's pair specification has already done its job (anchoring the docking); the docked output is the source of truth for "what's at the interface now."  Agree?
+
+**A143:** I agree with the first option i, but I wanted to clarify something - is it actually meaningful to specify hotspots after HADDOCK, since HADDOCK already placed the target in a specific place, and the close contact pairs that would be auto-derived as the hotspots are already obvious to RFDiffusion from the input model - I thought the hotspots were more useful for specifying target residues which weren't necessarily in contact on the input, but that the user wanted to be in contact after RFDiffusion's design process.
+
+**Synthesis note + hotspot semantics audit**: User's intuition is right.  Evidence from `params_example.yml`:
+
+> `hotspot: ""            # auto-derived from HADDOCK3 in modes 1-3; set manually in mode 2`
+> `# e.g. "B45,B67,B89" — soft hint, not exhaustive; RFDiffusion`
+> `# aims for these residues but may also contact neighbours`
+
+The hotspot parameter in RFDiffusion (`ppi.hotspot_res=[B45,B67,B89]`) is a SOFT BIAS — "diffuse backbone toward contacting these residues."  RFDiffusion can already see the geometric layout of the input complex PDB; it doesn't need to be told "these residues are nearby" because they are.  The bias is most informative when it says "make sure THESE residues end up in contact, even if they're currently not."
+
+**Implication**: the current EXTRACT_HOTSPOTS step is doing redundant work.  It reads the docked complex and emits the residues at the interface — which RFDiffusion already infers from the input PDB.  In case (a) (pairs specified), the user's pair effector halves are likewise already obvious from the input PDB.  In neither case does EXTRACT_HOTSPOTS add information beyond what's geometrically present.
+
+**Two architectural choices**:
+
+- **(i) Keep EXTRACT_HOTSPOTS as a redundant safety net.**  It costs little, and there's a possible edge case where RFDiffusion's internal interface inference disagrees with the explicit hotspot list — making the disagreement visible could help debug bad designs.
+- **(ii) Delete EXTRACT_HOTSPOTS entirely.**  Hotspots come from the user via `params.hotspot` (which is "biological knowledge about which target residues we want contacted").  If the user doesn't provide one, RFDiffusion runs without the soft bias and uses the input PDB geometry alone.  Simpler, cleaner; loses the safety net.
+- **(iii) Repurpose EXTRACT_HOTSPOTS.**  Keep the process but change what it computes — instead of "what's already at the interface," compute "what's NOT at the interface but is in a homologous binding site" by aligning to a reference complex.  Much more useful information, but much more complex.
+
+My lean is (ii) — delete it.  The current logic gives RFDiffusion information it already has; removing the redundancy simplifies the module without losing capability.  `params.hotspot` stays as a user-facing optional input (already supports manual specification per main.nf line 439); the auto-derive path goes away.  This also resolves the `params.rfdiff_contact_cutoff` / `params.haddock_hotspot_cutoff` parameter split flagged in `SESSION_HANDOFF.md` (high-priority item #2): EXTRACT_HOTSPOTS was the only HADDOCK-side consumer of that cutoff; deleting it removes the shared-cutoff confusion entirely.
+
+Open as Q145 in Batch 3 — locking the deletion needs your sign-off, since it changes the user-facing behaviour of Branch A (currently the hotspot is auto-derived, will require explicit user input or RFDiffusion-without-hotspot after the change).
+
+---
+
+**Q144 [UNKNOWN]** — Phase 4 module type: `HaddockRun`?  By analogy with `NegativeSteeringRun` and `DesignCohort`, the HADDOCK stage could grow a deep-module type that wraps the whole stage:
+
+```python
+@dataclass(frozen=True)
+class HaddockRun:
+    receptor_pdb: Path
+    effector_pdb: Path
+    restraints: HaddockRestraints  # tagged union: ContactPairs | ActiveResidues
+    clusters: Tuple[HaddockCluster, ...]  # post-docking, per-qualifying-cluster
+    chosen_cluster_id: Optional[int]
+
+    @classmethod
+    def from_workdir(cls, workdir: Path) -> "HaddockRun": ...
+    def selected_complex_pdb(self) -> Path: ...
+    def selected_metrics(self) -> HaddockClusterMetrics: ...
+    def to_rfdiffusion_input(self) -> Tuple[Path, ContigSpec, HotspotString]: ...
+```
+
+Costs: ~300 LOC of new type + tests; another `from_workdir` to maintain (this is a real maintenance burden — see how much rebuilding `NegativeSteeringRun.from_workdir` cost in Phase 4).
+Benefits: typed interface for downstream consumers; one place to put the restraint-spec validation and metric aggregation; consistent with the Phase 4 architecture pattern.
+
+Or: keep HADDOCK as thin Nextflow processes + Python CLIs, no deep-module type.  HADDOCK is a one-shot stage (not iterated), much smaller than negsteer, and its "state" is just a directory of files — there's less benefit from a typed wrapper.
+
+Is `HaddockRun` worth building, or should we keep the stage stateless?
+
+**A144:** I think the HaddockRun class is a great idea.
+
+**Synthesis note**: Approved.  `HaddockRun` joins the Phase 4 deep-module roster.  Spec to be locked in Batch 3 (Q152), then implementation lands as a single Tier-N commit (probably Tier 3 alongside `DesignedBackbone` since it sits at the same architectural level — both wrap "a single docking/design event with its inputs and outputs").
+
+Initial spec sketch (refined in Q152):
+
+```python
+@dataclass(frozen=True)
+class HaddockRestraints:
+    contact_pairs: Tuple[ContactPair, ...]              # case (a) — may be empty
+    receptor_active_residues: Tuple[int, ...]           # case (b) receptor side
+    effector_active_residues: Tuple[int, ...]           # case (b) effector side — may be empty
+    pair_distance: Tuple[float, float, float]            # (target, lo_dev, hi_dev)
+
+    @property
+    def design_region(self) -> Set[int]: ...            # receptor-side, for clash bookkeeping
+
+@dataclass(frozen=True)
+class HaddockCluster:
+    cluster_id: int
+    size: int
+    mean_haddock_score: float
+    best_model_pdb: Path
+    metrics: HaddockClusterMetrics                       # BSA, COM, AIR-sat, bridge, Sc, clashes_in/out
+
+@dataclass(frozen=True)
+class HaddockRun:
+    receptor_pdb: Path
+    effector_pdb: Path
+    restraints: HaddockRestraints
+    qualifying_clusters: Tuple[HaddockCluster, ...]
+    chosen_cluster_id: Optional[int]                     # None ⇒ auto-pick by max BSA
+
+    @classmethod
+    def from_workdir(cls, workdir: Path) -> "HaddockRun": ...
+    @property
+    def selected(self) -> HaddockCluster: ...
+    def to_rfdiffusion_input(self) -> Path: ...          # returns the chosen complex PDB path
+```
+
+Note: `to_rfdiffusion_input` returns ONLY the PDB.  Contig update is BUILD_CONTIGS' job (separate process); hotspot is dropped per A143.
+
+---
+
+### Batch 2 — close
+
+Q137–Q144 locked the implementation shape.  Key outcomes beyond the locked decisions:
+- **Schema tightening** (A139): receptor design region is ALWAYS user-defined.  No "discover from HADDOCK" path.  Validator enforces "at least one of `haddock_contact_pairs` or `haddock_receptor_active_residues` non-empty."
+- **EXTRACT_HOTSPOTS likely deletion** (A143): the auto-derive path duplicates information RFDiffusion already has from the input PDB.  User's `params.hotspot` (optional) becomes the only source.  Resolves the `rfdiff_contact_cutoff` / `haddock_hotspot_cutoff` parameter split flagged in SESSION_HANDOFF.
+- **COM consolidation** (A140): inline COM calls in `rfdiffusion_filter.py` get extracted into a shared `bin/structure_metrics.py` helper.  No duplication; both stages use the same primitive.
+- **Chain-ID contract** (A142): pre-HADDOCK input PDBs are relabelled to A/B by HADDOCK_PREPARE; downstream assumes A/B.  Existing chain-disambiguation fallbacks in `extract_hotspots.py` and `build_contigs.py` stay as belt-and-braces.
+- **HaddockRun deep-module type** (A144): approved.  Joins the Phase 4 type catalogue.
+
+New questions surfaced:
+- Q145 — EXTRACT_HOTSPOTS deletion sign-off.
+- Q150 — `run_rosetta_metrics.py` invocation cost (FastRelax overhead) for per-cluster Sc.
+- Q151 — `bin/structure_metrics.py` as the new home for COM helper (and other geometry primitives).
+- Q152 — `HaddockRun` spec finalisation.
+
+Batch 3 covers these plus a handful of remaining loose ends (AIR violation tolerance, file layout for the two `.tbl` restraint files when both case (a) and case (b) are specified, and validator/tests delta).
+
+### Batch 3 — Loose ends + spec finalisation (Q145–Q152)
+
+---
+
+**Q145 [VERIFY]** — Delete EXTRACT_HOTSPOTS.  Per A143 analysis, the auto-derive path duplicates information RFDiffusion already infers from the input PDB; the user's `params.hotspot` (optional) becomes the only source.  Concrete changes:
+- Delete `bin/extract_hotspots.py`, `modules/haddock.nf:EXTRACT_HOTSPOTS`.
+- Delete the `main.nf` lines that wire EXTRACT_HOTSPOTS into Branch A.
+- `params.hotspot` stays as a user-facing optional string; passes through unchanged from `params_example.yml` to RFDIFFUSION.
+- `params.rfdiff_contact_cutoff` keeps its current role (Cα–Cα cutoff in `rfdiffusion_filter.py`).  The "also used for HADDOCK hotspot extraction" comment in `params_example.yml` gets dropped.
+- README documents that for Branch A users who want hotspot bias, they should specify `params.hotspot` manually (using their biological knowledge of which target residues matter), not rely on auto-derive.
+
+Are you OK losing the auto-derive (existing) behaviour wholesale, or do you want to keep EXTRACT_HOTSPOTS as a fallback that fires only when `params.hotspot` is empty?
+
+**A145:** I wanted you to help me understand if it's still meaningful to have auto-derived hotspots when there are no hotspots specified.  You just asked another question making an assumption.  I don't know if there's any point RFDiffusion receiving hotspot strings for hotspots autoderived from HADDOCK - surely that just encourages it to redesign the same interface as the native receptor?  Surely it makes more sense to remove the autoderision and allow RFDiffusion to generate varied design interfaces constrained on just a couple of user-defined hotspots?
+
+**Synthesis note**: User's reasoning is correct and locks the decision.  Auto-derived hotspots come from the docked complex's interface — feeding those back to RFDiffusion as `ppi.hotspot_res=[...]` is a soft bias that says "make sure your designs contact THESE specific target residues."  Since those residues are the exact ones HADDOCK placed close to the receptor's de novo regions, the bias just tells RFDiffusion "preserve the contact pattern HADDOCK chose."  That reduces design diversity — RFDiffusion can no longer explore variant contact patterns that might lead to stronger binders.
+
+The right behaviour is exactly what the user described: **auto-derive deleted; user-specified hotspots only.**  When a user supplies `params.hotspot = "C45,C67,C89"`, that comes from biological knowledge (e.g. "these are the residues homologous receptors contact, even when our docked pose hasn't put them in contact yet").  When the user supplies nothing, RFDiffusion explores freely guided only by the input PDB's geometry.
+
+Locked actions for Q145 (no further user input needed):
+- Delete `bin/extract_hotspots.py`.
+- Delete `modules/haddock.nf:EXTRACT_HOTSPOTS` process definition.
+- Delete the EXTRACT_HOTSPOTS wiring in `main.nf` Branch A (lines 413–425, 438–441).
+- `main.nf` `hotspot_ch` becomes simply `Channel.value(params.hotspot ?: "")` in both Branch A and Branch B paths.
+- `params.hotspot` doc updated: "Optional target-residue bias for RFDiffusion (e.g. `C45,C67,C89`).  Use this to bias designs toward contacting specific effector residues based on biological knowledge — for example, residues homologous receptors are known to contact.  Leave blank to let RFDiffusion explore freely based on the input PDB geometry alone."
+- `params.rfdiff_contact_cutoff` doc updated: drop the "also used for HADDOCK hotspot extraction" line (the HADDOCK reference is now gone).
+- The `rfdiff_contact_cutoff` / `haddock_hotspot_cutoff` parameter split flagged as high-priority #2 in `SESSION_HANDOFF.md` is RESOLVED by this deletion (HADDOCK no longer has a hotspot cutoff consumer).
+
+---
+
+**Q146 [UNKNOWN]** — AIR violation tolerance.  HADDOCK's CNS engine has a parameter `nrest` in the `[airs]` block that says "this many AIRs MUST be satisfied" — the rest are soft.  Default in HADDOCK3 is to require all of them; in case (b) two-sided AIRs (every receptor active residue must contact an effector active residue), this is geometrically infeasible for any active residue list longer than ~6 residues.  Two options:
+
+- **(i) Auto-set `nrest = ceil(0.5 × N_active)`** in `haddock3_prepare.py` based on the active-residue counts.  Users don't think about it.  50% is the canonical HADDOCK literature value.
+- **(ii) Expose a `params.haddock_air_satisfaction_frac: 0.5`** so users can tune.  More surface area; allows campaigns with very long de novo regions to relax to 30% if needed.
+
+Lean is (i) — auto-set with the 50% default — to keep params minimal.  But you might want the knob for the more difficult campaigns (Pwt3 with its atypical fold).  Which?
+
+**A146:** Would it be possible to output as part of the metrics table the percentage of user-defined pairs that are actually in contact?  I'm unlikely to be selecting any more than 3-4 pairs of contacts to be honest - the more I choose the less flexibility HADDOCK has, which defeats the whole point.  You can set the 50% threshold but I want to prioritise those with higher percentages of intended contacts where possible.
+
+**Synthesis note**: Locked, with a new per-cluster metric added.
+
+- **AIR satisfaction (active residues = case (b))**: auto-set `nrest = ceil(0.5 × N_active_residues)` in `haddock3_prepare.py` when writing the AIR file.  No user-facing param.  50% is the canonical HADDOCK literature value and matches the user's "soft list of possibilities" framing in A148.
+- **NEW per-cluster metric**: `pair_contact_fraction` — fraction of `haddock_contact_pairs` (case (a)) whose CA-CA distance on this cluster's best model is within the restraint's upper bound (default `2 + 4 = 6 Å`).  Added to `HaddockCluster` (flattened per A151 below).
+- **Ranking**: primary sort key is still BSA descending (per A130).  `pair_contact_fraction` is reported alongside; the user manually prioritises clusters with both high BSA AND high pair satisfaction at the checkpoint.  Auto-pick (when `stop_after_haddock=false`) stays max-BSA only — the user does the trade-off when they want to.  Open Q in Batch 4 if you want the auto-pick to incorporate pair fraction.
+
+The "fewer pairs = more HADDOCK flexibility" observation is the right intuition.  At 3–4 pairs and 50% AIR satisfaction over a typical 10–20-residue receptor active list, HADDOCK has room to wiggle while still hitting the user's anchor points.
+
+---
+
+**Q147 [UNKNOWN]** — Restraint file layout when case (a) AND case (b) both specified.  `haddock3_prepare.py` writes restraints into the workdir.  HADDOCK reads two file types: `ambig_restraints.tbl` (AIRs) and `unambig_restraints.tbl` (distance restraints).  When the user specifies both pairs AND active residues:
+
+- **(i) Two files**: `ambig_restraints.tbl` for the AIR side (from active residues), `unambig_restraints.tbl` for the pair side.  HADDOCK reads both; pairs hard-pin, AIRs soft-prefer.  Cleanest separation.
+- **(ii) One AIR file**: encode pairs as ambiguous restraints too (with only one effector residue in the OR).  Loses the hard-pin semantics; arguably worse.
+
+(i) wins on semantics; just confirming.  The docking.cfg in `modules/haddock.nf` currently references `ambig_fname` only — needs an additional `unambig_fname` line when pairs are present (or always, with an empty unambig file when not).  Minor Nextflow plumbing; not a real design question.  Confirm?
+
+**A147:** Something I'd like to keep in mind for the future is, maybe it would be better to do docking with the side chains from the design region removed.  I'm not sure how feasible or biologically meaningful this is - it might allow HADDOCK to place the target closer and generate a larger interface surface area, RFDiffusion to account for that closeness, and MPNN to choose residue identities that fill the closer gap.  Not to do now - just to consider for the future.  Also you have to say what cases a and b are I've been reading thousands of lines of code there is too much information to hold in my head.  Assuming you mean that both the specific pair contacts and target hotspot parameters are user defined, then prioritise the specific pair contacts.  Option i looks good with the two separate restraints tables.
+
+**Synthesis note**:
+- **Q147 locked**: option (i) — two separate restraint files.  `ambig_restraints.tbl` for case-(b) active-residue AIRs, `unambig_restraints.tbl` for case-(a) contact pairs.  When both case (a) and case (b) are user-specified, both files are written and HADDOCK reads both.  Pairs hard-pin (unambig); active residues soft-prefer (AIRs).  When only one is specified, only that file is written; `docking.cfg` references it conditionally.
+
+- **Terminology fix (load-bearing for clarity going forward)**: The user is reading a lot of code.  From here onwards I'll spell out the two restraint cases by full name:
+  - **"contact-pair mode"** = case (a) = `haddock_contact_pairs` is set.  Hard pinning of specific receptor:effector residue pairs (e.g. `A25-C42`).  Written as `unambig_restraints.tbl`.
+  - **"active-residues mode"** = case (b) = `haddock_receptor_active_residues` (and optionally `haddock_effector_active_residues`) is set.  Soft preference that a residue list contacts the other side.  Written as `ambig_restraints.tbl` with 50% nrest tolerance.
+  - The two modes are not mutually exclusive — both can be set in one run.
+  - **Note on the user's "target hotspot" reading**: in A147 the user wrote "specific pair contacts and target hotspot parameters" — they were referring to `haddock_effector_active_residues` as "target hotspots."  I now realise this is a real terminology collision: in the pipeline, "hotspot" means a SOFT RFDiffusion bias parameter (`params.hotspot = "C45,..."`); meanwhile `haddock_effector_active_residues` is a SOFT HADDOCK AIR constraint.  Both are "soft hints about target residues."  To avoid future confusion, going forward I will only use "hotspot" for the RFDiffusion bias, and call the HADDOCK side "effector active residues" — never "target hotspots."  Captured in the close-out memory note (Q158 deferred).
+
+- **Future consideration captured (Q147 future note)**: docking with design-region sidechains removed from the receptor PDB.  Hypothesis: with sidechains gone, HADDOCK can place the effector tighter, generating larger BSA; RFDiffusion sees a closer pose and can design a fitting backbone; ProteinMPNN fills with appropriate residues.  Plausible — Rosetta and some HADDOCK protocols use poly-Ala or backbone-only inputs for exactly this reason.  Not actioning now.  Recorded in a new section at the end of this audit under "HADDOCK future considerations" for the next iteration cycle.
+
+---
+
+**Q148 [VERIFY]** — Validator + ParamSpec delta.  `bin/validate_params.py` gains:
+- `haddock_contact_pairs` ParamSpec: string, regex `^([A-Za-z]\d+-[A-Za-z]\d+\s*)*$` (chain-letter + resnum, dash, chain-letter + resnum, repeat).  Empty string allowed.
+- `haddock_receptor_active_residues` ParamSpec: string, regex for comma-separated residue numbers + ranges (`^(\d+(-\d+)?(,\d+(-\d+)?)*)?$`).  Empty string allowed.
+- `haddock_effector_active_residues` ParamSpec: same regex as above.  Replaces the existing `effector_active_residues` ParamSpec (rename only; semantics unchanged).
+- `haddock_pair_distance` ParamSpec: string, regex `^\d+(\.\d+)?,\d+(\.\d+)?,\d+(\.\d+)?$` (three positive floats comma-separated).  Default `"2,2,4"`.
+- `haddock_chosen_cluster` ParamSpec: int ≥ 1 OR null.  Null = auto-pick.
+- `stop_after_haddock` ParamSpec: bool, default false.
+- Branch-A cross-param rule (covered in custom validator, not ParamSpec): when `receptor_input` is set, at least one of `haddock_contact_pairs` or `haddock_receptor_active_residues` MUST be non-empty.
+
+Delete-or-update ParamSpecs:
+- `effector_active_residues` deleted (renamed).
+- `haddock_sampling` no change.
+- `haddock_seletop` no change.
+- `min_hotspot_frac` unchanged (RFDiffusion-side, not HADDOCK).
+- `rfdiff_contact_cutoff` — comment updates only (HADDOCK reference dropped per A145).
+
+Is this validator delta complete, or am I missing a rule?  In particular: are there cases where you'd want the validator to warn (not error) — e.g. "you specified many active residues, this may exceed HADDOCK's geometric feasibility — consider switching to pairs" — or is "error or quietly accept" enough?
+
+**A148:** This looks correct.  For the target hotspots, it doesn't really matter if not all of them are fulfilled - it's more a list of possibilities.  The only concrete ones are the specified pairs.
+
+**Synthesis note**: Validator delta locked as drafted.  Key reinforcement: `haddock_effector_active_residues` (and `haddock_receptor_active_residues`) are SOFT — the validator does not error or warn if many are specified; it just lets HADDOCK satisfy the 50% nrest threshold among them.  `haddock_contact_pairs` are HARD — every pair becomes an unambig restraint and HADDOCK works to satisfy each.  This semantic difference is implicit in the regex shapes but worth documenting in `params_example.yml` for the user.
+
+The "warn about many active residues" suggestion I floated in Q148 is dropped — soft is soft, the user's intent is clear, no warning needed.
+
+---
+
+**Q149 [UNKNOWN]** — Test fixture strategy.  The HADDOCK test currently has a minimal fixture (Nextflow run-artefacts only, scientific outputs are placeholders).  After this restructure the test should cover at minimum:
+- Case (a) pairs-only run: 2 user-supplied pairs, no active residues, default `pair_distance="2,2,4"`.  Verify clusters emerge with sensible BSA, the max-BSA cluster is selected, the chosen complex PDB has the receptor in chain A and effector in chain B.
+- Case (b) active-residues-only run: receptor list + effector list, no pairs.  Verify the same.
+- Validator-rejection test: a params file with all three restraint params empty triggers a clear error.
+- Resume test: first run produces N clusters, second run with `haddock_chosen_cluster: 2` reuses HADDOCK_DOCK's cache and SELECT_HADDOCK_CLUSTER picks cluster 2.
+
+Test inputs (the two monomer PDBs) could come from:
+- **(i) Pikp1-HMA + AvrPikF monomers**: real campaign inputs.  Larger PDBs (~85 + ~100 residues); HADDOCK runtime ~5–10 min at `sampling=100`.
+- **(ii) Synthetic small monomers**: handcrafted 30-residue helical fragments.  Much faster, but tests the plumbing not the science.
+
+Lean is (i) — real inputs match production behaviour, and HADDOCK at sampling=100 is tractable in test time.  Agree?  Also: should the existing minimal-fixture HADDOCK test be deprecated entirely once the new ones land, or kept as a smoke test?
+
+**A149:** Wouldn't it be possible to test the Q147 example with both cases a and b on the real biological inputs at the same time to cover off all parts of the code?  That might make more sense than having two tests where one is sort of meaningless test structures.
+
+**Synthesis note**: Locked.  ONE combined test on real bio inputs (Pikp1-HMA monomer + AvrPikF monomer) that specifies BOTH contact-pair mode (`haddock_contact_pairs = "A25-C42 A13-C94"` or similar from the known PikP1/AvrPikF interface) AND active-residues mode (`haddock_receptor_active_residues` covering the receptor de novo region, `haddock_effector_active_residues` covering the known AVR-Pik binding face).  Cluster outputs validate:
+- Both restraint files are written (`ambig_restraints.tbl` and `unambig_restraints.tbl`).
+- `nrest = ceil(0.5 × N_active_residues)` is set in the AIR table.
+- Each qualifying cluster has BSA, COM, AIR-sat, pair-contact-fraction, bridge distance, Sc, and clashes-in/out reported.
+- Max-BSA cluster is selected as `selected_complex.pdb`.
+- Receptor is chain A, effector is chain B in the selected PDB.
+
+Plus two separate small tests:
+- Validator-rejection test: a params file with all three restraint params empty → error.
+- Resume test: re-run with `haddock_chosen_cluster: 2` produces cluster 2's PDB downstream.  (May be hard to run cleanly in CI — Nextflow `-resume` semantics depend on cache state.  Could be deferred to integration smoke testing rather than a per-module test.)
+
+Old minimal-fixture HADDOCK test: **retired**.  The combined test replaces it.
+
+---
+
+**Q150 [VERIFY]** — Per-cluster `run_rosetta_metrics.py` cost.  Running Rosetta InterfaceAnalyzer on each cluster representative (typically 3–6 clusters at production `sampling=10000`) costs ~30s–2min per cluster for FastRelax + InterfaceAnalyzer.  Total ~3–12 min added to HADDOCK_DOCK post-processing.  That's not free, but it's small compared to HADDOCK's own runtime (~30 min at sampling=10000).  Worth the cost for Sc as one of the reported cluster metrics, OR drop Sc from the HADDOCK cluster metrics (BSA, COM, AIR-sat, bridge distance, clash counts already give 5 metrics — Sc is the 6th)?
+
+**A150:** It's fine - add the InterfaceAnalyzer step.  It's no time at all compared to the negative steering.
+
+**Synthesis note**: Locked.  Per-cluster Sc reported via `run_rosetta_metrics.py` invocation.  ΔΔG from the same run is computed but discarded (HADDOCK-irrelevant) unless a Q156 follow-up decides we want a `--sc-only` flag on `run_rosetta_metrics.py` to skip the ΔΔG path.  For now, just call the script and read the Sc field.
+
+---
+
+**Q151 [VERIFY]** — `bin/structure_metrics.py` as the new home for COM helper (and other small geometry primitives).  Per A140 — confirm new file is the right location, or you prefer one of the alternatives (`contig_utils.py`, `haddock_utils.py`, `protein_structure_prediction.py`).
+
+**A151:** If these match the format, style, and fine-grained-ness of the others (i.e. if there's only 1 RFDiffusion class but 4 HADDOCK classes it's not really matching the current format), then that looks acceptable.  I'm not really qualified to select specific class fields.  For the HADDOCK restraints question are you asking about the filtering threshold value?  If so it can go wherever the other filtering values are (i.e. for BSA or Sc).  I guess it makes more sense for them to be global than with the per-cluster metrics repeated each cluster.  Does HaddockRun need the contig string for anything?  Doesn't it need it to work out whether the clashes are inside or outside the design region?  If so then yes include it?  You need to make a decision on these.
+
+**Synthesis note + class-granularity check**: User's point on format-matching is correct.  Quick grep confirms each Phase 4 module file has EXACTLY ONE top-level class: `DesignedBackbone`, `NegativeSteeringRun`, `OrthogonalMetrics`, `StageResult`, `DesignedSequence`, `ProteinStructurePrediction`, `ContigSpec`, `PositionSet`, `BoltzConfidenceMetrics`, `AF3ConfidenceAggregate`, `PipelineParams`, `PipelineInternalThresholds`, `DesignCohort`.  My 4-class sketch (HaddockRun + HaddockCluster + HaddockClusterMetrics + HaddockRestraints) breaks the pattern.
+
+**Decision: 2 types in 2 files** — matching the level of factoring used elsewhere (e.g. `NegativeSteeringRun` composes `StageResult`).
+
+- **`bin/haddock_run.py`** — `HaddockRun` (top-level, one per docking call).
+- **`bin/haddock_cluster.py`** — `HaddockCluster` (per-cluster representative, used as `Tuple[HaddockCluster, ...]` inside HaddockRun, analogous to how `StageResult` is used inside `NegativeSteeringRun`).
+- **`HaddockClusterMetrics` is INLINED** into HaddockCluster as flat scalar fields (BSA, COM, AIR-sat, pair-contact-fraction, bridge distance, Sc, clashes_in/out).  This matches how `OrthogonalMetrics` keeps its metric fields flat (irmsd, fnat, dockq, bsa, sc, …) rather than nesting a `Metrics` sub-object.
+- **`HaddockRestraints` is INLINED** into HaddockRun as flat tuple fields (`contact_pairs`, `receptor_active_residues`, `effector_active_residues`, `pair_distance`).  The `design_region` derives via a `@property` on HaddockRun.
+
+**Decision: contig string NOT in HaddockRun.**  Per A139 the receptor design region for clash bookkeeping derives from `contact_pairs.receptor_residues ∪ receptor_active_residues` — both of which ARE HaddockRun fields.  The contig string isn't needed.  BUILD_CONTIGS handles the contig separately (it's a different concern: updating contig numbering against the docked PDB for RFDiffusion's input).  Keeping HaddockRun contig-free preserves the clean separation between "what HADDOCK did" and "what RFDiffusion needs to know about HADDOCK's output."
+
+**Decision: AIR-satisfaction-threshold (50% default) is NOT a field on HaddockRun.**  The threshold is global (applies the same to every run); it lives as a constant in `haddock3_prepare.py` (or as a `PipelineInternalThresholds` entry, more Phase-4-natively).  The actual per-cluster AIR satisfaction COUNT is on HaddockCluster as a metric.  Per user's note "more sense for them to be global than with the per-cluster metrics repeated each cluster."
+
+**One subtle note re: bridge distance**: computing "minimum bridge distance" (the geodesic the de novo region would need to span to reach the effector) DOES require knowledge of the contig (which residues anchor the de novo gaps).  Two clean options to avoid putting the contig on HaddockRun:
+- (i) Bridge distance computed by a downstream consumer (e.g. by the Nextflow process that wraps HaddockRun construction, with the contig available there as a separate channel input).  HaddockCluster's `bridge_distance` field is populated by that downstream code.
+- (ii) Bridge distance moved out of HaddockCluster entirely — reported as a separate "post-HADDOCK" metric, not part of HaddockRun's contract.
+
+Picking (i) for simplicity: HaddockCluster still has a `bridge_distance` field, but `HaddockRun.from_workdir` doesn't compute it — the Nextflow wrapper does, using its access to both HaddockRun + the contig string.  Documented in the type's docstring.
+
+Open as Q153 to confirm the final spec before implementation.
+
+---
+
+**Q152 [VERIFY]** — `HaddockRun` spec.  The sketch in A144:
+
+```python
+@dataclass(frozen=True)
+class HaddockRestraints:
+    contact_pairs: Tuple[ContactPair, ...]
+    receptor_active_residues: Tuple[int, ...]
+    effector_active_residues: Tuple[int, ...]
+    pair_distance: Tuple[float, float, float]
+    @property
+    def design_region(self) -> Set[int]: ...
+
+@dataclass(frozen=True)
+class HaddockCluster:
+    cluster_id: int
+    size: int
+    mean_haddock_score: float
+    best_model_pdb: Path
+    metrics: HaddockClusterMetrics
+
+@dataclass(frozen=True)
+class HaddockClusterMetrics:
+    bsa: float
+    com_distance: float
+    air_satisfaction_count: int
+    air_total_count: int
+    min_bridge_distance: float
+    sc: Optional[float]                                  # None if Q150 says skip
+    clashes_in_design_region: int
+    clashes_outside_design_region: int
+
+@dataclass(frozen=True)
+class HaddockRun:
+    receptor_pdb: Path
+    effector_pdb: Path
+    restraints: HaddockRestraints
+    qualifying_clusters: Tuple[HaddockCluster, ...]
+    chosen_cluster_id: Optional[int]
+    @classmethod
+    def from_workdir(cls, workdir: Path) -> "HaddockRun": ...
+    @property
+    def selected(self) -> HaddockCluster: ...
+    def to_rfdiffusion_input(self) -> Path: ...
+```
+
+Is this the right shape, or do you want fields added/removed?  Specific questions:
+- Should `HaddockRestraints` also carry the AIR-satisfaction-fraction param (per Q146) — currently implicit in HaddockCluster.metrics.air_satisfaction_count, but the threshold the restraints were generated with isn't preserved.
+- Should `HaddockRun` carry the user-supplied `params.contigs` string?  Phase 4 modelling says contig is for RFDiffusion, not HADDOCK — but HaddockRun's output flows into the RFDiffusion stage, and BUILD_CONTIGS needs the contig.  Cleaner to carry it as a separate channel through the Nextflow workflow, or thread it through HaddockRun?
+
+**A152:** Superseded — answers folded into A151's synthesis.
+
+**Synthesis note**: The class-granularity, contig-carriage, and threshold-placement sub-questions of Q152 all got answered inline by A151.  Final locked spec is in the next batch (Q153) where I lay it out cleanly for one explicit confirmation before implementation begins.
+
+---
+
+### Batch 3 — close
+
+Eight more decisions landed.  Key new outcomes:
+- **EXTRACT_HOTSPOTS deleted entirely** (A145): auto-derived hotspots reduce design diversity by re-enforcing the docked pose's interface.  User-only `params.hotspot` from biological knowledge.
+- **`pair_contact_fraction` per-cluster metric** (A146): tracks how many of the user's contact pairs are actually in contact on each cluster representative, so the user can prioritise high-pair-fraction clusters at the manual checkpoint.
+- **Class-granularity collapse** (A151): 4 sketched classes → 2.  `HaddockRun` (with restraints flat, clusters tuple) + `HaddockCluster` (with metrics flat).
+- **HaddockRun is contig-free** (A151): receptor design region derives from restraint fields; contig handled separately by BUILD_CONTIGS.
+- **One combined test on real bio inputs** (A149) covering both restraint modes simultaneously.
+- **Sc + InterfaceAnalyzer kept** for per-cluster metrics (A150).
+- **Terminology lock**: from here on use "contact-pair mode" (case a) and "active-residues mode" (case b) by full name in this document — and never use the word "hotspot" for HADDOCK-side residue lists (reserved exclusively for the RFDiffusion soft-bias parameter).
+- **Future consideration captured** (A147): docking with design-region sidechains stripped from receptor PDB.  Not actioning now.
+
+### HADDOCK future considerations (recorded from A147 for the next iteration cycle)
+
+- **Strip design-region sidechains before docking.**  Replace receptor de novo sidechains with backbone-only (poly-Gly or poly-Ala) before handing to HADDOCK.  Hypothesis: HADDOCK can place the effector tighter against the receptor backbone, leading to larger interface BSA, which RFDiffusion can then design into.  ProteinMPNN fills the gap with appropriate residues.  Feasibility/biological-meaningfulness needs validation; would alter the HADDOCK_PREPARE process to add a sidechain-stripping step, and would slightly change the chain-A/B contract (the receptor PDB into HADDOCK becomes a derivative, not the user's input).
+- **Full pipeline test exercising Branch A.**  Per A157, `tests/full_test_run/` currently stays in mode 2.  A future iteration should extend it (or add a sibling) to drive the full Branch-A path end-to-end (two monomers → HADDOCK → SELECT_HADDOCK_CLUSTER → RFDiffusion → … → orthogonal metrics).  Wait until the standalone HADDOCK module test is stable before doing this.
+
+---
+
+## Session 7 — Close
+
+Grill-me complete.  Q129–Q157 (29 questions across 4 batches) landed every decision needed to implement the HADDOCK restructure.  The architectural change is substantial: HADDOCK pivots from "energy-driven docking with contig-derived active residues" to "geometry-driven docking with user-supplied restraints, a per-cluster metric table, manual checkpoint capability, and BSA-primary auto-pick."  EXTRACT_HOTSPOTS is deleted; the parameter split flagged in `SESSION_HANDOFF.md` is resolved.  Two new deep-module types (`HaddockRun`, `HaddockCluster`) and one shared helper (`bin/structure_metrics.py`) join the Phase 4 catalogue.
+
+### Locked decisions (summary index)
+
+| # | Decision | Q ref |
+|---:|---|---|
+| 1 | HADDOCK's role is geometric placement, not affinity prediction. | A129 |
+| 2 | Cluster ranking primary key = BSA (descending); no absolute cutoff. | A130 |
+| 3 | Auto-pick sort key = `(-pair_contact_fraction, -bsa)` lexicographic. | A154 |
+| 4 | Contig-driven AIR derivation deleted entirely.  Restraints come from user params only. | A131 |
+| 5 | New restraint params: `haddock_contact_pairs` (contact-pair mode) + `haddock_receptor_active_residues` + `haddock_effector_active_residues` (active-residues mode).  Rename of the existing `effector_active_residues` param. | A132, A137 |
+| 6 | Contact-pair format: `"A25-C42 A13-C94"` (CA-CA only, chain-prefixed-resnum, dash, chain-prefixed-resnum, space-separated pairs). | A138 |
+| 7 | Global pair distance param `haddock_pair_distance: "2,2,4"` (target, lo_dev, hi_dev); no per-pair overrides; no plusminus syntax. | A138 |
+| 8 | AIR satisfaction: auto-set `nrest = ceil(0.5 × N_active)`; not user-tunable. | A146 |
+| 9 | Two separate restraint files when both modes specified: `ambig_restraints.tbl` (active residues) + `unambig_restraints.tbl` (contact pairs); pairs hard-pin, AIRs soft-prefer. | A147 |
+| 10 | Validator rule: when Branch A is selected, at least one of `haddock_contact_pairs` or `haddock_receptor_active_residues` MUST be non-empty.  All three restraint params empty = error pointing at workflow. | A137, A139, A148 |
+| 11 | Receptor design region (for clash bookkeeping) = `receptor halves of contact_pairs ∪ receptor_active_residues`.  Never derived from contig. | A139 |
+| 12 | Clash bookkeeping: heavy-atom pair < 2.0 Å; classify in/out design region; report both counts. | A132, A139 |
+| 13 | Per-cluster metrics reported: BSA, COM distance, AIR satisfaction count/total, **pair contact fraction**, bridge distance (per-anchor tuple + min + max), Sc, clashes_in/out. | A130, A146, A155 |
+| 14 | Sc kept (Rosetta InterfaceAnalyzer per cluster) despite ~3–12 min overhead. | A150 |
+| 15 | EXTRACT_HOTSPOTS deleted entirely.  `params.hotspot` becomes user-only optional. | A143, A145 |
+| 16 | `params.rfdiff_contact_cutoff` / `haddock_hotspot_cutoff` split is RESOLVED by EXTRACT_HOTSPOTS deletion. | A145 |
+| 17 | Stop-and-resume gate: `params.stop_after_haddock: false` (default).  Resume mechanism: `params.haddock_chosen_cluster: N`.  New process `SELECT_HADDOCK_CLUSTER` between HADDOCK_DOCK and downstream. | A134, A141 |
+| 18 | Input always two monomer PDBs.  Intended pose conveyed via restraint params, not via complex-PDB input. | A136 |
+| 19 | Chain-ID contract: HADDOCK_PREPARE relabels to A (receptor) / B (effector) before docking; downstream assumes A/B; existing chain-disambiguation fallbacks in `extract_hotspots.py`-style code remain as belt-and-braces. | A142 |
+| 20 | COM helper extracted into new `bin/structure_metrics.py`; `bin/rfdiffusion_filter.py` refactored to use it. | A140, A151 |
+| 21 | Two new Phase 4 deep-module types: `HaddockRun` (one file) + `HaddockCluster` (one file).  Metrics flat-inlined into HaddockCluster.  Restraints flat-inlined into HaddockRun.  No `HaddockClusterMetrics` or `HaddockRestraints` sub-types.  Matches the 1-class-per-file pattern of every other Phase 4 type. | A151 |
+| 22 | HaddockRun does NOT carry the contig string. | A151 |
+| 23 | `haddock_air_satisfaction_frac` is a constant, not a param (lives in `haddock3_prepare.py` or as a `PipelineInternalThresholds` entry). | A151 |
+| 24 | Test strategy: ONE combined real-bio test (Pikp1-HMA + AvrPikF monomers) exercising both contact-pair and active-residues modes simultaneously, plus a validator-rejection test.  Resume test deferred to integration smoke. | A149 |
+| 25 | Implementation: three commits — (1) types + COM refactor, (2) HADDOCK Nextflow rewiring, (3) EXTRACT_HOTSPOTS deletion + docs.  User tests after all three land. | A156 |
+| 26 | Full pipeline test stays in mode 2; rename `effector_active_residues` → `haddock_effector_active_residues`, add empty placeholders for the new params, no behavioural change. | A157 |
+| 27 | Campaign params files (`experiments/campaigns/*/runs/*/params.yml`) are NOT modified. | A157 |
+
+### Terminology lock for this restructure
+
+- **"contact-pair mode"** = case (a) = `haddock_contact_pairs` populated.  Hard restraints via `unambig_restraints.tbl`.
+- **"active-residues mode"** = case (b) = `haddock_receptor_active_residues` and/or `haddock_effector_active_residues` populated.  Soft restraints via `ambig_restraints.tbl` at 50% nrest tolerance.
+- **"hotspot"** = the `params.hotspot` RFDiffusion soft-bias parameter ONLY.  Never used to refer to HADDOCK-side residue lists.
+- **"design region at HADDOCK time"** = receptor residues from `contact_pairs.receptor_halves ∪ receptor_active_residues`.  Used for clash bookkeeping.  Distinct from "design region at RFDiffusion time" (= contig de novo segments).
+
+### Action items not in scope for this restructure (recorded for follow-up)
+
+- Strip design-region sidechains before docking (A147).
+- Extend `tests/full_test_run/` to exercise Branch A (A157).
+- Update `notes/inventory/01_module_map.md` and friends to reflect the HADDOCK changes (Phase 6 going-forward discipline).
+- Refresh CLAUDE.md / `notes/SESSION_HANDOFF.md` to reflect post-restructure state (end of next implementation session).
+- Update `notes/phase4_architecture_spec.md` §2.x with `HaddockRun` and `HaddockCluster` type specs (end of next implementation session, to keep the architectural contract in sync).
+
+
+
+### Batch 4 — Implementation finalisation (Q153–Q157)
+
+This is the last batch before implementation begins.  These confirm the final spec, sequence the work, and resolve the remaining loose ends.  Five questions, then we're ready to code.
+
+---
+
+**Q153 [VERIFY]** — Final HaddockRun + HaddockCluster spec.  Per the A151 synthesis, here is the spec as it will be implemented.  Please confirm or flag any field you want changed.
+
+```python
+# bin/haddock_cluster.py
+@dataclass(frozen=True)
+class HaddockCluster:
+    cluster_id: int
+    size: int                                    # number of models in cluster
+    mean_haddock_score: float                    # informational, not used for ranking
+    best_model_pdb: Path                         # path to best_cluster{id}.pdb
+    # ── Ranking + reporting metrics ──────────────────────────────────
+    bsa: float                                   # buried surface area, Å²; PRIMARY rank key
+    sc: Optional[float]                          # shape complementarity; None if Sc disabled
+    com_distance: float                          # centre-of-mass distance between chains, Å
+    air_satisfaction_count: int                  # number of AIRs satisfied on best model
+    air_total_count: int                         # total AIRs in restraints file
+    pair_contact_fraction: float                 # 0.0–1.0, fraction of contact pairs in contact
+    pair_total_count: int                        # total user-defined pairs (denominator)
+    bridge_distance: Optional[float]             # min Å the de novo region would need to span;
+                                                  # None when filled by downstream (Q152 (i))
+    clashes_in_design_region: int                # heavy-atom pairs <2.0 Å, either in design set
+    clashes_outside_design_region: int           # everything else
+```
+
+```python
+# bin/haddock_run.py
+@dataclass(frozen=True)
+class HaddockRun:
+    receptor_pdb: Path                           # input monomer, native numbering
+    effector_pdb: Path                           # input monomer, native numbering
+    # ── Restraints (flat) ─────────────────────────────────────────────
+    contact_pairs: Tuple[Tuple[str, int, str, int], ...]
+        # Each pair = (rec_chain, rec_resnum, eff_chain, eff_resnum).
+        # Empty tuple = no contact-pair mode.
+    receptor_active_residues: Tuple[int, ...]    # native receptor residue numbers
+    effector_active_residues: Tuple[int, ...]    # native effector residue numbers
+    pair_distance: Tuple[float, float, float]    # (target, lo_dev, hi_dev), default (2,2,4)
+    # ── Outputs ───────────────────────────────────────────────────────
+    qualifying_clusters: Tuple[HaddockCluster, ...]   # post-clustfcc, MIN_CLUSTER_SIZE filtered
+    chosen_cluster_id: Optional[int]             # None → auto-pick max-BSA
+
+    @classmethod
+    def from_workdir(cls, workdir: Path) -> "HaddockRun": ...
+    @property
+    def selected(self) -> HaddockCluster: ...
+    @property
+    def design_region(self) -> Set[int]: ...     # = receptor_active_residues ∪ receptor halves of pairs
+    def to_rfdiffusion_input(self) -> Path: ...  # returns selected.best_model_pdb
+```
+
+Implementation files:
+- `bin/haddock_run.py` (~250 LOC + 20 tests)
+- `bin/haddock_cluster.py` (~100 LOC + 10 tests)
+- `bin/structure_metrics.py` (~80 LOC: `chain_centre_of_mass`, `clash_count_in_set`, + 8 tests)
+
+OK?  Any fields to add, remove, or rename?
+
+**A153:** Looks good - as I said I'm not really able to asses clearly, but all the metrics seemed to be there and I couldn't see anything obviously missing.
+
+**Synthesis note**: Spec locked.  Implementation files committed to as drafted, with the per-A155 amendment that `bridge_distance` becomes two fields (`bridge_distance_min`, `bridge_distance_max`) plus a per-segment tuple — see A155 synthesis below.
+
+---
+
+**Q154 [UNKNOWN]** — Auto-pick weighting.  When `stop_after_haddock = false` AND `haddock_chosen_cluster` is unset, SELECT_HADDOCK_CLUSTER picks the cluster with **max BSA**.  Per A146, you want `pair_contact_fraction` to influence the manual checkpoint pick — but for the AUTO pick, do you want pair fraction to also weigh in?  Options:
+
+- **(i) Max BSA only** (current proposal).  Simple; the user does the BSA-vs-pair-fraction trade-off only when they intervene.
+- **(ii) Max BSA among clusters where `pair_contact_fraction == 1.0`**, falling back to max BSA overall if none satisfy all pairs.  Prefers full pair satisfaction when available.
+- **(iii) Weighted score `BSA × pair_contact_fraction`** as auto-pick key.  Continuous trade-off.
+
+If you specified 3 pairs and one cluster has BSA=800 with 2/3 pairs in contact while another has BSA=750 with 3/3, which would you want auto-picked?
+
+**A154:** I would want the BSA 750 with 3/3 contacts - the specified pair contacts should be the priority, but where there are clusters with equal numbers, rank by BSA - RFDiffusion can always redesign to improve BSA, but it may not choose the intended contacts.
+
+**Synthesis note**: Locked.  Auto-pick sort key is **lexicographic**: primary = `pair_contact_fraction` descending, secondary = `bsa` descending.  None of my three options matched cleanly; the right specification is:
+
+```python
+def auto_pick_key(cluster: HaddockCluster) -> Tuple[float, float]:
+    return (-cluster.pair_contact_fraction, -cluster.bsa)
+selected = min(qualifying_clusters, key=auto_pick_key)
+```
+
+Reasoning (user's): user-specified pair contacts encode biological intent and RFDiffusion cannot recover them if HADDOCK has placed the effector such that those pairs don't end up nearby; BSA can always be improved later by RFDiffusion's redesign.  Pair-contact-fraction is therefore the harder constraint and the right primary ranking key.
+
+**Edge case**: when `contact_pairs` is empty (active-residues mode only), `pair_contact_fraction` is undefined; in that case it should be reported as `None` (or `1.0` as a "all 0 of 0 pairs satisfied vacuously") AND the auto-pick falls through to BSA only.  Picking the "report as 1.0" convention so the lexicographic sort still works uniformly — all clusters tie at 1.0, BSA breaks the tie.
+
+Documentation note: the cluster metrics table (the per-cluster summary published to `${outdir}/haddock/`) should make the (pair_contact_fraction, BSA) ranking visible — e.g. sort the rows by the same key, so the auto-pick is the top row.
+
+---
+
+**Q155 [VERIFY]** — Bridge-distance definition.  From A130 you mentioned "minimum bridge distance" — the gap a de novo region would need to span.  Operational definition I'm proposing:
+
+For each de novo segment in the contig (e.g. the `10-20`-residue and `6-6` gaps in `A1-32/10-20/A46-72/6-6 C`):
+- Anchor = the fixed CA on the receptor immediately before AND after the de novo segment (e.g. for the first gap, CAs of residues 32 and 46 in native numbering).
+- "Bridge distance" for this gap = distance from the segment's anchors to the nearest effector CA.  Specifically: for the docked complex, `min(dist(anchor_before_CA, any_effector_CA), dist(anchor_after_CA, any_effector_CA))`.
+- `HaddockCluster.bridge_distance` = minimum across all de novo segments.
+
+Interpretation: a small bridge_distance means the de novo region's anchor points are CLOSE to the effector, so a short de novo backbone can reach across.  A large bridge_distance means the de novo region would need to span a long way, which is harder for RFDiffusion.
+
+Is this the right operational definition, or did you mean something else by "bridge distance"?  (Alternative readings: anchor-to-anchor Euclidean distance across the gap; gap length × 3.8 Å expected backbone length; etc.)
+
+**A155:** That sounds sensible, but maybe the bridge distances from all anchors should be shown, and both the minimum and maximum should be reported?  I'm thinking it would help us catch if one of the design regions is miles from the target after HADDOCK placement, it may need reconsidering.
+
+**Synthesis note**: Locked, with HaddockCluster spec amendment.
+
+`HaddockCluster.bridge_distance` (singular Optional[float]) becomes three fields:
+
+```python
+bridge_distance_per_anchor: Tuple[float, ...]   # one per (anchor, segment-end) pair, in Å
+bridge_distance_min: float                       # min of the above
+bridge_distance_max: float                       # max of the above
+```
+
+The per-anchor tuple preserves ALL bridge distances (per de novo segment, per anchor: before-anchor and after-anchor).  For a contig `A1-32/10-20/A46-72/6-6 C` with two de novo segments, that's 4 anchor-effector distances per cluster (anchor 32 → effector, anchor 46 → effector, anchor 72 → effector, anchor C-terminus-of-second-fixed → effector — caveat: the second de novo segment trails off the end so it has only one anchor, not two; the implementation handles this).
+
+The min catches "easiest gap to bridge"; the max catches "hardest gap — does it look feasible?".  Per the user: a very large max signals that one of the design regions is "miles from the target" and the pose probably needs to be reconsidered.
+
+`HaddockCluster.bridge_distance_per_anchor` is `None` (the field omitted, or set to `()` empty tuple) when the contig is unavailable at HaddockRun construction time — per Q152(i), bridge distance is filled by the downstream Nextflow wrapper that has access to both HaddockRun + the contig, NOT inside `from_workdir`.  When unfilled, the min and max are also None.
+
+Q153's HaddockCluster spec updates to:
+
+```python
+bridge_distance_per_anchor: Optional[Tuple[float, ...]]   # None when contig unavailable
+bridge_distance_min: Optional[float]
+bridge_distance_max: Optional[float]
+```
+
+---
+
+**Q156 [VERIFY]** — Implementation sequencing.  The HADDOCK restructure lands as **a single git commit** on `phase4-impl` (or a follow-up branch off `phase4-impl`), containing:
+
+1. **New code**: `bin/haddock_run.py`, `bin/haddock_cluster.py`, `bin/structure_metrics.py`, `bin/haddock_cluster_metrics.py` (computes the metrics, calls run_biophysical_metrics + run_rosetta_metrics as subprocesses, fills HaddockCluster fields), restructured `bin/haddock3_prepare.py` (no contig dependency, accepts new restraint params, writes one or two .tbl files).
+2. **Deleted code**: `bin/extract_hotspots.py`, the EXTRACT_HOTSPOTS Nextflow process, the find_denovo_residues + parse_contig_segments inside `haddock3_prepare.py`.
+3. **Refactored code**: `bin/collect_haddock3_dock.py` (drop score-based ranking, replace with BSA ranking via HaddockCluster; drop fail-on-positive-score gate or rewrite it as "filter clusters with positive HADDOCK score before computing BSA ranking"); `bin/rfdiffusion_filter.py` (replace inline COM with `structure_metrics.chain_centre_of_mass`); `bin/validate_params.py` (new ParamSpecs); `modules/haddock.nf` (HADDOCK_PREPARE inputs change, new SELECT_HADDOCK_CLUSTER process, EXTRACT_HOTSPOTS gone); `main.nf` Branch A wiring; `nextflow.config` (new params + new process selector for SELECT_HADDOCK_CLUSTER); `params_example.yml`.
+4. **Tests + fixtures**: rebuilt `tests/haddock/test_haddock.nf` with real bio inputs (Pikp1-HMA + AvrPikF monomers), validator-rejection test, deferred resume test.
+5. **Documentation**: README chain-ID contract; `params_example.yml` annotations; CLAUDE.md / inventory file updates (the inventory will need refreshing — but per the codebase remediation plan, that happens as part of Phase 6 going-forward discipline, not in this commit).
+
+Single big commit (~1000+ LOC delta), or split into 3–4 bisectable commits?
+- (a) Single commit: easier to reason about as one logical change; harder to bisect if something breaks.
+- (b) Three commits: (1) new types (haddock_run, haddock_cluster, structure_metrics) + rfdiffusion_filter COM refactor + tests; (2) HADDOCK Nextflow rewiring + collect_haddock3_dock refactor + validator; (3) EXTRACT_HOTSPOTS deletion + main.nf cleanup + docs.  Bisectable; each commit individually testable.
+
+Lean is (b).  Confirm?
+
+**A156:** I'm going to be testing after everything is implemented - you can provide three commits or one commit as you see fit, but know that I will only test once everything is in place.
+
+**Synthesis note**: Locked.  Going with **three commits** (option b in Q156) for bisectability — at the cost of slightly more git overhead, but with the upside that if something breaks under test, the failing commit can be isolated even though the user only tests at the end.  Each commit is internally consistent (passes the existing local_unit tests) even though the HADDOCK module isn't exercised end-to-end until commit 2 lands.
+
+Sequence:
+1. **Commit 1 — types + COM refactor**: `bin/haddock_run.py`, `bin/haddock_cluster.py`, `bin/structure_metrics.py` + tests.  `bin/rfdiffusion_filter.py` refactored to use `structure_metrics.chain_centre_of_mass`.  No Nextflow changes yet.
+2. **Commit 2 — HADDOCK Nextflow rewiring**: restructured `bin/haddock3_prepare.py` (no contig), new `bin/haddock_cluster_metrics.py`, refactored `bin/collect_haddock3_dock.py` (BSA ranking via HaddockCluster), modified `modules/haddock.nf` (new SELECT_HADDOCK_CLUSTER, restraint input changes), `main.nf` Branch A rewiring, `bin/validate_params.py` (new ParamSpecs + cross-param rule), `nextflow.config`, `params_example.yml`, rebuilt `tests/haddock/test_haddock.nf` with combined real-bio test inputs.  HADDOCK plot script also updated to drop the `effector_active_residues` name (now `haddock_effector_active_residues`).
+3. **Commit 3 — EXTRACT_HOTSPOTS deletion + docs**: delete `bin/extract_hotspots.py`, delete EXTRACT_HOTSPOTS process from `modules/haddock.nf`, delete EXTRACT_HOTSPOTS wiring from `main.nf`, update README chain-ID contract and hotspot semantics, update `params_example.yml` annotations.
+
+---
+
+**Q157 [VERIFY]** — `tests/full_test_run/params_full_test.yml`.  The full test stays in mode 2 (pre-docked complex), so HADDOCK params remain placeholders.  Concrete delta:
+- `effector_active_residues` → `haddock_effector_active_residues` (rename).
+- Add `haddock_contact_pairs: ""` and `haddock_receptor_active_residues: ""` (both unused in mode 2, but the validator runs unconditionally — values just need to satisfy the regex, empty strings are fine).
+- Add `haddock_pair_distance: "2,2,4"` (placeholder).
+- Add `stop_after_haddock: false`.
+- `haddock_chosen_cluster: null`.
+
+No behaviour change for the full test run; it doesn't exercise Branch A.  The dedicated `tests/haddock/` test (Q149) exercises the new HADDOCK code end-to-end.  Confirm.
+
+**A157:** Yes, and you need to update any other test params files in the repo (NOT the ones used in actual campaign runs though).  You need to consider how these code changes will all interact with the existing code and make sure everything is compatible.  Later on, the full test run will be updated to exercise Branch A, but that's not a job for now - the dedicated HADDOCK test is acceptable.
+
+**Synthesis note + compatibility audit**: Locked.  Test-params-file inventory (from quick repo search):
+
+YAML params files in scope of the restructure (NON-campaign):
+- `params_example.yml` — root, user-copyable starter.
+- `tests/full_test_run/params_full_test.yml` — the mode-2 full-pipeline test.
+
+YAML params files OUT of scope (campaign runs):
+- 18 files under `experiments/campaigns/pikp1_*/runs/v1_*/params.yml` — historical campaign records, not touched.
+
+Inline-params test `.nf` files in scope:
+- `tests/haddock/test_haddock.nf` — rebuilt entirely (combined real-bio test per A149).
+- `tests/negative_steering/test_negative_steering.nf`, `tests/rosetta_filtering/test_rosetta_filtering.nf`, `tests/orthogonal_metrics/test_orthogonal_metrics.nf`, `tests/rfdiffusion/test_rfdiffusion.nf`, `tests/proteinmpnn/test_proteinmpnn.nf` — quick grep needed to confirm whether any of these reference `params.effector_active_residues` (likely don't, since they don't exercise HADDOCK).  If they do, rename to `params.haddock_effector_active_residues`.
+
+Confirmed at search time that the only files currently referencing `effector_active_residues` are: `bin/haddock3_prepare.py`, `bin/haddock3_plots.py`, `bin/validate_params.py`, `modules/haddock.nf`, `tests/full_test_run/params_full_test.yml`, `tests/haddock/test_haddock.nf`, `main.nf`, `params_example.yml`.  Plus the rendered `tests/haddock/example_output_files/dag.html` (will regenerate from the rebuilt test).  None of the other module tests touch it.
+
+**Compatibility cross-check** (per the user's "consider how these code changes will all interact"):
+- `bin/contig_utils.parse_block_segments` still used by RESOLVE_CONTIGS, BUILD_CONTIGS — UNAFFECTED.
+- `bin/contig_spec.ContigSpec` already has all the API surface needed for the cases that DO use the contig (BUILD_CONTIGS) — UNAFFECTED.
+- `bin/derive_input_design_region.py` (controls flow) parses contigs — UNAFFECTED.
+- `bin/pipeline_correct_sequences.py` parses contigs for MPNN sequence reconstruction — UNAFFECTED.
+- All Phase 4 deep types (NegativeSteeringRun, DesignedBackbone, etc.) DOWNSTREAM of HADDOCK — UNAFFECTED.  The HADDOCK restructure changes ONLY the HADDOCK module + the `effector_active_residues` rename; the deep types consume `selected_complex.pdb` like they consumed `best_model.pdb` before.
+- `bin/run_biophysical_metrics.py`, `bin/run_rosetta_metrics.py` (orthogonal stage) — the HADDOCK cluster metrics code calls them as subprocesses; their existing CLI is preserved.  UNAFFECTED.
+- `bin/rfdiffusion_filter.py` COM refactor: replaces an inline `np.mean(axis=0)` call with `structure_metrics.chain_centre_of_mass(pdb, chain)`.  Same numerical output; characterization tests should pass without fixture changes.
+
+**Test-fixture regeneration plan**:
+- `tests/haddock/` — full regeneration (new combined real-bio test).
+- Other module tests — no regeneration expected (HADDOCK restructure doesn't touch their code paths).  Characterization tests should pass green.
+- `tests/full_test_run/` — no regeneration expected (mode 2 doesn't exercise HADDOCK).  Validator gains new params but they're empty strings, validator accepts.
+
+---
+
+
 

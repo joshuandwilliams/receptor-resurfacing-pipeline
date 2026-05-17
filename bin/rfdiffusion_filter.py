@@ -39,6 +39,13 @@ import sys
 
 import numpy as np
 
+# Local helper for centroid/COM math.  Shared with bin/haddock_cluster_metrics.py
+# so the centroid primitive has one home (per Session 7 A140).
+_BIN_DIR = os.path.dirname(os.path.abspath(__file__))
+if _BIN_DIR not in sys.path:
+    sys.path.insert(0, _BIN_DIR)
+import structure_metrics  # noqa: E402
+
 from contig_utils import (
     resolve_contigs, get_expected_chain_lengths, parse_design_region,
 )
@@ -555,8 +562,10 @@ def calc_motif_and_region_metrics(
     Q = np.array(matched_input_coords)          # reference (input)
 
     # ── Kabsch on the fixed residues ────────────────────────────────────
-    P_centroid = P.mean(axis=0)
-    Q_centroid = Q.mean(axis=0)
+    # Centroid helper from bin/structure_metrics.py — same primitive used
+    # by HADDOCK cluster metrics so the operation is named consistently.
+    P_centroid = structure_metrics.centroid(P)
+    Q_centroid = structure_metrics.centroid(Q)
     P_centred = P - P_centroid
     Q_centred = Q - Q_centroid
 
@@ -623,7 +632,7 @@ def calc_motif_and_region_metrics(
                 design_region_coords[-1] - design_region_coords[0]))
         else:
             ep_design = float("nan")
-        design_com = design_region_coords.mean(axis=0)
+        design_com = structure_metrics.centroid(design_region_coords)
 
         # ── Input side: pick the residues this region corresponds to ───
         if region_idx >= len(denovo_anchors):
@@ -666,7 +675,7 @@ def calc_motif_and_region_metrics(
         # COM displacement: works as long as we found *any* corresponding
         # input residues at all.
         if input_gap_coords:
-            input_com = np.array(input_gap_coords).mean(axis=0)
+            input_com = structure_metrics.centroid(np.array(input_gap_coords))
             com_disp = float(np.linalg.norm(design_com - input_com))
         else:
             com_disp = float("nan")
