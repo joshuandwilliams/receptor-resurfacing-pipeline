@@ -351,6 +351,9 @@ PARAM_SPECS: List[ParamSpec] = [
               "manual cluster override; null = auto-pick by (pair_contact_fraction, BSA)"),
     ParamSpec("stop_after_haddock", "bool", {},
               "halt after HADDOCK_PLOTS for manual cluster inspection"),
+    ParamSpec("haddock_strip_design_sidechains", "bool", {},
+              "strip receptor design-region sidechains to backbone-only GLY "
+              "before docking (A147 / DR1-rotation experiment)"),
 
     # ── Orthogonal cascade ──────────────────────────────────────────
     # Which cross_tier values get the AF3 + biophysical + Rosetta

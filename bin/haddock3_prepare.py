@@ -73,6 +73,14 @@ HADDOCK_EFFECTOR_CHAIN = "B"
 # AIR satisfaction fraction — 50% per A146, hardcoded constant.
 AIR_SATISFACTION_FRACTION = 0.5
 
+# Backbone atoms preserved when stripping design-region sidechains (per
+# A147 future-consideration, opt-in via --strip-design-sidechains).
+# Stripped residues are also renamed to GLY so HADDOCK's topoaa stage
+# doesn't trip over having an ARG / LYS / etc. with only 4 atoms.  This
+# is HADDOCK-only; RFDiffusion replaces these residues entirely so the
+# GLY substitution never reaches the designed sequences.
+BACKBONE_ATOMS = frozenset({"N", "CA", "C", "O"})
+
 
 def parse_args():
     parser = argparse.ArgumentParser(description=__doc__)
@@ -109,6 +117,14 @@ def parse_args():
                              'clash bookkeeping — receptor residues NOT in '
                              'fixed contig segments are considered design '
                              'region.  Does NOT drive AIR generation.')
+    # Strip design-region sidechains per A147 future-consideration.
+    parser.add_argument("--strip-design-sidechains", action="store_true",
+                        help='Replace receptor residues in the contig-derived '
+                             'design region with backbone-only (N/CA/C/O) and '
+                             'rename to GLY before docking.  Removes steric '
+                             'walls in regions RFDiffusion will redesign '
+                             'anyway, letting HADDOCK pack the effector tighter '
+                             'against the receptor backbone.  Requires --contigs.')
     return parser.parse_args()
 
 
@@ -116,24 +132,49 @@ def parse_args():
 
 
 def write_pdb_with_chain(in_path: Path, out_path: Path,
-                         src_chain: str, dst_chain: str) -> int:
+                         src_chain: str, dst_chain: str,
+                         strip_residues=None) -> tuple:
     """Copy ``in_path`` to ``out_path``, restricting to ATOM records on
     ``src_chain`` and rewriting the chain column to ``dst_chain``.
-    Returns the number of ATOM lines written.
+
+    When ``strip_residues`` is non-empty, ATOM lines for residues in that
+    set (referenced by the SOURCE PDB's residue numbers) are filtered to
+    backbone-only (N/CA/C/O) and have their residue name rewritten to
+    GLY.  This is the implementation of the --strip-design-sidechains
+    flag — see A147 in notes/design_audit.md for the rationale.
+
+    Returns ``(n_atom_lines_written, n_residues_stripped)``.
 
     Other record types (HEADER, TITLE, TER, END) are preserved but
     re-written with the dst chain letter where applicable (TER lines).
     """
     src_chain = src_chain.upper()
     dst_chain = dst_chain.upper()
+    strip = set(strip_residues or ())
     n_written = 0
+    stripped_residues_seen = set()
     with open(in_path) as fin, open(out_path, "w") as fout:
         for line in fin:
             if line.startswith("ATOM") or line.startswith("HETATM"):
                 if line[21].upper() != src_chain:
                     continue
-                # Rewrite chain column (index 21).
-                line = line[:21] + dst_chain + line[22:]
+                if strip:
+                    try:
+                        resnum = int(line[22:26].strip())
+                    except ValueError:
+                        resnum = None
+                    if resnum in strip:
+                        atom_name = line[12:16].strip()
+                        if atom_name not in BACKBONE_ATOMS:
+                            continue
+                        # Rename residue to GLY (cols 17-19) AND rewrite
+                        # the chain column (col 21) in one pass.
+                        line = line[:17] + "GLY" + line[20:21] + dst_chain + line[22:]
+                        stripped_residues_seen.add(resnum)
+                    else:
+                        line = line[:21] + dst_chain + line[22:]
+                else:
+                    line = line[:21] + dst_chain + line[22:]
                 fout.write(line)
                 n_written += 1
             elif line.startswith("TER"):
@@ -146,7 +187,7 @@ def write_pdb_with_chain(in_path: Path, out_path: Path,
             else:
                 # HEADER / TITLE / SEQRES etc. — pass through.
                 fout.write(line)
-    return n_written
+    return n_written, len(stripped_residues_seen)
 
 
 # ── Contig-derived design region (for clash bookkeeping) ───────────
@@ -393,13 +434,26 @@ def main():
     )
 
     # ── Relabel input PDBs to chains A / B ───────────────────────────
-    n_rec_atoms = write_pdb_with_chain(
+    # Strip set used only for the receptor; effector never has sidechains
+    # stripped (the user's hotspots are USED at HADDOCK time on the
+    # effector side, can't strip their sidechains).
+    strip_for_receptor = (set(contig_design_region)
+                          if args.strip_design_sidechains and contig_design_region
+                          else set())
+    if args.strip_design_sidechains and not contig_design_region:
+        print("WARNING: --strip-design-sidechains requested but the "
+              "contig-derived design region is empty; no sidechains "
+              "will be stripped.  Provide --contigs and ensure the "
+              "receptor chain appears in it.", file=sys.stderr)
+
+    n_rec_atoms, n_stripped = write_pdb_with_chain(
         Path(args.receptor),
         Path("receptor_haddock.pdb"),
         src_chain=args.receptor_chain,
         dst_chain=HADDOCK_RECEPTOR_CHAIN,
+        strip_residues=strip_for_receptor,
     )
-    n_eff_atoms = write_pdb_with_chain(
+    n_eff_atoms, _ = write_pdb_with_chain(
         Path(args.effector),
         Path("effector_haddock.pdb"),
         src_chain=args.effector_chain,
@@ -418,6 +472,9 @@ def main():
     print(f"Relabelled receptor chain {args.receptor_chain} -> "
           f"{HADDOCK_RECEPTOR_CHAIN} ({n_rec_atoms} atoms) "
           f"-> receptor_haddock.pdb")
+    if n_stripped:
+        print(f"  Stripped {n_stripped} design-region residue(s) to "
+              f"backbone-only GLY (per --strip-design-sidechains)")
     print(f"Relabelled effector chain {args.effector_chain} -> "
           f"{HADDOCK_EFFECTOR_CHAIN} ({n_eff_atoms} atoms) "
           f"-> effector_haddock.pdb")
@@ -466,6 +523,8 @@ def main():
         "contig": args.contigs,
         "receptor_chain_in_pdb": args.receptor_chain,
         "contig_design_region": contig_design_region,
+        "strip_design_sidechains": bool(strip_for_receptor),
+        "n_stripped_residues": n_stripped,
     }
     Path("restraints_summary.json").write_text(json.dumps(summary, indent=2))
 

@@ -41,6 +41,7 @@ process HADDOCK3_PREPARE {
     val  effector_active_residues
     val  pair_distance
     val  contigs
+    val  strip_design_sidechains
     path prepare_script
 
     output:
@@ -57,6 +58,7 @@ process HADDOCK3_PREPARE {
     def eff_arg   = effector_active_residues
                                           ? "--effector-active-residues '${effector_active_residues}'" : ""
     def contigs_arg = contigs            ? "--contigs '${contigs}'" : ""
+    def strip_arg = strip_design_sidechains ? "--strip-design-sidechains" : ""
     """
     singularity exec --bind \${PWD}:\${PWD} ${params.rfdiff_container} \\
         python ${prepare_script} \\
@@ -68,7 +70,8 @@ process HADDOCK3_PREPARE {
             ${rec_arg} \\
             ${eff_arg} \\
             --pair-distance '${pair_distance}' \\
-            ${contigs_arg}
+            ${contigs_arg} \\
+            ${strip_arg}
     """
 }
 

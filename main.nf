@@ -256,6 +256,12 @@ params.haddock_effector_active_residues = ""    // Soft AIR effector side; empty
 params.haddock_pair_distance            = "2,2,4"  // Global pair distance "target,lo_dev,hi_dev"
 params.haddock_chosen_cluster           = null  // Set to a cluster_id to override auto-pick
 params.stop_after_haddock               = false // Halt after HADDOCK_PLOTS for manual inspection
+// Strip design-region sidechains from the receptor before docking
+// (per A147).  Replaces residues in the contig-derived design region
+// with backbone-only GLY in receptor_haddock.pdb.  HADDOCK-only — RFD
+// replaces those residues entirely, so the GLY substitution doesn't
+// reach the designed sequences.  Off by default; opt in per campaign.
+params.haddock_strip_design_sidechains  = false
 
 // ── Infrastructure ──────────────────────────────────────────────────────
 // All container paths (rfdiff_container, rosetta_container, boltz2_container,
@@ -399,6 +405,7 @@ workflow {
             params.haddock_effector_active_residues,
             params.haddock_pair_distance,
             params.contigs,
+            params.haddock_strip_design_sidechains,
             Channel.value(file("${projectDir}/bin/haddock3_prepare.py"))
         )
 

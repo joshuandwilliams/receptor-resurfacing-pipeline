@@ -149,6 +149,18 @@ stop_after_haddock: false
 haddock_chosen_cluster: null   # null = auto-pick by (pair_contact_fraction, BSA)
                                # integer = override with that cluster ID
 
+# Strip receptor design-region sidechains before docking.  When true,
+# residues in the contig's de novo regions are reduced to backbone-only
+# (N/CA/C/O) and renamed to GLY in the receptor PDB that goes into
+# HADDOCK.  Rationale: those residues will be replaced by RFDiffusion
+# anyway, so their current sidechains are sterically irrelevant to the
+# final design — but at HADDOCK time they act as walls that deflect
+# the effector and prevent tight packing.  Stripping them lets HADDOCK
+# pack the effector against the receptor backbone, often producing a
+# rotated receptor pose with much higher BSA.  HADDOCK-only: the
+# original receptor PDB is unchanged on disk.
+haddock_strip_design_sidechains: false
+
 # ── Rosetta pre-validation physics filter ────────────────────────────
 sc_threshold: 0.62
 stop_after_rosetta: false  # *** USEFUL DIAGNOSTIC TOOL ***

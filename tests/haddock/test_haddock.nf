@@ -61,17 +61,22 @@ params.haddock_min_cluster_size = 4
 // de novo region, which is the expected "HADDOCK pins to native coords;
 // RFDiffusion redesigns the residue identities" workflow).
 params.haddock_contact_pairs            = "A73-B31 A72-B32 A71-B33"
-// No receptor active list — the contig-derived design region (33-49,
-// 69-78) handles clash bookkeeping.  Per A139 post-commit-3 amendment.
-params.haddock_receptor_active_residues = ""
-// Effector hotspot: a beta strand on avr-Pia (B20-26) that the user
-// wants HADDOCK to dock the receptor toward, without specifying which
-// receptor residues should contact it (effector-only AIR mode: each
-// effector active residue is restrained to any receptor residue, AIR
-// 5.0 +- 5.0 +- 5.0).
+// Receptor design region 1 (33-49) on the active list — combined with
+// the effector hotspot list below this becomes a two-sided AIR that
+// pulls DR1 residues toward B20-26.  DR2 (residues 69-78) is intentionally
+// EXCLUDED here because the contact pairs already pin DR2 to the existing
+// AvrPikF beta-strand interface; adding DR2 to the active list would
+// double-restrain.  See notes/design_audit.md "DR1 rotation experiment".
+params.haddock_receptor_active_residues = "33-49"
 params.haddock_effector_active_residues = "20-26"
 params.haddock_pair_distance            = "2,2,4"
 params.haddock_chosen_cluster           = null   // auto-pick
+// Strip the receptor's design-region sidechains (33-49 + 69-78) before
+// HADDOCK runs — leaves backbone-only GLY in those positions so the
+// effector can pack tight against the receptor backbone without
+// being deflected by sidechains that RFDiffusion will redesign anyway.
+// Per A147 future-consideration in notes/design_audit.md.
+params.haddock_strip_design_sidechains  = true
 
 params.rfdiff_contact_cutoff = 8.0
 params.project_name          = "test_haddock"
@@ -116,6 +121,7 @@ workflow {
         params.haddock_effector_active_residues,
         params.haddock_pair_distance,
         params.contigs,
+        params.haddock_strip_design_sidechains,
         Channel.value(file("${projectDir}/bin/haddock3_prepare.py"))
     )
 

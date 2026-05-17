@@ -53,6 +53,7 @@ haddock_effector_active_residues: ""
 haddock_pair_distance: "2,2,4"
 haddock_chosen_cluster: null
 stop_after_haddock: false
+haddock_strip_design_sidechains: false
 
 # ── RFDiffusion ───────────────────────────────────────────────────────
 contigs: "A1-32/10-20/A46-72/6-6 C"
