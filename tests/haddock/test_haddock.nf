@@ -87,6 +87,7 @@ include { HADDOCK3_PREPARE         } from '../../modules/haddock'
 include { HADDOCK3_DOCK            } from '../../modules/haddock'
 include { HADDOCK3_PLOTS           } from '../../modules/haddock'
 include { HADDOCK_CLUSTER_METRICS  } from '../../modules/haddock'
+include { HADDOCK_CLUSTER_SC       } from '../../modules/haddock'
 include { SELECT_HADDOCK_CLUSTER   } from '../../modules/haddock'
 include { BUILD_CONTIGS            } from '../../modules/haddock'
 include { WRITE_DUMMY_MAPPING as WRITE_DUMMY_MAPPING_REC } from '../../modules/preprocessing'
@@ -132,7 +133,8 @@ workflow {
         HADDOCK3_DOCK.out.capri_scores,
         HADDOCK3_DOCK.out.cluster_summary,
         HADDOCK3_DOCK.out.run_dir,
-        params.haddock_receptor_active_residues,
+        HADDOCK3_PREPARE.out.restraints_summary,
+        params.haddock_contact_pairs,
         params.haddock_effector_active_residues,
         Channel.value(file("${projectDir}/bin/haddock3_plots.py"))
     )
@@ -147,9 +149,17 @@ workflow {
         Channel.value(file("${projectDir}/bin"))
     )
 
+    HADDOCK_CLUSTER_SC(
+        HADDOCK3_DOCK.out.haddock_report,
+        HADDOCK3_DOCK.out.cluster_models,
+        Channel.value(file("${projectDir}/bin/haddock_cluster_sc.py")),
+        Channel.value(file("${projectDir}/bin"))
+    )
+
     SELECT_HADDOCK_CLUSTER(
         HADDOCK3_DOCK.out.haddock_report,
         HADDOCK_CLUSTER_METRICS.out.cluster_metrics,
+        HADDOCK_CLUSTER_SC.out.cluster_sc,
         HADDOCK3_PREPARE.out.restraints_summary,
         HADDOCK3_DOCK.out.cluster_models,
         receptor_ch,

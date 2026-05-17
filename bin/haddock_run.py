@@ -278,6 +278,7 @@ class HaddockRun:
         workdir = Path(workdir)
         report_path = workdir / "haddock_report.json"
         metrics_path = workdir / "cluster_metrics.json"
+        sc_path = workdir / "cluster_sc.json"
         restraints_path = workdir / "restraints_summary.json"
         if not report_path.is_file():
             raise FileNotFoundError(
@@ -292,6 +293,13 @@ class HaddockRun:
             report = json.load(f)
         with open(metrics_path) as f:
             metrics = json.load(f)
+        # cluster_sc.json (sibling output from HADDOCK_CLUSTER_SC in
+        # rosetta_container) is optional — if missing, sc stays None on
+        # every HaddockCluster.
+        sc_by_cluster: dict = {}
+        if sc_path.is_file():
+            with open(sc_path) as f:
+                sc_by_cluster = json.load(f)
         # restraints_summary.json may be absent for legacy / synthetic fixtures.
         contig_design_region: Tuple[int, ...] = ()
         if restraints_path.is_file():
@@ -310,6 +318,11 @@ class HaddockRun:
                 # cluster, so this is a defensive guard.
                 continue
             best_pdb = workdir / info["filename"]
+            # Sc may come from either cluster_metrics.json (legacy single-
+            # process flow) or cluster_sc.json (post-commit-4 split).
+            sc_value = m.get("sc")
+            if sc_value is None and str(cid) in sc_by_cluster:
+                sc_value = sc_by_cluster[str(cid)].get("sc")
             cluster = HaddockCluster(
                 cluster_id=cid,
                 size=int(info["size"]),
@@ -323,7 +336,7 @@ class HaddockRun:
                 pair_total_count=int(m["pair_total_count"]),
                 clashes_in_design_region=int(m["clashes_in_design_region"]),
                 clashes_outside_design_region=int(m["clashes_outside_design_region"]),
-                sc=None if m.get("sc") is None else float(m["sc"]),
+                sc=None if sc_value is None else float(sc_value),
             )
             clusters.append(cluster)
 

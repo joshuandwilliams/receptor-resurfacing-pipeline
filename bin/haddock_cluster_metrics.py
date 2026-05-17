@@ -14,21 +14,22 @@ Reads:
 
 For each cluster:
 - BSA + interface H-bonds via ``run_biophysical_metrics.py`` subprocess.
-- Sc + ΔΔG via ``run_rosetta_metrics.py`` subprocess (ΔΔG discarded; the
-  HADDOCK stage doesn't use it).  Per A150 — adding ~3–12 min of
-  FastRelax overhead is acceptable.
 - COM distance between receptor and effector via structure_metrics.
 - Pair contact fraction: count of contact pairs with CA-CA distance
   within ``pair_distance[0] + pair_distance[2]`` (the restraint upper bound).
-- AIR satisfaction count: how many of the receptor active residues have
-  ANY CA within the AIR upper bound of an effector active residue (or
-  any effector CA when effector_active is empty).
+- AIR satisfaction count: how many of the active residues have a
+  qualifying contact under the AIR distance threshold (three-mode
+  satisfaction matching the AIR table).
 - Clash counts in/outside the design region via structure_metrics.
 
-Bridge distances are NOT computed here — they require the contig string,
-which is intentionally not a HaddockRun field (per A139 / Q152(i)).  The
-Nextflow wrapper that has access to both this output and the contig
-fills bridge distances onto HaddockCluster post-construction.
+Sc (shape complementarity) is NOT computed here — it requires Rosetta
+binaries that aren't in the boltz2_container this script runs in.  A
+sibling process HADDOCK_CLUSTER_SC computes it via run_rosetta_metrics.py
+in the rosetta_container and merges sc into HaddockCluster downstream
+(post-commit-4 split).
+
+Bridge distances are also NOT computed here — they require the contig
+string and are filled by the Nextflow wrapper post-construction.
 
 Outputs:
     cluster_metrics.json  - {"<cluster_id>": {metric: value, ...}, ...}
@@ -77,14 +78,6 @@ def parse_args():
     ap.add_argument("--biophysical-script",
                     default=str(Path(_BIN_DIR) / "run_biophysical_metrics.py"),
                     help="Path to run_biophysical_metrics.py")
-    ap.add_argument("--rosetta-script",
-                    default=str(Path(_BIN_DIR) / "run_rosetta_metrics.py"),
-                    help="Path to run_rosetta_metrics.py")
-    ap.add_argument("--fastrelax-xml",
-                    default=str(Path(_BIN_DIR) / "fastrelax_for_ia.xml"),
-                    help="Path to fastrelax_for_ia.xml for Rosetta InterfaceAnalyzer")
-    ap.add_argument("--skip-sc", action="store_true",
-                    help="Skip Rosetta Sc computation (debugging only)")
     return ap.parse_args()
 
 
@@ -134,37 +127,6 @@ def _run_biophys(
     if raw_fail:
         failures.extend(raw_fail.split(","))
     return bsa, hbonds, failures
-
-
-def _run_rosetta_sc(
-    rosetta_script: Path, fastrelax_xml: Path, pdb: Path,
-    receptor_chain: str, effector_chain: str, cluster_id: int,
-) -> Tuple[Optional[float], List[str]]:
-    """Call run_rosetta_metrics.py; return (sc, failures).  ΔΔG is discarded."""
-    with tempfile.TemporaryDirectory(prefix=f"rosetta_c{cluster_id}_") as tmp:
-        out_csv = Path(tmp) / "out.csv"
-        cmd = [
-            "python3", str(rosetta_script),
-            "--seq-name", f"cluster_{cluster_id}",
-            "--canonical-pdb", str(pdb),
-            "--receptor-chain", receptor_chain,
-            "--effector-chain", effector_chain,
-            "--fast-relax-xml", str(fastrelax_xml),
-            "--output-csv", str(out_csv),
-        ]
-        try:
-            subprocess.run(cmd, check=True, capture_output=True, text=True)
-        except subprocess.CalledProcessError as e:
-            print(f"[cluster {cluster_id}] rosetta subprocess failed: "
-                  f"{e.stderr}", file=sys.stderr)
-            return None, ["rosetta_subprocess_failed"]
-        row = _read_csv_single_row(out_csv)
-    sc = _safe_float(row.get("sc", ""))
-    failures = []
-    raw_fail = row.get("rosetta_failures", "")
-    if raw_fail:
-        failures.extend(raw_fail.split(","))
-    return sc, failures
 
 
 def _safe_float(s) -> Optional[float]:
@@ -245,37 +207,69 @@ def _air_satisfaction(
     effector_active: List[int],
     receptor_chain: str, effector_chain: str,
 ) -> Tuple[int, int]:
-    """Per-AIR satisfaction count.  Each receptor active residue
-    contributes one AIR; it's "satisfied" iff any CA within the AIR upper
-    bound is found on the effector side (active list if non-empty,
-    otherwise any effector residue).
+    """Per-AIR satisfaction count.
+
+    Three modes mirroring the AIR table itself:
+    - Two-sided (both active lists set): one AIR per receptor active
+      residue; satisfied iff any of the effector active CAs is within
+      AIR_TWO_SIDED_UPPER A.
+    - Receptor-only: one AIR per receptor active; satisfied iff any
+      effector CA at all is within AIR_ONE_SIDED_UPPER A.
+    - Effector-only (post-commit-4 amendment): one AIR per effector
+      active; satisfied iff any receptor CA at all is within
+      AIR_ONE_SIDED_UPPER A.
 
     Returns ``(satisfied, total)``.
     """
-    total = len(receptor_active)
-    if total == 0:
-        return 0, 0
     rec_cas = _ca_by_resnum(pdb, receptor_chain)
     eff_cas = _ca_by_resnum(pdb, effector_chain)
-    if effector_active:
+
+    if receptor_active and effector_active:
         eff_subset = [eff_cas[rn] for rn in effector_active if rn in eff_cas]
-        upper = AIR_TWO_SIDED_UPPER
-    else:
+        if not eff_subset:
+            return 0, len(receptor_active)
+        eff_arr = np.array(eff_subset)
+        satisfied = 0
+        for rn in receptor_active:
+            ca = rec_cas.get(rn)
+            if ca is None:
+                continue
+            diffs = eff_arr - ca
+            if float(np.min(np.sqrt(np.einsum("ij,ij->i", diffs, diffs)))) <= AIR_TWO_SIDED_UPPER:
+                satisfied += 1
+        return satisfied, len(receptor_active)
+
+    if receptor_active:
         eff_subset = list(eff_cas.values())
-        upper = AIR_ONE_SIDED_UPPER
-    if not eff_subset:
-        return 0, total
-    eff_arr = np.array(eff_subset)
-    satisfied = 0
-    for rn in receptor_active:
-        ca = rec_cas.get(rn)
-        if ca is None:
-            continue
-        diffs = eff_arr - ca
-        min_d = float(np.min(np.sqrt(np.einsum("ij,ij->i", diffs, diffs))))
-        if min_d <= upper:
-            satisfied += 1
-    return satisfied, total
+        if not eff_subset:
+            return 0, len(receptor_active)
+        eff_arr = np.array(eff_subset)
+        satisfied = 0
+        for rn in receptor_active:
+            ca = rec_cas.get(rn)
+            if ca is None:
+                continue
+            diffs = eff_arr - ca
+            if float(np.min(np.sqrt(np.einsum("ij,ij->i", diffs, diffs)))) <= AIR_ONE_SIDED_UPPER:
+                satisfied += 1
+        return satisfied, len(receptor_active)
+
+    if effector_active:
+        rec_subset = list(rec_cas.values())
+        if not rec_subset:
+            return 0, len(effector_active)
+        rec_arr = np.array(rec_subset)
+        satisfied = 0
+        for rn in effector_active:
+            ca = eff_cas.get(rn)
+            if ca is None:
+                continue
+            diffs = rec_arr - ca
+            if float(np.min(np.sqrt(np.einsum("ij,ij->i", diffs, diffs)))) <= AIR_ONE_SIDED_UPPER:
+                satisfied += 1
+        return satisfied, len(effector_active)
+
+    return 0, 0
 
 
 def _design_region(restraints: dict) -> Set[int]:
@@ -337,15 +331,6 @@ def main() -> int:
             args.receptor_chain, args.effector_chain, cid,
         )
 
-        # Sc via Rosetta subprocess.
-        if args.skip_sc:
-            sc, ros_fail = None, []
-        else:
-            sc, ros_fail = _run_rosetta_sc(
-                Path(args.rosetta_script), Path(args.fastrelax_xml),
-                pdb, args.receptor_chain, args.effector_chain, cid,
-            )
-
         # COM distance.
         com_dist = structure_metrics.chain_com_distance(
             pdb, args.receptor_chain, args.effector_chain,
@@ -374,7 +359,9 @@ def main() -> int:
         out[str(cid)] = {
             "bsa": bsa if bsa is not None else 0.0,
             "interface_hbonds": hbonds,
-            "sc": sc,
+            # sc is filled in by HADDOCK_CLUSTER_SC (sibling process in
+            # rosetta_container) via cluster_sc.json; left null here.
+            "sc": None,
             "com_distance": com_dist if com_dist is not None else 0.0,
             "air_satisfaction_count": air_sat,
             "air_total_count": air_total,
@@ -382,13 +369,12 @@ def main() -> int:
             "pair_total_count": pair_total,
             "clashes_in_design_region": clashes_in,
             "clashes_outside_design_region": clashes_out,
-            "failures": biophys_fail + ros_fail,
+            "failures": biophys_fail,
         }
         print(f"[cluster {cid}] BSA={out[str(cid)]['bsa']:.2f}  "
               f"COM={out[str(cid)]['com_distance']:.2f}  "
               f"AIR={air_sat}/{air_total}  pairs={pair_frac*100:.0f}%  "
-              f"clashes={clashes_in}/{clashes_out}  "
-              f"Sc={'' if sc is None else f'{sc:.3f}'}")
+              f"clashes={clashes_in}/{clashes_out}")
 
     (workdir / "cluster_metrics.json").write_text(json.dumps(out, indent=2))
     print(f"Wrote {len(out)} cluster metric record(s) -> "

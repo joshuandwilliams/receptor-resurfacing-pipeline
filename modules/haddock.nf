@@ -186,9 +186,13 @@ HADDOCK_CFG
 /*
  * HADDOCK_CLUSTER_METRICS
  * -----------------------
- * Compute BSA / Sc / COM / AIR satisfaction / pair contact fraction /
+ * Compute BSA / hbonds / COM / AIR satisfaction / pair contact fraction /
  * clash counts (in/out design region) for every qualifying cluster.
- * Writes cluster_metrics.json keyed by cluster_id.
+ * Runs in boltz2_container (needs numpy + freesasa + MDAnalysis).
+ *
+ * Sc is NOT computed here — see HADDOCK_CLUSTER_SC sibling process which
+ * runs in rosetta_container and emits cluster_sc.json.  HaddockRun
+ * merges the two files at construction time.
  */
 process HADDOCK_CLUSTER_METRICS {
     tag "haddock_metrics"
@@ -212,14 +216,51 @@ process HADDOCK_CLUSTER_METRICS {
     script:
     """
     # haddock_cluster_metrics expects its scripts side-by-side in bin/
-    # (it shells out to run_biophysical_metrics.py + run_rosetta_metrics.py).
-    # Symlink everything into a single workdir so the relative paths line up.
+    # (it shells out to run_biophysical_metrics.py).  Symlink everything
+    # into a single workdir so the relative paths line up.
+    for f in ${bin_dir}/*.py ${bin_dir}/*.xml; do
+        ln -sf "\${f}" .
+    done
+
+    singularity exec --bind \${PWD}:\${PWD} ${params.boltz2_container} \\
+        python haddock_cluster_metrics.py \\
+            --workdir . \\
+            --receptor-chain A \\
+            --effector-chain B
+    """
+}
+
+
+/*
+ * HADDOCK_CLUSTER_SC
+ * ------------------
+ * Compute Rosetta shape complementarity (Sc) for every qualifying
+ * cluster's best model.  Runs in rosetta_container; output is merged
+ * onto HaddockCluster fields downstream via cluster_sc.json.
+ */
+process HADDOCK_CLUSTER_SC {
+    tag "haddock_sc"
+    label 'cpu_haddock_metrics'
+
+    publishDir "${params.outdir}/haddock", mode: 'copy'
+
+    input:
+    path haddock_report
+    path cluster_models
+    path sc_script
+    path bin_dir
+
+    output:
+    path "cluster_sc.json", emit: cluster_sc
+
+    script:
+    """
     for f in ${bin_dir}/*.py ${bin_dir}/*.xml; do
         ln -sf "\${f}" .
     done
 
     singularity exec --bind \${PWD}:\${PWD} ${params.rosetta_container} \\
-        python haddock_cluster_metrics.py \\
+        python haddock_cluster_sc.py \\
             --workdir . \\
             --receptor-chain A \\
             --effector-chain B
@@ -244,6 +285,7 @@ process SELECT_HADDOCK_CLUSTER {
     input:
     path haddock_report
     path cluster_metrics
+    path cluster_sc
     path restraints_summary
     path cluster_models
     path receptor_pdb
@@ -303,7 +345,8 @@ process HADDOCK3_PLOTS {
     path capri_scores
     path cluster_summary
     path run_dir
-    val  receptor_active_residues
+    path restraints_summary
+    val  contact_pairs
     val  effector_active_residues
     path plots_script
 
@@ -311,8 +354,8 @@ process HADDOCK3_PLOTS {
     path "haddock_*.png", emit: plots
 
     script:
-    def rec_arg = receptor_active_residues
-                  ? "--receptor-active-residues '${receptor_active_residues}'" : ""
+    def pairs_arg = contact_pairs
+                    ? "--contact-pairs '${contact_pairs}'" : ""
     def eff_arg = effector_active_residues
                   ? "--effector-active-residues '${effector_active_residues}'" : ""
     """
@@ -324,8 +367,9 @@ process HADDOCK3_PLOTS {
             --capri-scores ${capri_scores} \\
             --cluster-summary ${cluster_summary} \\
             --run-dir ${run_dir} \\
+            --restraints-summary ${restraints_summary} \\
             --min-cluster-size ${params.haddock_min_cluster_size} \\
-            ${rec_arg} \\
+            ${pairs_arg} \\
             ${eff_arg}
     """
 }

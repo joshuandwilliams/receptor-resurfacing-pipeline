@@ -298,6 +298,7 @@ include { HADDOCK3_PREPARE                     } from './modules/haddock'
 include { HADDOCK3_DOCK                        } from './modules/haddock'
 include { HADDOCK3_PLOTS                       } from './modules/haddock'
 include { HADDOCK_CLUSTER_METRICS              } from './modules/haddock'
+include { HADDOCK_CLUSTER_SC                   } from './modules/haddock'
 include { SELECT_HADDOCK_CLUSTER               } from './modules/haddock'
 include { BUILD_CONTIGS                        } from './modules/haddock'
 
@@ -415,13 +416,14 @@ workflow {
             HADDOCK3_DOCK.out.capri_scores,
             HADDOCK3_DOCK.out.cluster_summary,
             HADDOCK3_DOCK.out.run_dir,
-            params.haddock_receptor_active_residues,
+            HADDOCK3_PREPARE.out.restraints_summary,
+            params.haddock_contact_pairs,
             params.haddock_effector_active_residues,
             Channel.value(file("${projectDir}/bin/haddock3_plots.py"))
         )
 
-        // ── Per-cluster metrics (BSA, Sc, COM, AIR/pair satisfaction,
-        //    clash counts) — computed once and consumed by SELECT below.
+        // ── Per-cluster metrics (BSA, COM, AIR/pair satisfaction,
+        //    clash counts) — runs in boltz2_container.
         HADDOCK_CLUSTER_METRICS(
             HADDOCK3_DOCK.out.haddock_report,
             HADDOCK3_DOCK.out.cluster_models,
@@ -429,6 +431,15 @@ workflow {
             HADDOCK3_PREPARE.out.ambig_restraints,
             HADDOCK3_PREPARE.out.unambig_restraints,
             Channel.value(file("${projectDir}/bin/haddock_cluster_metrics.py")),
+            Channel.value(file("${projectDir}/bin"))
+        )
+
+        // ── Per-cluster Sc (shape complementarity) — runs in
+        //    rosetta_container; merged onto HaddockCluster downstream.
+        HADDOCK_CLUSTER_SC(
+            HADDOCK3_DOCK.out.haddock_report,
+            HADDOCK3_DOCK.out.cluster_models,
+            Channel.value(file("${projectDir}/bin/haddock_cluster_sc.py")),
             Channel.value(file("${projectDir}/bin"))
         )
 
@@ -456,6 +467,7 @@ workflow {
         SELECT_HADDOCK_CLUSTER(
             HADDOCK3_DOCK.out.haddock_report,
             HADDOCK_CLUSTER_METRICS.out.cluster_metrics,
+            HADDOCK_CLUSTER_SC.out.cluster_sc,
             HADDOCK3_PREPARE.out.restraints_summary,
             HADDOCK3_DOCK.out.cluster_models,
             receptor_pdb_ch,

@@ -30,7 +30,7 @@ COLOUR_ALL      = "#4C72B0"
 COLOUR_BEST     = "#DD4444"
 COLOUR_WARN     = "#FFCCCC"
 COLOUR_DENOVO   = "#FF8C00"
-BSA_WARN_CUTOFF = 1000.0
+BSA_WARN_CUTOFF = 700.0
 CONTACT_CUTOFF  = 8.0
 MIN_CLUSTER_SIZE = 4  # Default; overridden by --min-cluster-size CLI flag.
                       # Single source of truth lives in nextflow.config as
@@ -52,13 +52,16 @@ def parse_args():
     parser.add_argument("--min-cluster-size", type=int, default=MIN_CLUSTER_SIZE,
                         help="Minimum cluster size to qualify (default: %(default)s). "
                              "Should match `min_population` in haddock.nf clustfcc block.")
-    parser.add_argument("--receptor-active-residues", default="",
-                        help="Comma-separated receptor active residues / ranges, used "
-                             "for design-region shading on the interface heatmap.  Empty "
-                             "= no shading.  (Session 7: replaces the old contig-driven "
-                             "shading; the contig is no longer a HADDOCK input.)")
     parser.add_argument("--effector-active-residues", default="",
                         help="Comma-separated effector active residues for AIR annotation bar")
+    parser.add_argument("--contact-pairs", default="",
+                        help="Space-separated CA-CA pin pairs, e.g. 'A73-B31 A72-B32'. "
+                             "Each pair's receptor and effector residues are marked with "
+                             "a triangle on the heatmap annotation bars.")
+    parser.add_argument("--restraints-summary", default=None,
+                        help="Path to restraints_summary.json from haddock3_prepare.py. "
+                             "If provided, the 'contig_design_region' field is used to "
+                             "shade the receptor design region on the heatmap.")
     return parser.parse_args()
 
 
@@ -113,7 +116,8 @@ def plot_score_vs_bsa(scores, bsas, best_score, best_bsa):
     fig, ax = plt.subplots(figsize=(7, 5))
 
     ax.scatter(bsas, scores, color=COLOUR_ALL, alpha=0.6, s=30,
-               edgecolors="white", linewidths=0.5, label="All models", zorder=3)
+               edgecolors="white", linewidths=0.5,
+               label="Top-N per cluster (seletopclusts output)", zorder=3)
     ax.scatter(best_bsa, best_score, color=COLOUR_BEST, s=120, zorder=5,
                edgecolors="black", linewidths=0.8,
                label=f"Best model (BSA={best_bsa:.0f} Å²)", marker="*")
@@ -180,6 +184,9 @@ def plot_cluster_sizes(clusters, best_cluster, best_model_cluster):
     ax.set_xlabel("FCC Cluster", fontsize=12)
     ax.set_ylabel("Number of Models", fontsize=12)
     ax.set_ylim(top=ax.get_ylim()[1] * 1.25)
+    # Y axis is a count → integer ticks only.
+    from matplotlib.ticker import MaxNLocator
+    ax.yaxis.set_major_locator(MaxNLocator(integer=True))
 
     sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
     sm.set_array([])
@@ -371,7 +378,8 @@ def _set_heatmap_xticks(ax, res_range, xlabel):
 
 def plot_interface_heatmap(clusters, pdb_index, rec_chain, eff_chain, cutoff,
                            fixed_residues=None, best_model_name=None,
-                           effector_active_residues=None):
+                           effector_active_residues=None,
+                           contact_pairs=None):
     """Combined receptor + effector interface contact frequency heatmap."""
     out_path = "haddock_interface_heatmap.png"
 
@@ -518,6 +526,21 @@ def plot_interface_heatmap(clusters, pdb_index, rec_chain, eff_chain, cutoff,
                     "Design region" if n_regions == 1 else "Design regions",
                     ha="right", va="center", transform=ax_bar.transAxes, fontsize=9)
 
+    # Receptor contact-pair markers: small black triangles above the bar
+    # pointing down to the receptor halves of each user-defined pair.
+    rec_pair_residues = []
+    if contact_pairs:
+        rec_pair_residues = [rn for (_rc, rn, _ec, _en) in contact_pairs
+                             if rn in rec_res_to_col]
+        for rn in rec_pair_residues:
+            ax_bar.scatter(rec_res_to_col[rn], 1.15, marker="v",
+                           color="#000000", s=40, clip_on=False, zorder=5)
+    if rec_pair_residues:
+        ax_bar.text(0.5, 1.45,
+                    f"▼ user contact-pair anchors ({len(rec_pair_residues)})",
+                    ha="center", va="bottom", transform=ax_bar.transAxes,
+                    fontsize=8, color="#333333")
+
     # ── Shared colourmap ─────────────────────────────────────────────────
     cmap = plt.cm.Blues.copy()
     cmap.set_bad(color="#EEEEEE")
@@ -562,6 +585,22 @@ def plot_interface_heatmap(clusters, pdb_index, rec_chain, eff_chain, cutoff,
         ax_eff_bar.set_xlim(-0.5, n_eff_res - 0.5)
         ax_eff_bar.text(-0.01, 0.5, "Active residues",
                         ha="right", va="center", transform=ax_eff_bar.transAxes, fontsize=9)
+
+        # Effector contact-pair markers (mirror of the receptor markers).
+        eff_pair_residues = []
+        if contact_pairs:
+            eff_pair_residues = [en for (_rc, _rn, _ec, en) in contact_pairs
+                                 if en in eff_res_to_col]
+            for en in eff_pair_residues:
+                ax_eff_bar.scatter(eff_res_to_col[en], 1.15, marker="v",
+                                   color="#000000", s=40, clip_on=False, zorder=5)
+        if eff_pair_residues:
+            ax_eff_bar.text(0.5, 1.45,
+                            f"▼ user contact-pair anchors "
+                            f"({len(eff_pair_residues)})",
+                            ha="center", va="bottom",
+                            transform=ax_eff_bar.transAxes,
+                            fontsize=8, color="#333333")
 
     # ── Effector heatmap ─────────────────────────────────────────────────
     if has_eff and ax_eff is not None:
@@ -642,14 +681,41 @@ def main():
         else:
             print("WARNING: --run-dir or --complex-dir not provided; heatmap will be empty.")
 
-    # Design-region shading uses haddock_receptor_active_residues directly
-    # (Session 7: contig parsing removed from this script per A131).
-    design_residues = _parse_residue_spec(args.receptor_active_residues)
+    # Design-region shading: read contig_design_region from
+    # restraints_summary.json (post-commit-4 amendment).  The contig is
+    # the authoritative source for the receptor design region; HADDOCK
+    # PREPARE pre-computes it and stores the residue list there.
+    design_residues: set = set()
+    if args.restraints_summary and os.path.exists(args.restraints_summary):
+        try:
+            import json as _json
+            with open(args.restraints_summary) as f:
+                _rs = _json.load(f)
+            design_residues = set(int(r) for r in
+                                  _rs.get("contig_design_region", []))
+        except (ValueError, OSError) as e:
+            print(f"WARNING: could not read --restraints-summary "
+                  f"{args.restraints_summary}: {e}", file=sys.stderr)
     fixed_residues = design_residues if design_residues else None
     if fixed_residues:
-        print(f"Design-region residues for shading: {len(fixed_residues)}")
+        print(f"Design-region residues for shading "
+              f"(from contig_design_region): {len(fixed_residues)}")
     else:
-        print("No --receptor-active-residues provided; design-region shading disabled.")
+        print("No design region available; heatmap design-region shading disabled.")
+
+    # Parse contact pairs for triangle markers above the heatmap bars.
+    contact_pairs = []
+    if args.contact_pairs:
+        import re
+        for token in args.contact_pairs.split():
+            m = re.match(r"^([A-Za-z])(\d+)-([A-Za-z])(\d+)$", token.strip())
+            if m:
+                contact_pairs.append((
+                    m.group(1).upper(), int(m.group(2)),
+                    m.group(3).upper(), int(m.group(4)),
+                ))
+    if contact_pairs:
+        print(f"Contact pairs to mark on heatmap: {len(contact_pairs)}")
 
     # Best model: lowest-scoring member of pipeline-selected cluster
     best_model_name = None
@@ -684,7 +750,8 @@ def main():
     plot_interface_heatmap(clusters, pdb_index, args.receptor_chain, args.effector_chain,
                            args.contact_cutoff, fixed_residues=fixed_residues,
                            best_model_name=best_model_name,
-                           effector_active_residues=sorted(set(eff_active)) if eff_active else None)
+                           effector_active_residues=sorted(set(eff_active)) if eff_active else None,
+                           contact_pairs=contact_pairs)
 
 
 if __name__ == "__main__":
