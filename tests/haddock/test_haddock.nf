@@ -158,7 +158,8 @@ workflow {
         params.haddock_receptor_active_residues,
         params.haddock_effector_active_residues,
         params.haddock_pair_distance,
-        params.haddock_chosen_cluster,
+        // Nextflow refuses to bind null to a `val` input — string-sentinel.
+        (params.haddock_chosen_cluster != null ? "${params.haddock_chosen_cluster}" : "null"),
         Channel.value(file("${projectDir}/bin/select_haddock_cluster.py"))
     )
 
