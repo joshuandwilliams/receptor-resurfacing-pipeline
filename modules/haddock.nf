@@ -171,13 +171,10 @@ HADDOCK_CFG
         haddock3 docking.cfg
     cd ..
 
-    # ── Restraints summary follows the chosen complex through publishDir ─
-    # so haddock_cluster_metrics.py can read it when SELECT_HADDOCK_CLUSTER
-    # invokes it later via the same workdir.
-    cp ${ambig_restraints}   .
-    cp ${unambig_restraints} .
-
     # ── Collect cluster best-models ──────────────────────────────────────
+    # (ambig_restraints.tbl and unambig_restraints.tbl are already staged
+    # into the workdir by Nextflow as `path` inputs; they flow into
+    # HADDOCK_CLUSTER_METRICS via the HADDOCK3_PREPARE output channels.)
     singularity exec --bind \${PWD}:\${PWD} ${params.rfdiff_container} \\
         python ${collect_script} \\
             --run-dir run/run-haddock \\
