@@ -1,0 +1,105 @@
+# =============================================================================
+# Pipeline params for pikp1_avrpia campaign, run pose_solved_3a
+#
+# Design region: binder residues within 3 Å (heavy-atom contact) of avr-pia
+# in the constraint-solved pose (A7-B24 4-constraint + global interp).
+# Gap-joined at ≤ 1 residue.
+# Design region (13 residues): 7-9, 37-39, 42-43, 68-72
+#
+# Submit:
+#   sbatch run_pipeline.slurm.sh ./experiments/campaigns/pikp1_avrpia/runs/pose_solved_3a/params.yml
+# =============================================================================
+
+# ── Project ───────────────────────────────────────────────────────────
+project_name: "PikP1_AvrPia_pose_solved_3a"
+outdir: "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/experiments/campaigns/pikp1_avrpia/runs/pose_solved_3a/results"
+
+# ── Execution ─────────────────────────────────────────────────────────
+max_boltz2_parallel: 24
+
+# ═════════════════════════════════════════════════════════════════════════
+# INPUT MODE 2: Pre-docked complex PDB
+# ═════════════════════════════════════════════════════════════════════════
+pdb_file: "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/experiments/campaigns/pikp1_avrpia/inputs/pikp1_avrpia_pose_solved.pdb"
+hotspot: "B22,B24,B31,B33"
+
+# ═════════════════════════════════════════════════════════════════════════
+# SHARED SETTINGS
+# ═════════════════════════════════════════════════════════════════════════
+
+# ── Chain identifiers ─────────────────────────────────────────────────
+receptor_chain: "A"
+effector_chain: "B"
+
+# ── HADDOCK3 (modes 1/3 only — UNUSED in mode 2) ──────────────────────
+haddock_sampling: 1
+haddock_seletop: 1
+effector_active_residues: ""
+
+# ── RFDiffusion ───────────────────────────────────────────────────────
+# Design region (3 Å): residues 7-9, 37-39, 42-43, 68-72 (13 residues)
+# Lengths scaled ×0.7–×1.5 per strategy 4a: N=3→2-5, N=3→2-5, N=2→1-3, N=5→4-8
+contigs: "A1-6/2-5/A10-36/2-5/A40-41/1-3/A44-67/4-8/A73-78 B"
+num_designs: 64
+rfdiff_iterations: 100
+rfdiff_checkpoint: "Complex_beta_ckpt.pt"
+min_hotspot_frac: 0.0
+rfdiff_contact_cutoff: 8.0
+add_potential: true
+rfdiff_guide_scale: 2
+rfdiff_guide_decay: "quadratic"
+rfdiff_interface_weight: 1.0
+rfdiff_rog_weight: 0.5
+rfdiff_rog_min_dist: 5
+
+# ── Rosetta pre-validation ────────────────────────────────────────────
+sc_threshold: 0.5
+stop_after_rosetta: false
+
+# ── ProteinMPNN ───────────────────────────────────────────────────────
+num_seqs: 2
+mpnn_sampling_temp: 0.25
+rm_aa: "C"
+mpnn_top_n: 128
+
+# ── ProteinMPNN sequence quality control ──────────────────────────────
+max_poly_x: 5
+min_pct_identity: 0.0
+max_pct_identity: 100.0
+
+# ═════════════════════════════════════════════════════════════════════════
+# Boltz2 negative-steering
+# ═════════════════════════════════════════════════════════════════════════
+negsteer_mode: "mild"
+negsteer_max_mutations: 6
+negsteer_candidate_pool_size: 10
+negsteer_protected_set_source: "design_region_union"
+negsteer_n_designs: 3
+negsteer_num_seeds: 3
+negsteer_n_cycles: 1
+negsteer_diffusion_samples: 5
+negsteer_recycling_steps: 3
+negsteer_rmsd_threshold: 6.0
+negsteer_contact_cutoff: 4.5
+negsteer_no_kernels: true
+negsteer_postprocess_rmsd_threshold: 5.0
+negsteer_postprocess_metric_column: "steered_ra_eff_vs_truth"
+negsteer_postprocess_contact_cutoff: 5.0
+
+# ── Negative controls ─────────────────────────────────────────────────
+run_negative_controls: true
+negsteer_controls_n_designs: 1
+controls_warning_ipsae_max: 0.5
+controls_warning_ra_eff_min: 5.0
+
+# ── Interface metrics ─────────────────────────────────────────────────
+interface_plddt_trim_threshold: 50.0
+interface_intact_threshold: 5.0
+weighted_jaccard_pair_cutoff: 8.0
+
+# ── Orthogonal validation metrics ─────────────────────────────────────
+af3_nomsa_seeds: [42, 123, 456]
+orthogonal_filter_sc_min: 0.55
+orthogonal_filter_bsa_min: 600
+orthogonal_filter_plddt_min: 0.75
+orthogonal_filter_af3_ra_max: 5.0
