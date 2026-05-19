@@ -1,0 +1,111 @@
+# =============================================================================
+# Pipeline params for pikp1_avrpia campaign, run pose_solved_5a_2
+#
+# Design region: same as pose_solved_5a (5 Å contact cutoff, 25 residues).
+# Changes vs pose_solved_5a:
+#   - hotspot removed: RFDiffusion guided by pre-docked geometry alone,
+#     not by an explicit hotspot signal that collapsed 5a to a monoculture.
+#   - sc_threshold: 0.5 → 0.3: allow more scaffolds through Rosetta filter
+#     before MPNN; previous threshold likely discarded correct-geometry scaffolds.
+#   - num_designs: 64 → 128: more independent RFDiffusion trajectories to
+#     increase probability of sampling a correct-geometry family.
+#
+# See notes/pipeline_notes/pipeline_notes15.md for full diagnostic rationale.
+#
+# Submit:
+#   sbatch run_pipeline.slurm.sh ./experiments/campaigns/pikp1_avrpia/runs/pose_solved_5a_2/params.yml
+# =============================================================================
+
+# ── Project ───────────────────────────────────────────────────────────
+project_name: "PikP1_AvrPia_pose_solved_5a_2"
+outdir: "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/experiments/campaigns/pikp1_avrpia/runs/pose_solved_5a_2/results"
+
+# ── Execution ─────────────────────────────────────────────────────────
+max_boltz2_parallel: 24
+
+# ═════════════════════════════════════════════════════════════════════════
+# INPUT MODE 2: Pre-docked complex PDB
+# ═════════════════════════════════════════════════════════════════════════
+pdb_file: "/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/experiments/campaigns/pikp1_avrpia/inputs/pikp1_avrpia_pose_solved.pdb"
+# hotspot removed intentionally — see pipeline_notes15.md
+
+# ═════════════════════════════════════════════════════════════════════════
+# SHARED SETTINGS
+# ═════════════════════════════════════════════════════════════════════════
+
+# ── Chain identifiers ─────────────────────────────────────────────────
+receptor_chain: "A"
+effector_chain: "B"
+
+# ── HADDOCK3 (modes 1/3 only — UNUSED in mode 2) ──────────────────────
+haddock_sampling: 100
+haddock_seletop: 1
+effector_active_residues: ""
+
+# ── RFDiffusion ───────────────────────────────────────────────────────
+# Design region (5 Å): residues 5-10, 36-45, 54, 67-73, 76 (25 residues)
+# Lengths scaled ×0.7–×1.5 per strategy 4a: N=6→4-9, N=10→7-15, N=1→1-1, N=7→5-11, N=1→1-1
+contigs: "A1-4/4-9/A11-35/7-15/A46-53/1-1/A55-66/5-11/A74-75/1-1/A77-78 B"
+num_designs: 128
+rfdiff_iterations: 100
+rfdiff_checkpoint: "Complex_beta_ckpt.pt"
+min_hotspot_frac: 0.0
+rfdiff_contact_cutoff: 8.0
+add_potential: true
+rfdiff_guide_scale: 2
+rfdiff_guide_decay: "quadratic"
+rfdiff_interface_weight: 1.0
+rfdiff_rog_weight: 0.5
+rfdiff_rog_min_dist: 5
+
+# ── Rosetta pre-validation ────────────────────────────────────────────
+sc_threshold: 0.3
+stop_after_rosetta: false
+
+# ── ProteinMPNN ───────────────────────────────────────────────────────
+num_seqs: 2
+mpnn_sampling_temp: 0.25
+rm_aa: "C"
+mpnn_top_n: 128
+
+# ── ProteinMPNN sequence quality control ──────────────────────────────
+max_poly_x: 5
+min_pct_identity: 0.0
+max_pct_identity: 100.0
+
+# ═════════════════════════════════════════════════════════════════════════
+# Boltz2 negative-steering
+# ═════════════════════════════════════════════════════════════════════════
+negsteer_mode: "mild"
+negsteer_max_mutations: 6
+negsteer_candidate_pool_size: 10
+negsteer_protected_set_source: "design_region_union"
+negsteer_n_designs: 3
+negsteer_num_seeds: 3
+negsteer_n_cycles: 1
+negsteer_diffusion_samples: 5
+negsteer_recycling_steps: 3
+negsteer_rmsd_threshold: 6.0
+negsteer_contact_cutoff: 4.5
+negsteer_no_kernels: true
+negsteer_postprocess_rmsd_threshold: 5.0
+negsteer_postprocess_metric_column: "steered_ra_eff_vs_truth"
+negsteer_postprocess_contact_cutoff: 5.0
+
+# ── Negative controls ─────────────────────────────────────────────────
+run_negative_controls: true
+negsteer_controls_n_designs: 1
+controls_warning_ipsae_max: 0.5
+controls_warning_ra_eff_min: 5.0
+
+# ── Interface metrics ─────────────────────────────────────────────────
+interface_plddt_trim_threshold: 50.0
+interface_intact_threshold: 5.0
+weighted_jaccard_pair_cutoff: 8.0
+
+# ── Orthogonal validation metrics ─────────────────────────────────────
+af3_nomsa_seeds: [42, 123, 456]
+orthogonal_filter_sc_min: 0.55
+orthogonal_filter_bsa_min: 600
+orthogonal_filter_plddt_min: 0.75
+orthogonal_filter_af3_ra_max: 5.0
