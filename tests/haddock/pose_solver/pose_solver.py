@@ -48,6 +48,11 @@ W_DIST     = 1e4   # penalty for pair CA-CA > max_pair_distance
 W_LOWER    = 1e4   # penalty for pair CA-CA < min_pair_distance (too close to be realistic)
 W_EXCL     = 1e4   # penalty for exclusion pair CA-CA < min_excl_distance (too close)
 W_INTERP   = 10.0  # overall CA interpenetration depth — overridden by --interp-weight
+W_PAIR_SC_CLASH = 1e4  # heavy-atom clash between sidechains of paired residues
+PAIR_SC_CLASH_TOL = 2.0  # Å — paired sidechain heavy atoms within this distance count as a clash
+
+# Backbone atoms excluded when extracting sidechain-only heavy atoms.
+_BACKBONE_ATOMS = frozenset({'N', 'CA', 'C', 'O', 'OXT'})
 
 
 # ── CLI ───────────────────────────────────────────────────────────────────────
@@ -69,6 +74,9 @@ def parse_args() -> argparse.Namespace:
                          'e.g. "A8-B33@4.5" penalises if A8 and B33 come within 4.5 Å')
     ap.add_argument('--clash-cutoff', type=float, default=2.0,
                     help='Heavy-atom distance counted as a clash (Å)')
+    ap.add_argument('--pair-sc-clash-cutoff', type=float, default=PAIR_SC_CLASH_TOL,
+                    help='Min heavy-atom distance between sidechains of paired residues (Å); '
+                         'enforced during optimisation. Set to 0 to disable.')
     ap.add_argument('--contact-cutoff', type=float, default=8.0,
                     help='CA-CA distance shown on heatmap (Å)')
     ap.add_argument('--contig-design-region', default='',
@@ -111,6 +119,27 @@ def read_heavy(pdb: Path, chain: str) -> dict[int, np.ndarray]:
             atom = line[12:16].strip()
             elem = line[76:78].strip()
             if elem == 'H' or (not elem and atom.startswith('H')): continue
+            try:
+                rn = int(line[22:26])
+                data.setdefault(rn, []).append([float(line[30:38]),
+                                                float(line[38:46]),
+                                                float(line[46:54])])
+            except ValueError:
+                pass
+    return {rn: np.array(v) for rn, v in data.items()}
+
+
+def read_sidechain_heavy(pdb: Path, chain: str) -> dict[int, np.ndarray]:
+    """Read sidechain heavy atoms only (excludes backbone N, CA, C, O, OXT)."""
+    data: dict[int, list] = {}
+    with open(pdb) as f:
+        for line in f:
+            if line[:4] != 'ATOM': continue
+            if line[21] != chain: continue
+            atom = line[12:16].strip()
+            elem = line[76:78].strip()
+            if elem == 'H' or (not elem and atom.startswith('H')): continue
+            if atom in _BACKBONE_ATOMS: continue
             try:
                 rn = int(line[22:26])
                 data.setdefault(rn, []).append([float(line[30:38]),
@@ -210,6 +239,10 @@ def _obj(params: np.ndarray,
          excl_min_dists: np.ndarray, # minimum allowed distances for exclusions
          global_interp: bool,        # if True, penalise all CAs; if False, pair residues only
          interp_weight: float,       # weight for interpenetration penalty
+         b_pair_sc_arr: np.ndarray,  # (N_b_sc, 3) flat sidechain heavy atoms of binder pair residues
+         t_pair_sc_arr: np.ndarray,  # (N_t_sc, 3) flat sidechain heavy atoms of target pair residues
+         pair_sc_offsets: list,      # list of (b_start, b_end, t_start, t_end) per pair
+         pair_sc_clash_cutoff: float, # min allowed heavy-atom distance for paired sidechains
          ) -> float:
 
     R = Rotation.from_rotvec(params[:3]).as_matrix()
@@ -261,7 +294,25 @@ def _obj(params: np.ndarray,
             hull_depths(target_t[pair_t_idx], b_hull_eq).sum()
         )
 
-    return validity_loss + dist_loss + excl_loss + interp_loss
+    # Pair sidechain clash: minimum heavy-atom distance between the sidechain
+    # heavy atoms of each binder pair-residue and its partner target pair-residue.
+    # Catches the over-packing case where CA-CA satisfies the [min, max] window
+    # but bulky sidechains overlap.  Pairs involving GLY (no sidechain) skipped.
+    pair_sc_loss = 0.0
+    if pair_sc_clash_cutoff > 0.0 and pair_sc_offsets and t_pair_sc_arr.shape[0] > 0:
+        t_pair_sc_t = (R @ t_pair_sc_arr.T).T + t
+        for bs, be, ts, te in pair_sc_offsets:
+            if be <= bs or te <= ts:
+                continue
+            b_at = b_pair_sc_arr[bs:be]
+            t_at = t_pair_sc_t[ts:te]
+            diff = b_at[:, None, :] - t_at[None, :, :]
+            min_d = float(np.sqrt((diff * diff).sum(-1)).min())
+            if min_d < pair_sc_clash_cutoff:
+                pair_sc_loss += (pair_sc_clash_cutoff - min_d) ** 2
+        pair_sc_loss *= W_PAIR_SC_CLASH
+
+    return validity_loss + dist_loss + excl_loss + interp_loss + pair_sc_loss
 
 
 # ── Solver ────────────────────────────────────────────────────────────────────
@@ -271,6 +322,9 @@ def solve(binder_ca: dict, target_ca: dict,
           n_restarts: int, min_pair_dist: float, max_pair_dist: float,
           use_de: bool = False, global_interp: bool = False,
           interp_weight: float = 10.0,
+          binder_sc: dict | None = None,
+          target_sc: dict | None = None,
+          pair_sc_clash_cutoff: float = 0.0,
           ) -> tuple[np.ndarray, np.ndarray, float, list[dict]]:
 
     b_rn = sorted(binder_ca); t_rn = sorted(target_ca)
@@ -301,9 +355,33 @@ def solve(binder_ca: dict, target_ca: dict,
     else:
         excl_b_idx = excl_t_idx = excl_min_d = np.array([], dtype=int)
 
+    # Build flat sidechain heavy-atom arrays for pair residues, with per-pair offsets.
+    b_pair_sc_list: list = []
+    t_pair_sc_list: list = []
+    pair_sc_offsets: list[tuple[int, int, int, int]] = []
+    pair_sc_skipped: list[tuple[int, int, str]] = []
+    if binder_sc is not None and target_sc is not None and pair_sc_clash_cutoff > 0.0:
+        for rb, rt, _ in valid:
+            b_at = binder_sc.get(rb)
+            t_at = target_sc.get(rt)
+            bs = len(b_pair_sc_list)
+            ts = len(t_pair_sc_list)
+            if b_at is None or t_at is None or len(b_at) == 0 or len(t_at) == 0:
+                pair_sc_skipped.append((rb, rt, 'no sidechain (likely GLY)'))
+                pair_sc_offsets.append((bs, bs, ts, ts))
+                continue
+            b_pair_sc_list.extend(b_at.tolist())
+            t_pair_sc_list.extend(t_at.tolist())
+            pair_sc_offsets.append((bs, bs + len(b_at), ts, ts + len(t_at)))
+    b_pair_sc_arr = (np.array(b_pair_sc_list, dtype=float)
+                     if b_pair_sc_list else np.empty((0, 3), dtype=float))
+    t_pair_sc_arr = (np.array(t_pair_sc_list, dtype=float)
+                     if t_pair_sc_list else np.empty((0, 3), dtype=float))
+
     obj_args = (b_arr, t_arr, pb, pt, min_pair_dist, max_pair_dist,
                 b_hull.equations, t_hull.equations,
-                excl_b_idx, excl_t_idx, excl_min_d, global_interp, interp_weight)
+                excl_b_idx, excl_t_idx, excl_min_d, global_interp, interp_weight,
+                b_pair_sc_arr, t_pair_sc_arr, pair_sc_offsets, pair_sc_clash_cutoff)
 
     # Smart initialisation: for every restart, start with the target's pair
     # residue centroid placed near the binder's pair residue centroid.
@@ -332,8 +410,8 @@ def solve(binder_ca: dict, target_ca: dict,
 
     # Interface normal: perpendicular to the plane spanned by the three binder pair positions.
     # In the Kabsch pose the pairs coincide, so moving the target by n*d gives all pairs at distance d.
-    p1, p2, p3 = b_arr[pb[0]], b_arr[pb[1]], b_arr[pb[2]]
     if len(pb) >= 3:
+        p1, p2, p3 = b_arr[pb[0]], b_arr[pb[1]], b_arr[pb[2]]
         n = np.cross(p2 - p1, p3 - p1)
         n = n / (np.linalg.norm(n) + 1e-12)
     else:
@@ -346,6 +424,12 @@ def solve(binder_ca: dict, target_ca: dict,
     interp_scope = 'global' if global_interp else 'pair-only'
     print(f"  Weights: W_validity={W_VALIDITY:.0e} tol={VALID_TOL}Å  "
           f"W_dist={W_DIST:.0e}  W_lower={W_LOWER:.0e}  W_interp={interp_weight} ({interp_scope})")
+    if pair_sc_clash_cutoff > 0.0:
+        print(f"  Pair sidechain-clash: W={W_PAIR_SC_CLASH:.0e}  cutoff={pair_sc_clash_cutoff:.2f}Å  "
+              f"(active pairs: {sum(1 for bs, be, ts, te in pair_sc_offsets if be > bs and te > ts)}"
+              f"/{len(valid)})")
+        for rb, rt, reason in pair_sc_skipped:
+            print(f"    skipped {rb}-{rt}: {reason}")
 
     if use_de:
         # Differential evolution: global optimiser, no gradients required.
@@ -665,6 +749,8 @@ def main() -> None:
     target_ca    = read_ca(args.target, tc)
     binder_heavy = read_heavy(args.binder, bc)
     target_heavy = read_heavy(args.target, tc)
+    binder_sc    = read_sidechain_heavy(args.binder, bc)
+    target_sc    = read_sidechain_heavy(args.target, tc)
 
     print(f"Binder: {len(binder_ca)} residues   Target: {len(target_ca)} residues")
     print()
@@ -674,7 +760,9 @@ def main() -> None:
         binder_ca, target_ca, pairs, exclusions, args.n_restarts,
         args.min_pair_distance, args.max_pair_distance,
         use_de=args.use_de, global_interp=args.global_interp,
-        interp_weight=args.interp_weight)
+        interp_weight=args.interp_weight,
+        binder_sc=binder_sc, target_sc=target_sc,
+        pair_sc_clash_cutoff=args.pair_sc_clash_cutoff)
     print()
 
     all_satisfied = all(pr['satisfied'] for pr in pair_results)

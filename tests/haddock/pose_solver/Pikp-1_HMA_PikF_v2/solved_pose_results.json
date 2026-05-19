@@ -1,0 +1,70 @@
+{
+  "pair_results": [
+    {
+      "binder_res": 73,
+      "target_res": 76,
+      "achieved_d": 4.796,
+      "min_d": 3.5,
+      "max_d": 6.0,
+      "satisfied": true
+    },
+    {
+      "binder_res": 71,
+      "target_res": 78,
+      "achieved_d": 5.842,
+      "min_d": 3.5,
+      "max_d": 6.0,
+      "satisfied": true
+    },
+    {
+      "binder_res": 38,
+      "target_res": 42,
+      "achieved_d": 4.63,
+      "min_d": 3.5,
+      "max_d": 6.0,
+      "satisfied": true
+    }
+  ],
+  "all_pairs_satisfied": true,
+  "final_loss": 0.0,
+  "n_contact_pairs": 225,
+  "n_clash_pairs": 6,
+  "clash_binder_residues": [
+    33,
+    35,
+    39,
+    76,
+    78
+  ],
+  "clash_target_residues": [
+    42,
+    44,
+    46,
+    50,
+    71,
+    74
+  ],
+  "contig_design_region_input": [],
+  "clash_cutoff_A": 2.0,
+  "contact_cutoff_A": 8.0,
+  "contigs": {
+    "A) No joining": {
+      "contig": "A1-32/1-1/A34-34/1-1/A36-38/1-1/A40-75/1-1/A77-77/1-1 B",
+      "design_region": "33, 35, 39, 76, 78",
+      "n_residues": 5,
+      "join_gap": 0
+    },
+    "B) Join gap \u2264 1": {
+      "contig": "A1-32/3-3/A36-38/1-1/A40-75/3-3 B",
+      "design_region": "33-35, 39, 76-78",
+      "n_residues": 7,
+      "join_gap": 1
+    },
+    "C) Join gap \u2264 2": {
+      "contig": "A1-32/3-3/A36-38/1-1/A40-75/3-3 B",
+      "design_region": "33-35, 39, 76-78",
+      "n_residues": 7,
+      "join_gap": 2
+    }
+  }
+}

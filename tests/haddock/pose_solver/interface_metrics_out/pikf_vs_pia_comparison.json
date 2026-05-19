@@ -1,0 +1,272 @@
+[
+  {
+    "pdb": "../../full_test_run/af3_pikp1_native_avrpikf_complex.pdb",
+    "chains": {
+      "a": "A",
+      "b": "C"
+    },
+    "size": {
+      "residues_a": 78,
+      "residues_b": 82,
+      "heavy_atoms_a": 573,
+      "heavy_atoms_b": 668
+    },
+    "ca_contacts_8A": {
+      "count": 52,
+      "distance_stats": {
+        "n": 52,
+        "min": 1.833647608757019,
+        "max": 7.979354381561279,
+        "mean": 6.256792068481445,
+        "median": 6.6516571044921875,
+        "p25": 5.617718696594238,
+        "p75": 7.2657997608184814
+      },
+      "distance_histogram": {
+        "0.0-4.0": 4,
+        "4.0-5.0": 4,
+        "5.0-6.0": 9,
+        "6.0-7.0": 16,
+        "7.0-8.0": 19
+      }
+    },
+    "heavy_contacts_5A": {
+      "count": 857,
+      "distance_stats": {
+        "n": 857,
+        "min": 0.2527824640274048,
+        "max": 4.994740009307861,
+        "mean": 3.859421491622925,
+        "median": 4.135854244232178,
+        "p25": 3.315373182296753,
+        "p75": 4.6265411376953125
+      },
+      "distance_histogram": {
+        "0.0-2.0": 55,
+        "2.0-2.5": 40,
+        "2.5-3.0": 63,
+        "3.0-3.5": 93,
+        "3.5-4.0": 136,
+        "4.0-4.5": 191,
+        "4.5-5.0": 279
+      }
+    },
+    "clash_counts": {
+      "<2.0A": 55,
+      "<2.5A": 95,
+      "<3.0A": 158,
+      "<3.5A": 251
+    },
+    "interface_residues": {
+      "count_a": 23,
+      "count_b": 31,
+      "composition_a": {
+        "hydrophobic": 0.34782608695652173,
+        "polar": 0.2608695652173913,
+        "charged": 0.391304347826087,
+        "aromatic": 0.043478260869565216
+      },
+      "composition_b": {
+        "hydrophobic": 0.45161290322580644,
+        "polar": 0.1935483870967742,
+        "charged": 0.3548387096774194,
+        "aromatic": 0.1935483870967742
+      }
+    },
+    "bsa_A2": {
+      "chain_a": 1129.3052546780718,
+      "chain_b": 1587.25128618305,
+      "total": 2716.556540861122
+    },
+    "shape_complementarity_proxy": {
+      "gap_index_mean_A": 3.41447114944458,
+      "interface_heavy_atoms_a": 119,
+      "interface_heavy_atoms_b": 161
+    },
+    "hbond_candidates_3p5A": {
+      "donor_a_to_acceptor_b": 12,
+      "donor_b_to_acceptor_a": 19,
+      "total": 31
+    }
+  },
+  {
+    "pdb": "Pikp-1_HMA_PikF/solved_pose_posed.pdb",
+    "chains": {
+      "a": "A",
+      "b": "B"
+    },
+    "size": {
+      "residues_a": 78,
+      "residues_b": 82,
+      "heavy_atoms_a": 573,
+      "heavy_atoms_b": 668
+    },
+    "ca_contacts_8A": {
+      "count": 89,
+      "distance_stats": {
+        "n": 89,
+        "min": 2.8133420944213867,
+        "max": 7.9917073249816895,
+        "mean": 6.273177623748779,
+        "median": 6.463669776916504,
+        "p25": 5.453781604766846,
+        "p75": 7.251392841339111
+      },
+      "distance_histogram": {
+        "0.0-4.0": 5,
+        "4.0-5.0": 10,
+        "5.0-6.0": 19,
+        "6.0-7.0": 21,
+        "7.0-8.0": 34
+      }
+    },
+    "heavy_contacts_5A": {
+      "count": 1327,
+      "distance_stats": {
+        "n": 1327,
+        "min": 0.668345034122467,
+        "max": 4.998376369476318,
+        "mean": 3.887683629989624,
+        "median": 4.085655689239502,
+        "p25": 3.3351134061813354,
+        "p75": 4.580034971237183
+      },
+      "distance_histogram": {
+        "0.0-2.0": 44,
+        "2.0-2.5": 63,
+        "2.5-3.0": 122,
+        "3.0-3.5": 169,
+        "3.5-4.0": 224,
+        "4.0-4.5": 318,
+        "4.5-5.0": 387
+      }
+    },
+    "clash_counts": {
+      "<2.0A": 44,
+      "<2.5A": 107,
+      "<3.0A": 229,
+      "<3.5A": 398
+    },
+    "interface_residues": {
+      "count_a": 29,
+      "count_b": 37,
+      "composition_a": {
+        "hydrophobic": 0.4482758620689655,
+        "polar": 0.1724137931034483,
+        "charged": 0.3793103448275862,
+        "aromatic": 0.0
+      },
+      "composition_b": {
+        "hydrophobic": 0.43243243243243246,
+        "polar": 0.24324324324324326,
+        "charged": 0.32432432432432434,
+        "aromatic": 0.1891891891891892
+      }
+    },
+    "bsa_A2": {
+      "chain_a": 1293.4507324065426,
+      "chain_b": 1079.5225224377537,
+      "total": 2372.973254844296
+    },
+    "shape_complementarity_proxy": {
+      "gap_index_mean_A": 3.1824586391448975,
+      "interface_heavy_atoms_a": 152,
+      "interface_heavy_atoms_b": 202
+    },
+    "hbond_candidates_3p5A": {
+      "donor_a_to_acceptor_b": 16,
+      "donor_b_to_acceptor_a": 29,
+      "total": 45
+    }
+  },
+  {
+    "pdb": "../../../experiments/campaigns/pikp1_avrpia/inputs/pikp1_avrpia_pose_solved.pdb",
+    "chains": {
+      "a": "A",
+      "b": "B"
+    },
+    "size": {
+      "residues_a": 78,
+      "residues_b": 68,
+      "heavy_atoms_a": 573,
+      "heavy_atoms_b": 531
+    },
+    "ca_contacts_8A": {
+      "count": 72,
+      "distance_stats": {
+        "n": 72,
+        "min": 2.27148699760437,
+        "max": 7.919021129608154,
+        "mean": 6.30164909362793,
+        "median": 6.602206230163574,
+        "p25": 5.432476878166199,
+        "p75": 7.3922648429870605
+      },
+      "distance_histogram": {
+        "0.0-4.0": 5,
+        "4.0-5.0": 7,
+        "5.0-6.0": 14,
+        "6.0-7.0": 18,
+        "7.0-8.0": 28
+      }
+    },
+    "heavy_contacts_5A": {
+      "count": 1137,
+      "distance_stats": {
+        "n": 1137,
+        "min": 0.6574968099594116,
+        "max": 4.999087333679199,
+        "mean": 3.847837448120117,
+        "median": 4.046331882476807,
+        "p25": 3.2967734336853027,
+        "p75": 4.578732013702393
+      },
+      "distance_histogram": {
+        "0.0-2.0": 50,
+        "2.0-2.5": 52,
+        "2.5-3.0": 94,
+        "3.0-3.5": 159,
+        "3.5-4.0": 190,
+        "4.0-4.5": 265,
+        "4.5-5.0": 327
+      }
+    },
+    "clash_counts": {
+      "<2.0A": 50,
+      "<2.5A": 102,
+      "<3.0A": 196,
+      "<3.5A": 355
+    },
+    "interface_residues": {
+      "count_a": 24,
+      "count_b": 24,
+      "composition_a": {
+        "hydrophobic": 0.5416666666666666,
+        "polar": 0.125,
+        "charged": 0.3333333333333333,
+        "aromatic": 0.0
+      },
+      "composition_b": {
+        "hydrophobic": 0.5,
+        "polar": 0.3333333333333333,
+        "charged": 0.16666666666666666,
+        "aromatic": 0.20833333333333334
+      }
+    },
+    "bsa_A2": {
+      "chain_a": 756.602005739388,
+      "chain_b": 663.7916932662738,
+      "total": 1420.3936990056618
+    },
+    "shape_complementarity_proxy": {
+      "gap_index_mean_A": 3.1197874546051025,
+      "interface_heavy_atoms_a": 119,
+      "interface_heavy_atoms_b": 142
+    },
+    "hbond_candidates_3p5A": {
+      "donor_a_to_acceptor_b": 10,
+      "donor_b_to_acceptor_a": 11,
+      "total": 21
+    }
+  }
+]

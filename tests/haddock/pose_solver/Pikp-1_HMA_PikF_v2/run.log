@@ -1,0 +1,67 @@
+================================================================
+CONSTRAINT-DRIVEN POSE SOLVER
+================================================================
+Binder : ../data/Pikp-1_HMA.pdb  (chain A)
+Target : ../data/PikF.pdb  (chain B → output chain B)
+  Pair      A73 — B76  max 6.0 Å
+  Pair      A71 — B78  max 6.0 Å
+  Pair      A38 — B42  max 6.0 Å
+
+Binder: 78 residues   Target: 82 residues
+
+Solving pose...
+  Weights: W_validity=1e+06 tol=-1.0Å  W_dist=1e+04  W_lower=1e+04  W_interp=10.0 (global)
+     50/1000  best loss = 0.0000
+    100/1000  best loss = 0.0000
+    150/1000  best loss = 0.0000
+    200/1000  best loss = 0.0000
+    250/1000  best loss = 0.0000
+    300/1000  best loss = 0.0000
+    350/1000  best loss = 0.0000
+    400/1000  best loss = 0.0000
+    450/1000  best loss = 0.0000
+    500/1000  best loss = 0.0000
+    550/1000  best loss = 0.0000
+    600/1000  best loss = 0.0000
+    650/1000  best loss = 0.0000
+    700/1000  best loss = 0.0000
+    750/1000  best loss = 0.0000
+    800/1000  best loss = 0.0000
+    850/1000  best loss = 0.0000
+    900/1000  best loss = 0.0000
+    950/1000  best loss = 0.0000
+    1000/1000  best loss = 0.0000
+
+Final loss: 0.0000  —  all pairs satisfied: True
+  A 73 — B 76: achieved 4.796 Å  (max 6.0 Å)  ✓
+  A 71 — B 78: achieved 5.842 Å  (max 6.0 Å)  ✓
+  A 38 — B 42: achieved 4.630 Å  (max 6.0 Å)  ✓
+
+Analysing contacts and clashes...
+  Contacts ≤ 8.0 Å : 225 residue pairs
+  Clashes  <  2.0 Å  : 6 pairs   5 binder res   6 target res
+  Clashing binder residues: [33, 35, 39, 76, 78]
+
+----------------------------------------------------------------
+RFDiffusion CONTIG STRINGS
+----------------------------------------------------------------
+
+  A) No joining
+    Design region : 33, 35, 39, 76, 78  [5 residues]
+    Contig string : A1-32/1-1/A34-34/1-1/A36-38/1-1/A40-75/1-1/A77-77/1-1 B
+
+  B) Join gap ≤ 1
+    Design region : 33-35, 39, 76-78  [7 residues]
+    Contig string : A1-32/3-3/A36-38/1-1/A40-75/3-3 B
+
+  C) Join gap ≤ 2
+    Design region : 33-35, 39, 76-78  [7 residues]
+    Contig string : A1-32/3-3/A36-38/1-1/A40-75/3-3 B
+
+Saved posed complex : Pikp-1_HMA_PikF_v2/solved_pose_posed.pdb
+Saved results JSON  : Pikp-1_HMA_PikF_v2/solved_pose_results.json
+Saved heatmap: Pikp-1_HMA_PikF_v2/solved_pose_heatmap.png
+
+================================================================
+Open in ChimeraX:  open Pikp-1_HMA_PikF_v2/solved_pose_posed.pdb
+================================================================

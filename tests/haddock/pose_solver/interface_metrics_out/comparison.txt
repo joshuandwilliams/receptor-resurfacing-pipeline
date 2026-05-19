@@ -1,0 +1,57 @@
+=== af3_pikp1_native_avrpikf_complex.pdb  chains A/C ===
+  size:  A 78 res / 573 heavy   B 82 res / 668 heavy
+  CA contacts <=8A: 52  (mean 6.26 A, median 6.65 A)
+    histogram: {'0.0-4.0': 4, '4.0-5.0': 4, '5.0-6.0': 9, '6.0-7.0': 16, '7.0-8.0': 19}
+  heavy contacts <=5A: 857  (mean 3.86 A)
+    histogram: {'0.0-2.0': 55, '2.0-2.5': 40, '2.5-3.0': 63, '3.0-3.5': 93, '3.5-4.0': 136, '4.0-4.5': 191, '4.5-5.0': 279}
+  clashes: {'<2.0A': 55, '<2.5A': 95, '<3.0A': 158, '<3.5A': 251}
+  interface residues:  A 23  B 31
+    composition A: hydroph 0.35  polar 0.26  charged 0.39  aromatic 0.04
+    composition B: hydroph 0.45  polar 0.19  charged 0.35  aromatic 0.19
+  BSA: total 2717 A^2  (A 1129  B 1587)
+  gap-index (mean nearest-other-chain d, interface atoms): 3.414 A   (A iface atoms 119, B iface atoms 161)
+  H-bond candidates (<=3.5A, geom. only): A->B 12  B->A 19  total 31
+
+=== solved_pose_posed.pdb  chains A/B ===
+  size:  A 78 res / 573 heavy   B 68 res / 531 heavy
+  CA contacts <=8A: 72  (mean 6.30 A, median 6.60 A)
+    histogram: {'0.0-4.0': 5, '4.0-5.0': 7, '5.0-6.0': 14, '6.0-7.0': 18, '7.0-8.0': 28}
+  heavy contacts <=5A: 1137  (mean 3.85 A)
+    histogram: {'0.0-2.0': 50, '2.0-2.5': 52, '2.5-3.0': 94, '3.0-3.5': 159, '3.5-4.0': 190, '4.0-4.5': 265, '4.5-5.0': 327}
+  clashes: {'<2.0A': 50, '<2.5A': 102, '<3.0A': 196, '<3.5A': 355}
+  interface residues:  A 24  B 24
+    composition A: hydroph 0.54  polar 0.12  charged 0.33  aromatic 0.00
+    composition B: hydroph 0.50  polar 0.33  charged 0.17  aromatic 0.21
+  BSA: total 1420 A^2  (A 757  B 664)
+  gap-index (mean nearest-other-chain d, interface atoms): 3.120 A   (A iface atoms 119, B iface atoms 142)
+  H-bond candidates (<=3.5A, geom. only): A->B 10  B->A 11  total 21
+
+=== solved_pose_highinterp_posed.pdb  chains A/B ===
+  size:  A 78 res / 573 heavy   B 68 res / 531 heavy
+  CA contacts <=8A: 69  (mean 6.35 A, median 6.60 A)
+    histogram: {'0.0-4.0': 2, '4.0-5.0': 9, '5.0-6.0': 16, '6.0-7.0': 16, '7.0-8.0': 26}
+  heavy contacts <=5A: 1027  (mean 3.85 A)
+    histogram: {'0.0-2.0': 64, '2.0-2.5': 52, '2.5-3.0': 72, '3.0-3.5': 121, '3.5-4.0': 159, '4.0-4.5': 229, '4.5-5.0': 330}
+  clashes: {'<2.0A': 64, '<2.5A': 116, '<3.0A': 188, '<3.5A': 309}
+  interface residues:  A 24  B 29
+    composition A: hydroph 0.46  polar 0.17  charged 0.38  aromatic 0.00
+    composition B: hydroph 0.48  polar 0.28  charged 0.24  aromatic 0.17
+  BSA: total 1616 A^2  (A 876  B 739)
+  gap-index (mean nearest-other-chain d, interface atoms): 3.020 A   (A iface atoms 120, B iface atoms 139)
+  H-bond candidates (<=3.5A, geom. only): A->B 11  B->A 14  total 25
+
+=== pikp1_avrpia_pose_solved.pdb  chains A/B ===
+  size:  A 78 res / 573 heavy   B 68 res / 531 heavy
+  CA contacts <=8A: 72  (mean 6.30 A, median 6.60 A)
+    histogram: {'0.0-4.0': 5, '4.0-5.0': 7, '5.0-6.0': 14, '6.0-7.0': 18, '7.0-8.0': 28}
+  heavy contacts <=5A: 1137  (mean 3.85 A)
+    histogram: {'0.0-2.0': 50, '2.0-2.5': 52, '2.5-3.0': 94, '3.0-3.5': 159, '3.5-4.0': 190, '4.0-4.5': 265, '4.5-5.0': 327}
+  clashes: {'<2.0A': 50, '<2.5A': 102, '<3.0A': 196, '<3.5A': 355}
+  interface residues:  A 24  B 24
+    composition A: hydroph 0.54  polar 0.12  charged 0.33  aromatic 0.00
+    composition B: hydroph 0.50  polar 0.33  charged 0.17  aromatic 0.21
+  BSA: total 1420 A^2  (A 757  B 664)
+  gap-index (mean nearest-other-chain d, interface atoms): 3.120 A   (A iface atoms 119, B iface atoms 142)
+  H-bond candidates (<=3.5A, geom. only): A->B 10  B->A 11  total 21
+
+Wrote interface_metrics_out/comparison.json
