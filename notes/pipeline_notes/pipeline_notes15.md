@@ -155,6 +155,74 @@ Output saved to `tests/haddock/pose_solver/Pikp-1_HMA_avr-pia/solved_pose_highin
 
 ---
 
+## Receptor RMSD failures in negsteering — root cause analysis
+
+### Key finding: failures occur at cold start, before any steering mutations
+
+Receptor RMSD (`rep_independent_receptor_rmsd_median`) measures how well Boltz-2 reproduces the
+RFDiffusion backbone when given the MPNN-designed sequence. The negsteer_rmsd_threshold is 6.0 Å.
+
+| Run | RMSD > 6 Å | Mean RMSD | Corr: mutations vs RMSD |
+|---|---|---|---|
+| pose_solved_3a | 60/72 (83%) | 10.3 Å | 0.05 (negligible) |
+| pose_solved_5a | 57/104 (55%) | 7.9 Å | 0.14 (negligible) |
+
+All sequences in both runs are at `rep_cycle = 0`. The RMSD is measured on the MPNN sequence
+before any steering mutations are applied. 6 mutations is the maximum allowed
+(`negsteer_max_mutations: 6` in params), not an inherent cap. Since the correlation between
+mutation count and receptor RMSD is negligible, **steering mutations do not cause the RMSD
+failures** — the failure is present in the cold MPNN sequence itself.
+
+Impact: when RMSD passes (≤ 6 Å), mean Ra_eff drops from ~21 Å to ~11 Å (5a) or ~8 Å (3a),
+with 8/47 correct poses (Ra_eff < 5 Å) in 5a. The RMSD failure is the primary determinant of
+whether any correct interface can be found.
+
+### Two hypotheses for the cause
+
+**Hypothesis A — backbone pathology:** The RFDiffusion backbone is geometrically unusual (designed
+to bridge an interface) and no MPNN sequence can stabilise it. Boltz-2 consistently predicts a
+different fold regardless of sequence, because the backbone energy landscape is unfavourable.
+
+**Hypothesis B — MPNN sequence error:** The specific MPNN sequence assigned to the backbone happens
+to misfold. A different sequence for the same backbone might fold correctly.
+
+### Analysis 1 — Sidechain clash check (for RMSD-passing sequences, Level 2 failure)
+
+For sequences that DO pass receptor RMSD (Boltz-2 folds receptor correctly) but still have high
+Ra_eff (effector in the wrong place):
+
+1. Take RFDiffusion complex PDB (target position = ground truth)
+2. Take Boltz-2 predicted complex from same sequence (receptor RMSD ≤ 6 Å)
+3. Align receptors on Cα (RMSD ≤ 6 Å guarantees a meaningful alignment)
+4. After alignment, check for heavy-atom clashes (< 2 Å) between Boltz-2 receptor sidechains and
+   the RFDiffusion target
+5. Any clashes identify specific MPNN-assigned residues whose sidechain rotamers sterically
+   prevent Boltz-2 from placing the effector in the correct position
+
+This tests whether MPNN sidechains are the steric gatekeepers preventing correct interface
+formation in Level 2 failures.
+
+### Analysis 2 — Receptor misfold localisation (for RMSD-failing sequences, tests Hypotheses A/B)
+
+For sequences that FAIL receptor RMSD (> 6 Å), using pose_solved_3a (only 13 de novo residues):
+
+1. Take RFDiffusion complex PDB for a 3a design
+2. Take Boltz-2 predicted complex for an MPNN sequence from the same design (RMSD > 6 Å)
+3. **Align on fixed regions only** (A1-8, A10-36, A40-41, A44-67, A73-75, A77-78) — these
+   have native crystal structure sequence and should be accurately predicted by Boltz-2
+4. After aligning on fixed regions, measure per-residue Cα deviation for designed regions
+   (A9, A37-39, A42-43, A68-72 for 3a — only 13 residues)
+5. Interpret results:
+   - If only designed residues diverge → MPNN assigned a sequence that misfolds those specific
+     segments (supports Hypothesis B; testable by sampling alternative MPNN sequences)
+   - If fixed regions also shift in the alignment → backbone incompatibility propagates to
+     native scaffold (supports Hypothesis A; backbone itself is the problem)
+
+3a is preferred over 5a for this analysis because the smaller design region (13 vs 25 residues)
+makes interpretation cleaner.
+
+---
+
 ## Files changed
 
 - `experiments/campaigns/pikp1_avrpia/runs/pose_solved_5a_2/params.yml` — new run
