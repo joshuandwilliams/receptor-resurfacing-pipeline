@@ -47,7 +47,7 @@ VALID_TOL  = -1.0  # Å — pair residue must be this far OUTSIDE the opposite h
 W_DIST     = 1e4   # penalty for pair CA-CA > max_pair_distance
 W_LOWER    = 1e4   # penalty for pair CA-CA < min_pair_distance (too close to be realistic)
 W_EXCL     = 1e4   # penalty for exclusion pair CA-CA < min_excl_distance (too close)
-W_INTERP   = 10.0  # overall CA interpenetration depth (prevents full overlap)
+W_INTERP   = 10.0  # overall CA interpenetration depth — overridden by --interp-weight
 
 
 # ── CLI ───────────────────────────────────────────────────────────────────────
@@ -77,6 +77,8 @@ def parse_args() -> argparse.Namespace:
                     help='Number of random restarts (L-BFGS-B) or population×generations (DE)')
     ap.add_argument('--global-interp', action='store_true',
                     help='Penalise ALL CA atoms inside the opposite hull (not just pair residues)')
+    ap.add_argument('--interp-weight', type=float, default=10.0,
+                    help='Weight for interpenetration penalty (default 10.0)')
     ap.add_argument('--use-de', action='store_true',
                     help='Use differential evolution instead of random restarts')
     ap.add_argument('--output-prefix', default='solved_pose')
@@ -207,6 +209,7 @@ def _obj(params: np.ndarray,
          excl_t_idx: np.ndarray,     # exclusion target residue indices
          excl_min_dists: np.ndarray, # minimum allowed distances for exclusions
          global_interp: bool,        # if True, penalise all CAs; if False, pair residues only
+         interp_weight: float,       # weight for interpenetration penalty
          ) -> float:
 
     R = Rotation.from_rotvec(params[:3]).as_matrix()
@@ -248,12 +251,12 @@ def _obj(params: np.ndarray,
 
     # Interpenetration — global (all CAs) or pair residues only
     if global_interp:
-        interp_loss = W_INTERP * float(
+        interp_loss = interp_weight * float(
             hull_depths(b_in_t_frame, t_hull_eq).sum() +
             hull_depths(target_t, b_hull_eq).sum()
         )
     else:
-        interp_loss = W_INTERP * float(
+        interp_loss = interp_weight * float(
             hull_depths(b_in_t_frame[pair_b_idx], t_hull_eq).sum() +
             hull_depths(target_t[pair_t_idx], b_hull_eq).sum()
         )
@@ -267,6 +270,7 @@ def solve(binder_ca: dict, target_ca: dict,
           exclusions: list[tuple[int, int, float]],
           n_restarts: int, min_pair_dist: float, max_pair_dist: float,
           use_de: bool = False, global_interp: bool = False,
+          interp_weight: float = 10.0,
           ) -> tuple[np.ndarray, np.ndarray, float, list[dict]]:
 
     b_rn = sorted(binder_ca); t_rn = sorted(target_ca)
@@ -299,7 +303,7 @@ def solve(binder_ca: dict, target_ca: dict,
 
     obj_args = (b_arr, t_arr, pb, pt, min_pair_dist, max_pair_dist,
                 b_hull.equations, t_hull.equations,
-                excl_b_idx, excl_t_idx, excl_min_d, global_interp)
+                excl_b_idx, excl_t_idx, excl_min_d, global_interp, interp_weight)
 
     # Smart initialisation: for every restart, start with the target's pair
     # residue centroid placed near the binder's pair residue centroid.
@@ -341,7 +345,7 @@ def solve(binder_ca: dict, target_ca: dict,
     np.random.seed(42)
     interp_scope = 'global' if global_interp else 'pair-only'
     print(f"  Weights: W_validity={W_VALIDITY:.0e} tol={VALID_TOL}Å  "
-          f"W_dist={W_DIST:.0e}  W_lower={W_LOWER:.0e}  W_interp={W_INTERP} ({interp_scope})")
+          f"W_dist={W_DIST:.0e}  W_lower={W_LOWER:.0e}  W_interp={interp_weight} ({interp_scope})")
 
     if use_de:
         # Differential evolution: global optimiser, no gradients required.
@@ -669,7 +673,8 @@ def main() -> None:
     R, t, final_loss, pair_results = solve(
         binder_ca, target_ca, pairs, exclusions, args.n_restarts,
         args.min_pair_distance, args.max_pair_distance,
-        use_de=args.use_de, global_interp=args.global_interp)
+        use_de=args.use_de, global_interp=args.global_interp,
+        interp_weight=args.interp_weight)
     print()
 
     all_satisfied = all(pr['satisfied'] for pr in pair_results)

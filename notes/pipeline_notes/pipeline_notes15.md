@@ -120,7 +120,38 @@ Input complex, contigs, weights, negsteer params all unchanged.
 Re-running the pose solver with `--global-interp` and `W_INTERP` increased from 10 to 100, keeping
 all other parameters the same (4 constraints: A73-B31, A71-B33, A8-B22, A7-B24; exclusion
 A8-B33@4.5; VALID_TOL=-1.0; 1000 restarts). Goal: reduce clashes to < 5 while accepting looser
-pair constraint satisfaction. Results reported below once run completes.
+pair constraint satisfaction.
+
+### Results
+
+| Metric | Existing (W=10) | High interp (W=100) |
+|---|---|---|
+| Total loss | 39,685 | 49,569 |
+| Validity | 20 | **0** |
+| Dist (upper) | 39,661 | 49,561 |
+| Interp penalty | 4 | 10 |
+| COM-COM | 16.6 Å | 16.7 Å |
+| Clashes | 13 pairs / 7 binder res | 12 pairs / 7 binder res |
+| A73—B31 | 4.862 Å | 4.648 Å |
+| A71—B33 | 4.525 Å | 4.916 Å |
+| A8—B22 | 5.151 Å | 5.508 Å |
+| A7—B24 | 5.274 Å | 5.193 Å |
+
+**Conclusion: increasing W_INTERP 10× made virtually no difference.**
+
+The interpenetration at the CA/convex hull level was already essentially zero in the existing pose
+(only 0.5 Å total hull-depth across both proteins). There was nothing for the stronger penalty to
+push against. The 12–13 clashes are entirely sidechain-level contacts within the design region —
+the hull-based W_INTERP term is blind to them. Increasing it 10× only marginally changed pair
+distances and removed one clash pair.
+
+**Key insight:** Since all clashing residues are within the design region (RFDiffusion strips the
+backbone and sidechains there entirely), the clashes do not bias RFDiffusion regardless of their
+severity. The `W_INTERP` lever is not the right tool to address the monoculture problem. The
+existing pose is already optimal for this constraint set; the more promising intervention is hotspot
+removal in `pose_solved_5a_2`.
+
+Output saved to `tests/haddock/pose_solver/Pikp-1_HMA_avr-pia/solved_pose_highinterp_posed.pdb`.
 
 ---
 
