@@ -223,7 +223,126 @@ makes interpretation cleaner.
 
 ---
 
+## Cold-start RMSD confirmation
+
+The per-seed `raw_per_seed_results.csv` files contain an "initial" row: the direct Boltz-2
+prediction of the unmodified MPNN sequence with zero mutations. This is the genuine cold start.
+
+| Run | Cold-start RMSD > 6 Å | Mean cold RMSD | After mutations (representative) |
+|---|---|---|---|
+| pose_solved_3a | **60/72 (83%)** | 9.87 Å | 60/72 (identical) |
+| pose_solved_5a | **53/104 (51%)** | 7.29 Å | 57/104 (near-identical) |
+
+The representative RMSD and the cold-start RMSD are almost exactly the same. The 6 steering
+mutations do not cause, worsen, or fix the RMSD failures. This is entirely a property of the MPNN
+sequence itself: Boltz-2 cannot fold the MPNN-designed sequence into the RFDiffusion backbone
+before any mutations are applied.
+
+This rules out steering mutations as a cause. The question reduces to the two hypotheses above:
+is the RFDiffusion backbone geometrically incompatible with any sequence (Hypothesis A), or is
+MPNN choosing sequences that misfold for this specific backbone (Hypothesis B)? Analysis 2 is
+designed to answer this.
+
+---
+
+## SESSION HANDOFF
+
+The following is a self-contained brief for continuing this work in a new session.
+
+### What was done
+
+1. Two RFDiffusion design runs were submitted for the pikp1/avrpia system:
+   - `pose_solved_3a` (13 de novo residues, 3 Å contact cutoff, 64 designs)
+   - `pose_solved_5a` (25 de novo residues, 5 Å contact cutoff, 64 designs)
+   - Input: `experiments/campaigns/pikp1_avrpia/inputs/pikp1_avrpia_pose_solved.pdb`
+
+2. A third run, `pose_solved_5a_2`, was created to test fixes:
+   - Hotspot removed (was B22,B24,B31,B33 — suspected cause of structural monoculture)
+   - `sc_threshold` lowered to 0.3 (from 0.5)
+   - `num_designs` increased to 128
+   - Has not been submitted yet / just submitted — check HPC for status
+
+3. Five root-cause hypotheses were identified for negsteering failures (see body above).
+
+4. A key diagnostic finding: **receptor RMSD fails at cold start (before any mutations) for 83%
+   of 3a sequences and 51% of 5a sequences.** The MPNN sequence itself, directly predicted by
+   Boltz-2, does not fold into the RFDiffusion backbone. This is the dominant failure mode.
+
+### The two analyses to implement
+
+**Analysis 1 — Sidechain clash check (Level 2 failure, RMSD-passing sequences)**
+
+For sequences with cold-start receptor RMSD ≤ 6 Å, check whether MPNN sidechains sterically
+prevent the effector from adopting the correct pose.
+
+Inputs needed (per sequence):
+- `results/negative_steering/runs/<seq>/raw_per_seed_results.csv` — find the initial prediction
+  PDB path (column `pdb` in the "initial" row)
+- The RFDiffusion complex PDB for the same design:
+  `results/rfdiffusion/design_XX.pdb` (need to identify which design each sequence came from —
+  the sequence name encodes it: `design_47_seq_0` → `design_47.pdb`)
+
+Steps:
+1. Load RFDiffusion PDB (chain A = binder backbone, chain B = target with all atoms)
+2. Load Boltz-2 initial prediction PDB (full complex with MPNN sidechains on chain A)
+3. Align receptors (chain A Cα) — RMSD will be ≤ 6 Å by selection
+4. After alignment, measure all heavy-atom distances between chain A (Boltz-2 sidechain atoms)
+   and chain B (RFDiffusion target atoms)
+5. Any distance < 2.0 Å = clash → the specific binder residue whose sidechain is clashing
+
+**Analysis 2 — Receptor misfold localisation (Level 1 failure, RMSD-failing sequences, use 3a)**
+
+For sequences with cold-start receptor RMSD > 6 Å, identify which regions of the binder misfold.
+
+Inputs needed:
+- Same as Analysis 1 but for RMSD-failing sequences
+- Designed vs fixed residue lists for 3a:
+  - Fixed:   A1-8, A10-36, A40-41, A44-67, A73-75, A77-78
+  - Designed: A9, A37-39, A42-43, A68-72  (13 residues total)
+
+Steps:
+1. Load RFDiffusion PDB (chain A backbone) and Boltz-2 initial prediction (full chain A)
+2. Align on FIXED region Cα only (use residues A1-8, A10-36, A40-41, A44-67, A73-75, A77-78)
+3. After alignment, compute per-residue Cα displacement for ALL 78 residues
+4. Compare displacement in fixed vs designed regions:
+   - If displacement is concentrated in the designed residues (A9, A37-39, A42-43, A68-72)
+     → MPNN sequence misfolds specifically those segments (Hypothesis B — testable)
+   - If displacement is widespread including fixed regions
+     → Backbone incompatibility propagates to native scaffold (Hypothesis A — harder to fix)
+5. Visualise in ChimeraX using colour-by-RMSD on the aligned structures
+
+### Key file locations
+
+```
+Negsteering raw per-seed data:
+  pose_solved_3a: experiments/campaigns/pikp1_avrpia/runs/pose_solved_3a/results/negative_steering/runs/<seq>/raw_per_seed_results.csv
+  pose_solved_5a: same pattern with pose_solved_5a
+
+RFDiffusion designs:
+  pose_solved_3a: experiments/campaigns/pikp1_avrpia/runs/pose_solved_3a/results/rfdiffusion/
+  pose_solved_5a: same pattern
+
+Negsteering summary:
+  cross_sequence_summary_with_interface_metrics.csv — per-sequence aggregated metrics
+  Key columns: rep_independent_receptor_rmsd_median, rep_ra_eff_vs_truth_median,
+               rep_total_mutations_median, rep_outcome
+
+Pose solver outputs:
+  tests/haddock/pose_solver/Pikp-1_HMA_avr-pia/solved_pose_posed.pdb  (current campaign input)
+  tests/haddock/pose_solver/Pikp-1_HMA_avr-pia/solved_pose_posed_best.pdb  (backup)
+```
+
+### Branch / commit state
+
+Branch: `phase4-impl`. All changes committed and pushed. HPC synced.
+Latest commit: RMSD failure analysis and analyses design added to pipeline_notes15.md.
+
+---
+
 ## Files changed
+
+- `experiments/campaigns/pikp1_avrpia/runs/pose_solved_5a_2/params.yml` — new run
+- `notes/pipeline_notes/pipeline_notes15.md` — this document
 
 - `experiments/campaigns/pikp1_avrpia/runs/pose_solved_5a_2/params.yml` — new run
 - `notes/pipeline_notes/pipeline_notes15.md` — this document
