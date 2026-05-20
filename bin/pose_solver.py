@@ -165,8 +165,10 @@ def write_posed_pdb(out: Path, binder_pdb: Path, target_pdb: Path,
                 try:
                     xyz = np.array([float(line[30:38]), float(line[38:46]), float(line[46:54])])
                     nxyz = R @ xyz + t
-                    # Always write target as chain B in the output complex
-                    lines.append(line[:21] + 'B'
+                    # Preserve the target chain ID end-to-end.  Callers
+                    # must ensure binder_chain != target_chain to avoid
+                    # producing a complex with two same-named chains.
+                    lines.append(line[:21] + target_chain
                                  + line[22:30]
                                  + f'{nxyz[0]:8.3f}{nxyz[1]:8.3f}{nxyz[2]:8.3f}'
                                  + line[54:])
@@ -243,7 +245,8 @@ def _obj(params: np.ndarray,
          t_pair_sc_arr: np.ndarray,  # (N_t_sc, 3) flat sidechain heavy atoms of target pair residues
          pair_sc_offsets: list,      # list of (b_start, b_end, t_start, t_end) per pair
          pair_sc_clash_cutoff: float, # min allowed heavy-atom distance for paired sidechains
-         ) -> float:
+         return_components: bool = False,  # dict of per-term losses (end-of-run only)
+         ):
 
     R = Rotation.from_rotvec(params[:3]).as_matrix()
     t = params[3:]
@@ -312,6 +315,22 @@ def _obj(params: np.ndarray,
                 pair_sc_loss += (pair_sc_clash_cutoff - min_d) ** 2
         pair_sc_loss *= W_PAIR_SC_CLASH
 
+    # Split dist_loss into upper/lower for the breakdown view.  Recomputing
+    # only when explicitly asked keeps the hot optimisation path scalar.
+    if return_components:
+        dist_upper = W_DIST  * float((upper_violations ** 2).sum())
+        dist_lower = W_LOWER * float((lower_violations ** 2).sum())
+        return {
+            'validity':      validity_loss,
+            'dist_upper':    dist_upper,
+            'dist_lower':    dist_lower,
+            'excl':          excl_loss,
+            'interp':        interp_loss,
+            'pair_sc_clash': pair_sc_loss,
+            'total':         (validity_loss + dist_loss + excl_loss
+                              + interp_loss + pair_sc_loss),
+        }
+
     return validity_loss + dist_loss + excl_loss + interp_loss + pair_sc_loss
 
 
@@ -325,7 +344,7 @@ def solve(binder_ca: dict, target_ca: dict,
           binder_sc: dict | None = None,
           target_sc: dict | None = None,
           pair_sc_clash_cutoff: float = 0.0,
-          ) -> tuple[np.ndarray, np.ndarray, float, list[dict]]:
+          ) -> tuple[np.ndarray, np.ndarray, float, list[dict], list[tuple], tuple]:
 
     b_rn = sorted(binder_ca); t_rn = sorted(target_ca)
     b_arr = np.array([binder_ca[r] for r in b_rn])
@@ -431,6 +450,11 @@ def solve(binder_ca: dict, target_ca: dict,
         for rb, rt, reason in pair_sc_skipped:
             print(f"    skipped {rb}-{rt}: {reason}")
 
+    # Per-restart loss history.  Recorded so POSE_SOLVER_PLOTS can render
+    # the restart-loss convergence curve.  In the DE path we get one
+    # final value (no restart-level history); a single-row CSV is fine.
+    restart_history: list[tuple[int, float, float]] = []
+
     if use_de:
         # Differential evolution: global optimiser, no gradients required.
         # Search bounds: rotation in [-π, π]³, translation ±50 Å around binder pair centroid.
@@ -454,6 +478,7 @@ def solve(binder_ca: dict, target_ca: dict,
         )
         best_x = res.x
         best_loss = res.fun
+        restart_history.append((0, float(res.fun), float(res.fun)))
         print(f"  DE converged: loss = {best_loss:.4f}  (success={res.success})")
     else:
         for i in range(n_restarts):
@@ -479,6 +504,7 @@ def solve(binder_ca: dict, target_ca: dict,
             if res.fun < best_loss:
                 best_loss = res.fun
                 best_x = res.x.copy()
+            restart_history.append((i, float(res.fun), float(best_loss)))
 
             if (i + 1) % 50 == 0 or i == n_restarts - 1:
                 print(f"    {i+1:3d}/{n_restarts}  best loss = {best_loss:.4f}")
@@ -496,7 +522,12 @@ def solve(binder_ca: dict, target_ca: dict,
             'min_d': min_pair_dist, 'max_d': max_pair_dist,
             'satisfied': min_pair_dist - 0.01 <= achieved <= max_pair_dist + 0.01,
         })
-    return R, t, best_loss, pair_results
+
+    # Per-term loss breakdown at the final pose (one extra _obj() call;
+    # negligible overhead compared to optimisation).
+    loss_breakdown = _obj(best_x, *obj_args, return_components=True)
+
+    return R, t, best_loss, pair_results, restart_history, loss_breakdown
 
 
 # ── Clash / contact analysis ──────────────────────────────────────────────────
@@ -729,7 +760,10 @@ def main() -> None:
     args = parse_args()
     bc = args.binder_chain.upper()
     tc = args.target_chain.upper()
-    tc_out = 'B'  # target is always written as chain B in the output complex
+    if bc == tc:
+        sys.exit(f"ERROR: binder-chain and target-chain are both '{bc}'.  "
+                 f"Output would contain two same-named chains.  Pass distinct "
+                 f"chain IDs (rename inputs first if necessary).")
     pairs      = parse_pairs(args.pairs, args.max_pair_distance)
     exclusions = parse_pairs(args.exclusions, 4.5) if args.exclusions else []
     contig_dr  = parse_residue_ranges(args.contig_design_region)
@@ -738,11 +772,11 @@ def main() -> None:
     print('CONSTRAINT-DRIVEN POSE SOLVER')
     print('=' * 64)
     print(f"Binder : {args.binder}  (chain {bc})")
-    print(f"Target : {args.target}  (chain {tc} → output chain {tc_out})")
+    print(f"Target : {args.target}  (chain {tc})")
     for rb, rt, d in pairs:
-        print(f"  Pair      {bc}{rb} — {tc_out}{rt}  max {d:.1f} Å")
+        print(f"  Pair      {bc}{rb} — {tc}{rt}  max {d:.1f} Å")
     for rb, rt, d in exclusions:
-        print(f"  Exclusion {bc}{rb} — {tc_out}{rt}  min {d:.1f} Å")
+        print(f"  Exclusion {bc}{rb} — {tc}{rt}  min {d:.1f} Å")
     print()
 
     binder_ca    = read_ca(args.binder, bc)
@@ -756,7 +790,7 @@ def main() -> None:
     print()
 
     print("Solving pose...")
-    R, t, final_loss, pair_results = solve(
+    R, t, final_loss, pair_results, restart_history, loss_breakdown = solve(
         binder_ca, target_ca, pairs, exclusions, args.n_restarts,
         args.min_pair_distance, args.max_pair_distance,
         use_de=args.use_de, global_interp=args.global_interp,
@@ -769,8 +803,19 @@ def main() -> None:
     print(f"Final loss: {final_loss:.4f}  —  all pairs satisfied: {all_satisfied}")
     for pr in pair_results:
         flag = '✓' if pr['satisfied'] else '!'
-        print(f"  {bc}{pr['binder_res']:3d} — {tc_out}{pr['target_res']:3d}: "
+        print(f"  {bc}{pr['binder_res']:3d} — {tc}{pr['target_res']:3d}: "
               f"achieved {pr['achieved_d']:.3f} Å  (max {pr['max_d']:.1f} Å)  {flag}")
+    print()
+
+    # Per-term loss breakdown (per project memory feedback_loss_breakdown:
+    # report unprompted after every run so the user can judge which term
+    # dominates and whether weights need rebalancing).
+    print("Loss breakdown:")
+    for term, val in loss_breakdown.items():
+        if term == 'total':
+            continue
+        print(f"  {term:<14s} {val:>12.4f}")
+    print(f"  {'total':<14s} {loss_breakdown['total']:>12.4f}")
     print()
 
     print("Analysing contacts and clashes...")
@@ -796,7 +841,7 @@ def main() -> None:
         ('B) Join gap ≤ 1', 1),
         ('C) Join gap ≤ 2', 2),
     ]:
-        contig = make_contig(all_binder_rn, design_set, bc, tc_out, gap)
+        contig = make_contig(all_binder_rn, design_set, bc, tc, gap)
         dr_desc, dr_total = describe_design_region(all_binder_rn, design_set, gap)
         contigs_out[label] = {'contig': contig, 'design_region': dr_desc,
                               'n_residues': dr_total, 'join_gap': gap}
@@ -805,13 +850,22 @@ def main() -> None:
         print(f"    Contig string : {contig}")
 
     posed_pdb = Path(f'{args.output_prefix}_posed.pdb')
-    write_posed_pdb(posed_pdb, args.binder, args.target, bc, tc, R, t)  # tc_out (B) applied inside
+    write_posed_pdb(posed_pdb, args.binder, args.target, bc, tc, R, t)
     print(f"\nSaved posed complex : {posed_pdb}")
 
     results = {
         'pair_results': pair_results,
         'all_pairs_satisfied': all_satisfied,
         'final_loss': round(final_loss, 4),
+        'loss_breakdown': {k: round(v, 4) for k, v in loss_breakdown.items()},
+        'loss_weights': {
+            'W_VALIDITY':       W_VALIDITY,
+            'W_DIST':           W_DIST,
+            'W_LOWER':          W_LOWER,
+            'W_EXCL':           W_EXCL,
+            'W_INTERP':         args.interp_weight,
+            'W_PAIR_SC_CLASH':  W_PAIR_SC_CLASH,
+        },
         'n_contact_pairs': len(contacts),
         'n_clash_pairs': len(clash_pairs),
         'clash_binder_residues': clash_b,
@@ -825,8 +879,18 @@ def main() -> None:
     json_out.write_text(json.dumps(results, indent=2))
     print(f"Saved results JSON  : {json_out}")
 
+    # Per-restart loss history CSV — consumed by POSE_SOLVER_PLOTS for
+    # the restart-loss convergence curve.  Always emitted (DE path
+    # writes one row, L-BFGS-B path writes n_restarts rows).
+    csv_out = Path(f'{args.output_prefix}_restart_losses.csv')
+    with open(csv_out, 'w') as fh:
+        fh.write('restart_idx,restart_loss,best_loss_so_far\n')
+        for i, restart_loss, best_so_far in restart_history:
+            fh.write(f'{i},{restart_loss:.6f},{best_so_far:.6f}\n')
+    print(f"Saved restart loss  : {csv_out}")
+
     make_heatmap(contacts, pairs, contig_dr,
-                 set(clash_b), set(clash_t), bc, tc_out,
+                 set(clash_b), set(clash_t), bc, tc,
                  args.clash_cutoff, args.contact_cutoff,
                  pair_results, Path(f'{args.output_prefix}_heatmap.png'))
 
