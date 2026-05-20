@@ -1,16 +1,16 @@
 #!/bin/bash
-#SBATCH --job-name="nf_test_haddock"
+#SBATCH --job-name="nf_test_pose_solver"
 #SBATCH -p jic-medium
 #SBATCH -N 1
 #SBATCH -n 1
 #SBATCH -c 2
 #SBATCH --mem=4G
-#SBATCH --time=72:00:00
+#SBATCH --time=4:00:00
 #SBATCH --output=slurm_%j.out
 #SBATCH --error=slurm_%j.err
 #SBATCH --mail-type=END,FAIL
 #SBATCH --mail-user=jowillia@nbi.ac.uk
-#SBATCH --chdir=/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/haddock
+#SBATCH --chdir=/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/pose_solver
 
 set -euo pipefail
 
@@ -18,7 +18,7 @@ set -euo pipefail
 PIPELINE_DIR="/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline"
 NEXTFLOW_IMG="/hpc-home/jowillia/singularity/NextFlow/NextFlow.img"
 
-TEST_DIR="${PIPELINE_DIR}/tests/haddock"
+TEST_DIR="${PIPELINE_DIR}/tests/pose_solver"
 NXF_HOME="${PIPELINE_DIR}/nxf_home"
 NXF_WORK="${TEST_DIR}/work"
 NXF_TEMP="${TEST_DIR}/tmp"
@@ -53,7 +53,7 @@ fi
 
 # ── Launch ────────────────────────────────────────────────────────────────
 echo "============================================================"
-echo "HADDOCK3 Module Test — Nextflow Launcher"
+echo "Pose Solver Module Test — Nextflow Launcher"
 echo "============================================================"
 echo "Pipeline dir:  ${PIPELINE_DIR}"
 echo "Test dir:      ${TEST_DIR}"
@@ -62,7 +62,7 @@ echo "Date:          $(date)"
 echo "Node:          $(hostname)"
 echo "============================================================"
 
-"${NEXTFLOW_BIN}" run "${TEST_DIR}/test_haddock.nf" \
+"${NEXTFLOW_BIN}" run "${TEST_DIR}/test_pose_solver.nf" \
     -c "${PIPELINE_DIR}/nextflow.config" \
     -resume \
     "$@"

@@ -9,9 +9,13 @@ to be redesigned by RFDiffusion to accommodate the effector.
 ## Quick start
 
 ```bash
-cd tests/haddock/pose_solver
+cd tests/pose_solver
 bash run_example.sh
 ```
+
+The Nextflow integration lives in `modules/pose_solver.nf` and is
+exercised by `tests/pose_solver/test_pose_solver.nf`.  Use the shell
+script below to iterate on pair choices outside the pipeline.
 
 Opens `solved_pose_posed.pdb` in ChimeraX:
 ```
@@ -30,13 +34,15 @@ open solved_pose_posed.pdb
 ## Usage
 
 ```bash
-python3 pose_solver.py \
-    --receptor  ../data/receptor.pdb \
-    --effector  ../data/effector.pdb  \
-    --pairs "A71-B33 A72-B32 A73-B31" \
-    --target-distance 3.8             \
+python3 ../../bin/pose_solver.py \
+    --binder    ./data/Pikp-1_HMA.pdb \
+    --target    ./data/avr-pia.pdb \
+    --pairs "A73-B31 A71-B33 A8-B22" \
+    --min-pair-distance 3.5 \
+    --max-pair-distance 6.0 \
     --contig-design-region "33-49,69-78" \
-    --n-restarts 200
+    --n-restarts 1000 \
+    --global-interp
 ```
 
 ### Key flags

@@ -1,0 +1,32 @@
+# tests/pose_solver/reference_manifest.txt
+# See header in tests/rfdiffusion/reference_manifest.txt for format.
+#
+# The pose-solver per-module test has not yet had a curated example_output_files/
+# fixture generated.  After the first successful test run, refresh with
+#   sbatch tests/update_example_dataset.slurm.sh \
+#         --module pose_solver \
+#         --updated-output-folder tests/pose_solver/receptor_resurfacing_results
+# and add the resulting fixture artefacts to this manifest.
+
+# ── Top-level Nextflow run artefacts ──────────────────────────────
+dag.html
+timeline.html
+trace.txt
+pipeline_report.html
+
+# ── Pose solver outputs (placeholder; refine after first run) ────
+# pose_solver/data/receptor_pose.pdb
+# pose_solver/data/effector_pose.pdb
+# pose_solver/solved_pose_posed.pdb
+# pose_solver/solved_pose_results.json
+# pose_solver/solved_pose_heatmap.png
+# pose_solver/solved_pose_restart_losses.csv
+# pose_solver/interface_metrics.json
+# pose_solver/updated_contigs.txt
+# pose_solver/updated_params.json
+# pose_solver/rfdiffusion_input.pdb
+# plots/pose_loss_breakdown.png
+# plots/pose_pair_distances.png
+# plots/pose_interface_dashboard.png
+# plots/pose_restart_loss_curve.png
+# plots/pose_contig_comparison.png

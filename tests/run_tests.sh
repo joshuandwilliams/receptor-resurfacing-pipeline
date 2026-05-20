@@ -15,7 +15,7 @@
 #   ./tests/run_tests.sh --modules rfdiffusion --dry-run        # print, don't submit
 #
 # Recognised modules: rfdiffusion, proteinmpnn, rosetta_filtering,
-# negative_steering, orthogonal_metrics, haddock, full_test_run.
+# negative_steering, orthogonal_metrics, pose_solver, full_test_run.
 #
 # full_test_run runs the end-to-end main.nf pipeline against
 # tests/full_test_run/params_full_test.yml.  It uses the project-root
@@ -26,7 +26,7 @@
 #
 # --with-plots adds the per-module plot SLURM script as a dependency
 # (afterok:<workflow-job-id>) so plots only run if the workflow test
-# succeeds.  Modules without a plot script (haddock, full_test_run)
+# succeeds.  Modules without a plot script (pose_solver, full_test_run)
 # silently skip.
 #
 # Each module is its own independent sbatch — they run in parallel
@@ -52,7 +52,7 @@ VALID_MODULES=(
     rosetta_filtering
     negative_steering
     orthogonal_metrics
-    haddock
+    pose_solver
     full_test_run
 )
 
@@ -212,7 +212,7 @@ submit_one() {
         # Plot test SLURM scripts vary by module name:
         #   tests/<module>/run_test_<module>_plots.slurm.sh
         # except a couple where the naming differs slightly — list them
-        # all here.  Modules without a plot script (haddock) silently skip.
+        # all here.  Modules without a plot script (pose_solver) silently skip.
         local plot_scripts=()
         case "${module}" in
             rfdiffusion|proteinmpnn|rosetta_filtering)
@@ -228,8 +228,9 @@ submit_one() {
             orthogonal_metrics)
                 plot_scripts+=("${mod_dir}/run_test_orthogonal_metrics_plot.slurm.sh")
                 ;;
-            haddock)
-                # No plot tests yet.
+            pose_solver)
+                # No plot tests yet — POSE_SOLVER_PLOTS runs inline as
+                # part of the workflow test.
                 ;;
         esac
 
