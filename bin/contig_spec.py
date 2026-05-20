@@ -21,7 +21,6 @@ deferred to higher tiers):
     absorbs its functionality here.  contig_utils.py keeps working
     until callers are migrated.
   - bin/derive_input_design_region.py:_parse_contigs
-  - bin/haddock3_prepare.py:parse_contig_segments
   - bin/pipeline_correct_sequences.py:parse_contig_segments
 """
 

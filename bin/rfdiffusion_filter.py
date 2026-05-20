@@ -39,8 +39,7 @@ import sys
 
 import numpy as np
 
-# Local helper for centroid/COM math.  Shared with bin/haddock_cluster_metrics.py
-# so the centroid primitive has one home (per Session 7 A140).
+# Local helper for centroid/COM math.
 _BIN_DIR = os.path.dirname(os.path.abspath(__file__))
 if _BIN_DIR not in sys.path:
     sys.path.insert(0, _BIN_DIR)
@@ -562,8 +561,7 @@ def calc_motif_and_region_metrics(
     Q = np.array(matched_input_coords)          # reference (input)
 
     # ── Kabsch on the fixed residues ────────────────────────────────────
-    # Centroid helper from bin/structure_metrics.py — same primitive used
-    # by HADDOCK cluster metrics so the operation is named consistently.
+    # Centroid helper from bin/structure_metrics.py.
     P_centroid = structure_metrics.centroid(P)
     Q_centroid = structure_metrics.centroid(Q)
     P_centred = P - P_centroid

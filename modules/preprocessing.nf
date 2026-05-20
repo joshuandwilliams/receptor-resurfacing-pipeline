@@ -100,12 +100,12 @@ PYEOF
  * ---------------
  * Resolve a raw user contig string to PDB-resolved coordinates.  Used by
  * Branch B (pre-docked complex PDB), where the input PDB is the same one
- * the contig spec refers to and no HADDOCK-driven coordinate remapping
+ * the contig spec refers to and no docking-driven coordinate remapping
  * is needed.
  *
  * Branch A handles its own resolution + remapping inside BUILD_CONTIGS
- * because HADDOCK can renumber residues; Branch B is simpler and just
- * needs the bare contig_utils.resolve_contigs() pass.
+ * because the pose solver can renumber residues; Branch B is simpler
+ * and just needs the bare contig_utils.resolve_contigs() pass.
  *
  * Wraps bin/rfdiffusion_contigs.py, which already exposes this exact
  * functionality as a CLI.

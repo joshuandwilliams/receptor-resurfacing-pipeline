@@ -3,10 +3,9 @@ structure_metrics.py
 --------------------
 Geometric / structural primitives shared across the pipeline.
 
-Created during the HADDOCK module restructure (Session 7) to consolidate
-inline centre-of-mass code that previously lived only in
-``rfdiffusion_filter.py``.  The HADDOCK per-cluster metrics need the same
-primitives; one shared file beats two near-identical copies.
+Consolidates inline centre-of-mass + clash-counting code that previously
+lived only in ``rfdiffusion_filter.py`` so other consumers can reuse
+the same primitives without duplication.
 
 Contract
 ========
@@ -72,7 +71,7 @@ def centroid_distance(c1: np.ndarray, c2: np.ndarray) -> float:
 def _iter_atom_lines(pdb_path: Path) -> Iterable[str]:
     """Yield ATOM lines from the first model in the PDB.
 
-    Stops at ENDMDL so multi-model PDBs (e.g. NMR ensembles, HADDOCK
+    Stops at ENDMDL so multi-model PDBs (e.g. NMR ensembles, docking
     cluster outputs) only emit the first model.
     """
     with open(pdb_path) as fh:
@@ -186,12 +185,12 @@ def clash_count(
 
     A pair counts as "in design region" iff the chain_a (receptor)
     residue number is in ``design_region_residues_a``.  Chain B atoms
-    don't have a notion of design region at HADDOCK time.
+    don't have a notion of design region at this stage.
 
-    Note: this uses a naive O(N*M) loop.  For typical HADDOCK outputs
-    (one receptor ~100 residues × one effector ~100 residues) that's
-    ~10^4 atom pairs per chain pair — fast enough.  If a future consumer
-    has much larger inputs, swap in a KDTree.
+    Note: this uses a naive O(N*M) loop.  For typical 2-chain interface
+    PDBs (one receptor ~100 residues × one effector ~100 residues)
+    that's ~10^4 atom pairs per chain pair — fast enough.  If a future
+    consumer has much larger inputs, swap in a KDTree.
     """
     atoms_a = read_chain_heavy_atoms(Path(pdb_path), chain_a)
     atoms_b = read_chain_heavy_atoms(Path(pdb_path), chain_b)

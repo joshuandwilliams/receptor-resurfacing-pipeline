@@ -223,12 +223,12 @@ def test_coverage_report_runs():
     assert "any" in text  # the coverage-gap section is present
 
 
-# ── HADDOCK Session 7 restraint params ──────────────────────────────
+# ── Pose Solver restraint params ────────────────────────────────────
 
 
 @pytest.mark.local_unit
-class TestHaddockContactPairsRegex:
-    spec = next(s for s in vp.PARAM_SPECS if s.name == "haddock_contact_pairs")
+class TestPoseSolverPairsRegex:
+    spec = next(s for s in vp.PARAM_SPECS if s.name == "pose_solver_pairs")
     pat = spec.kwargs["pattern"]
 
     def test_empty_ok(self):
@@ -240,6 +240,10 @@ class TestHaddockContactPairsRegex:
     def test_multiple_pairs(self):
         assert vp._validate_regex("A25-C42 A13-C94", {"pattern": self.pat}) is None
 
+    def test_with_dist_override(self):
+        assert vp._validate_regex("A73-B48@4.5 A71-B50",
+                                  {"pattern": self.pat}) is None
+
     def test_bad_missing_dash(self):
         err = vp._validate_regex("A25 C42", {"pattern": self.pat})
         assert err and "does not match" in err
@@ -250,9 +254,30 @@ class TestHaddockContactPairsRegex:
 
 
 @pytest.mark.local_unit
-class TestHaddockActiveResiduesRegex:
+class TestPoseSolverExclusionsRegex:
+    spec = next(s for s in vp.PARAM_SPECS if s.name == "pose_solver_exclusions")
+    pat = spec.kwargs["pattern"]
+
+    def test_empty_ok(self):
+        assert vp._validate_regex("", {"pattern": self.pat}) is None
+
+    def test_with_dist(self):
+        assert vp._validate_regex("A8-B33@4.5", {"pattern": self.pat}) is None
+
+    def test_multiple_with_dist(self):
+        assert vp._validate_regex("A8-B33@4.5 A12-B17@6",
+                                  {"pattern": self.pat}) is None
+
+    def test_missing_dist_rejected(self):
+        # @DIST is mandatory for exclusions.
+        err = vp._validate_regex("A8-B33", {"pattern": self.pat})
+        assert err and "does not match" in err
+
+
+@pytest.mark.local_unit
+class TestPoseSolverContigDesignRegionRegex:
     spec = next(s for s in vp.PARAM_SPECS
-                if s.name == "haddock_receptor_active_residues")
+                if s.name == "pose_solver_contig_design_region")
     pat = spec.kwargs["pattern"]
 
     def test_empty_ok(self):
@@ -262,7 +287,7 @@ class TestHaddockActiveResiduesRegex:
         assert vp._validate_regex("25,35,40", {"pattern": self.pat}) is None
 
     def test_with_range(self):
-        assert vp._validate_regex("25,40-44", {"pattern": self.pat}) is None
+        assert vp._validate_regex("33-49,69-78", {"pattern": self.pat}) is None
 
     def test_bad_letters(self):
         err = vp._validate_regex("A25,A30", {"pattern": self.pat})
@@ -270,115 +295,82 @@ class TestHaddockActiveResiduesRegex:
 
 
 @pytest.mark.local_unit
-class TestHaddockPairDistanceRegex:
-    spec = next(s for s in vp.PARAM_SPECS if s.name == "haddock_pair_distance")
-    pat = spec.kwargs["pattern"]
-
-    def test_default(self):
-        assert vp._validate_regex("2,2,4", {"pattern": self.pat}) is None
-
-    def test_floats(self):
-        assert vp._validate_regex("2.5,1.5,4.0", {"pattern": self.pat}) is None
-
-    def test_wrong_count(self):
-        err = vp._validate_regex("2,4", {"pattern": self.pat})
-        assert err and "does not match" in err
-
-    def test_no_plusminus(self):
-        err = vp._validate_regex("2±2±4", {"pattern": self.pat})
-        assert err and "does not match" in err
-
-
-@pytest.mark.local_unit
-class TestHaddockChosenClusterCustom:
-    # Pull the lambda dynamically per call so Python doesn't bind it as
-    # a method via the descriptor protocol when accessed on the class.
-    @staticmethod
-    def _fn():
-        spec = next(s for s in vp.PARAM_SPECS
-                    if s.name == "haddock_chosen_cluster")
-        return spec.kwargs["fn"]
-
-    def test_null_ok(self):
-        fn = self._fn()
-        assert fn(None) is None
-        assert fn("null") is None
-
-    def test_int_ok(self):
-        assert self._fn()(3) is None
-
-    def test_zero_rejected(self):
-        assert self._fn()(0) is not None
-
-    def test_string_rejected(self):
-        assert self._fn()("3") is not None
-
-
-@pytest.mark.local_unit
-class TestBranchACrossParamRule:
-    def test_no_branch_a_is_ok(self):
+class TestBranchAPoseSolverPairsRequired:
+    def test_branch_b_is_ok(self):
         # Branch B (receptor_input absent) — no rule applies.
         errors = vp.validate_params({"pdb_file": "/tmp/x.pdb"})
         assert errors == []
 
-    def test_branch_a_with_no_restraints_fails(self):
+    def test_branch_a_with_no_pairs_fails(self):
         errors = vp.validate_params({
             "receptor_input": "/tmp/r.pdb",
             "effector_input": "/tmp/e.pdb",
         })
-        assert any("at least one HADDOCK restraint" in e for e in errors)
+        assert any("pose_solver_pairs" in e for e in errors)
+
+    def test_branch_a_with_empty_pairs_fails(self):
+        errors = vp.validate_params({
+            "receptor_input": "/tmp/r.pdb",
+            "effector_input": "/tmp/e.pdb",
+            "pose_solver_pairs": "   ",  # whitespace-only also rejected
+        })
+        assert any("pose_solver_pairs" in e for e in errors)
 
     def test_branch_a_with_pairs_ok(self):
         errors = vp.validate_params({
             "receptor_input": "/tmp/r.pdb",
             "effector_input": "/tmp/e.pdb",
-            "haddock_contact_pairs": "A25-C42",
+            "pose_solver_pairs": "A25-C42",
         })
         assert errors == []
 
-    def test_branch_a_with_receptor_active_ok(self):
+    def test_branch_a_with_multiple_pairs_ok(self):
         errors = vp.validate_params({
             "receptor_input": "/tmp/r.pdb",
             "effector_input": "/tmp/e.pdb",
-            "haddock_receptor_active_residues": "25,40-44",
+            "pose_solver_pairs": "A73-B31 A72-B32 A71-B33",
         })
         assert errors == []
 
-    def test_branch_a_with_only_effector_active_ok(self):
-        # Post-commit-3 amendment: effector-only is valid (the "I want
-        # this target face involved" mode).  Receptor design region for
-        # clash bookkeeping comes from the contig at HADDOCK time.
+    def test_branch_a_with_dist_overrides_ok(self):
         errors = vp.validate_params({
             "receptor_input": "/tmp/r.pdb",
             "effector_input": "/tmp/e.pdb",
-            "haddock_effector_active_residues": "42,94",
-        })
-        assert errors == []
-
-    def test_branch_a_with_pairs_and_effector_active_ok(self):
-        errors = vp.validate_params({
-            "receptor_input": "/tmp/r.pdb",
-            "effector_input": "/tmp/e.pdb",
-            "haddock_contact_pairs": "A73-B31 A72-B32 A71-B33",
-            "haddock_effector_active_residues": "20-26",
+            "pose_solver_pairs": "A73-B48@4.5 A71-B50 A8-B39",
         })
         assert errors == []
 
 
 @pytest.mark.local_unit
-class TestChosenClusterBranchAOnly:
-    def test_branch_b_with_chosen_fails(self):
-        errors = vp.validate_params({
-            "pdb_file": "/tmp/x.pdb",
-            "haddock_chosen_cluster": 2,
-        })
-        assert any("only applies in Branch A" in e for e in errors)
-
-    def test_branch_a_with_chosen_ok(self):
+class TestPoseSolverPairDistanceBoundsOrdered:
+    def test_default_ordering_ok(self):
         errors = vp.validate_params({
             "receptor_input": "/tmp/r.pdb",
             "effector_input": "/tmp/e.pdb",
-            "haddock_contact_pairs": "A25-C42",
-            "haddock_chosen_cluster": 2,
+            "pose_solver_pairs": "A25-C42",
+            "pose_solver_min_pair_distance": 3.5,
+            "pose_solver_max_pair_distance": 6.0,
         })
         assert errors == []
+
+    def test_min_equal_max_fails(self):
+        errors = vp.validate_params({
+            "receptor_input": "/tmp/r.pdb",
+            "effector_input": "/tmp/e.pdb",
+            "pose_solver_pairs": "A25-C42",
+            "pose_solver_min_pair_distance": 4.0,
+            "pose_solver_max_pair_distance": 4.0,
+        })
+        assert any("min_pair_distance" in e and "max_pair_distance" in e
+                   for e in errors)
+
+    def test_min_greater_than_max_fails(self):
+        errors = vp.validate_params({
+            "receptor_input": "/tmp/r.pdb",
+            "effector_input": "/tmp/e.pdb",
+            "pose_solver_pairs": "A25-C42",
+            "pose_solver_min_pair_distance": 8.0,
+            "pose_solver_max_pair_distance": 4.0,
+        })
+        assert any("min_pair_distance" in e and "max_pair_distance" in e
+                   for e in errors)

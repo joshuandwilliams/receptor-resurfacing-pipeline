@@ -27,8 +27,10 @@ max_boltz2_parallel: 10        # Max concurrent Boltz-2 GPU SLURM jobs on the
 # ═════════════════════════════════════════════════════════════════════════
 # INPUT MODE 1: PDB + PDB (separate files, need docking)
 # ═════════════════════════════════════════════════════════════════════════
-# Both structures exist as separate PDBs.  HADDOCK3 docks them, then the
-# pipeline continues with RFDiffusion → MPNN → Boltz2.
+# Both structures exist as separate PDBs.  The constraint-driven pose
+# solver docks them using user-supplied pair restraints (see the Pose
+# Solver section below), then the pipeline continues with RFDiffusion →
+# MPNN → Boltz2.
 #
 receptor_input: "./Sr50_3BI_LRR.pdb"
 effector_input: "./AVR-PikD.pdb"
@@ -38,7 +40,7 @@ effector_input: "./AVR-PikD.pdb"
 # INPUT MODE 2: Pre-docked complex PDB (direct mode)
 # ═════════════════════════════════════════════════════════════════════════
 # A single PDB containing both chains already docked together.
-# HADDOCK3 is skipped — goes straight to RFDiffusion.
+# The pose solver is skipped — goes straight to RFDiffusion.
 # You must provide hotspot manually (or leave blank if not needed).
 #
 # pdb_file: "./sr50_pwl2_af2.pdb"
@@ -65,11 +67,11 @@ hotspot: ""            # OPTIONAL RFDiffusion soft bias toward specific target r
                        # (e.g. homologous binding sites that aren't in close contact
                        # in the current docked complex).  Leave empty to let
                        # RFDiffusion explore freely based on input PDB geometry.
-                       # (Session 7: auto-derivation from HADDOCK was removed —
-                       # the docked complex's interface is already visible to
-                       # RFDiffusion from the input PDB, so the auto-derived
-                       # hotspot bias reinforces the docked pose and reduces
-                       # design diversity.  See notes/design_audit.md A143/A145.)
+                       # (Auto-derivation from the docked complex is not done:
+                       # the contact pattern is already visible to RFDiffusion
+                       # from the input PDB, so feeding it back as a hotspot
+                       # bias would just reinforce the docked pose and reduce
+                       # design diversity.)
 num_designs: 64                            # RFDiffusion backbone designs per run (32 for tests, 64+ for production)
 rfdiff_iterations: 100                     # Diffusion denoising steps (50 for tests, 100 for production)
 rfdiff_checkpoint: "Complex_beta_ckpt.pt"  # Checkpoint filename in /opt/RFdiffusion/models/
@@ -94,72 +96,65 @@ rfdiff_rog_weight: 0.5             # monomer_ROG: penalises high radius of gyrat
 rfdiff_rog_min_dist: 5             # monomer_ROG minimum Rg floor (Å) — Rg values below
                                    # this are not penalised (prevents over-collapsing short loops)
 
-# ── HADDOCK3 (modes 1-3 only) ────────────────────────────────────────
-# HADDOCK's job in this pipeline is GEOMETRIC PLACEMENT — placing the two
-# monomers in a compact, clash-free arrangement that gives RFDiffusion a
-# good starting point.  Energetics will be redesigned downstream, so the
-# original HADDOCK score is not the ranking criterion; clusters are
-# ranked by pair contact fraction first, then BSA (highest first).
+# ── Pose Solver (Branch A docking; ignored in Branch B) ─────────────
+# The constraint-driven pose solver places the two monomers in a
+# compact, clash-free arrangement that gives RFDiffusion a good
+# starting point.  Deterministic (one pose, not clusters), CA-only,
+# runs in minutes.  See notes/pipeline_notes/pipeline_notes16.md for
+# the geometric rationale behind the defaults.
 #
-# Two restraint modes (use either or both; at least one is REQUIRED in
-# Branch A — the validator will reject an empty config):
-#
-#   1. contact-pair mode (HARD pin) — use when you know specific
-#      residue pairs that must contact, e.g. from a homologous complex
-#      or a ChimeraX alignment of conserved beta-strand contacts.
-#      Format: "RECCHAIN+RESNUM-EFFCHAIN+RESNUM ..." (CA-CA pairs only,
-#      no plus-minus syntax).  Just 2-3 pairs is usually enough to
-#      orient the docking; HADDOCK is free to wiggle everything else.
-#
-#   2. active-residues mode (SOFT preference) — use when you know
-#      which receptor (and optionally effector) FACE should be at the
-#      interface but not specific pair contacts.  HADDOCK requires
-#      at least 50% of the listed receptor residues to contact the
-#      effector side (the active residue list when both are set, or
-#      the entire effector chain when only the receptor is set).
-haddock_sampling: 10000    # 10000 = semi-blind, 1000 = targeted
-haddock_seletop: 400       # Top N rigid-body models passed to flexref
-
-# Contact-pair mode (hard pin via unambig_restraints.tbl, CA-CA distance):
-haddock_contact_pairs: ""
+# REQUIRED in Branch A: pose_solver_pairs.  Hard-pin CA-CA pairs that
+# the solver must satisfy.  2-4 pairs is the sweet spot — 1 pair
+# underconstrains, >4 over-constrains.  Format:
+#   "RECCHAIN+RESNUM-EFFCHAIN+RESNUM ..."        (uses default window)
+#   "RECCHAIN+RES-EFFCHAIN+RES@DIST ..."         (per-pair max override)
+pose_solver_pairs: ""
 # Examples:
-#   haddock_contact_pairs: "A258-C42"                      # 1 pair
-#   haddock_contact_pairs: "A258-C42 A266-C45 A270-C94"    # 3 pairs
+#   pose_solver_pairs: "A73-B31 A71-B33 A8-B22"
+#   pose_solver_pairs: "A73-B48@4.5 A71-B50 A8-B39"
 
-# Active-residues mode (soft AIRs via ambig_restraints.tbl, AND-of-OR
-# with 50% nrest tolerance):
-haddock_receptor_active_residues: ""   # e.g. "258-274"   (the receptor de novo region)
-haddock_effector_active_residues: ""   # e.g. "24-47"     (the effector binding face)
-                                       # empty = restrain to entire effector chain
+# Optional repulsive exclusions — pairs that must stay APART by at
+# least DIST Å.  @DIST is mandatory for exclusions.
+pose_solver_exclusions: ""
+# Example: pose_solver_exclusions: "A8-B33@4.5"
 
-# Global pair distance for unambig restraints.  Three positive floats
-# "target,lower_deviation,upper_deviation".  Default 2,2,4 gives a
-# distance window [0, 6] A.  No plus-minus syntax.
-haddock_pair_distance: "2,2,4"
+# Pair distance window (Å).  notes16: natural CA-CA at real interfaces
+# clusters at 4.5-7 Å, so 6.0 is the right max; tighter (4.0) causes
+# the over-packing failure mode documented in notes16 §4.
+pose_solver_min_pair_distance: 3.5
+pose_solver_max_pair_distance: 6.0
 
-# Stop-and-resume gate for manual cluster inspection (see notes/SESSION_HANDOFF
-# for the workflow):
-#   1. First run with stop_after_haddock: true.
-#   2. Inspect cluster_metrics_table.csv + best_cluster*.pdb files under
-#      ${outdir}/haddock/ — open them in ChimeraX, pick a cluster.
-#   3. Re-run with stop_after_haddock: false AND haddock_chosen_cluster: <N>;
-#      Nextflow -resume reuses the cached HADDOCK run, only the downstream
-#      stages re-execute.
-stop_after_haddock: false
-haddock_chosen_cluster: null   # null = auto-pick by (pair_contact_fraction, BSA)
-                               # integer = override with that cluster ID
+# Heavy-atom clash penalty between paired residue sidechains during
+# optimisation.  Pair-only — global clash term is a deferred follow-up.
+# Set 0 to disable.
+pose_solver_pair_sc_clash_cutoff: 2.0
 
-# Strip receptor design-region sidechains before docking.  When true,
-# residues in the contig's de novo regions are reduced to backbone-only
-# (N/CA/C/O) and renamed to GLY in the receptor PDB that goes into
-# HADDOCK.  Rationale: those residues will be replaced by RFDiffusion
-# anyway, so their current sidechains are sterically irrelevant to the
-# final design — but at HADDOCK time they act as walls that deflect
-# the effector and prevent tight packing.  Stripping them lets HADDOCK
-# pack the effector against the receptor backbone, often producing a
-# rotated receptor pose with much higher BSA.  HADDOCK-only: the
-# original receptor PDB is unchanged on disk.
-haddock_strip_design_sidechains: false
+# Heavy-atom distance counted as a "clash" in the post-hoc report.
+pose_solver_clash_cutoff: 2.0
+
+# CA-CA cutoff for the contact heatmap.
+pose_solver_contact_cutoff: 8.0
+
+# Solver knobs.  1000 restarts converges on a typical 80-residue HMA
+# in <5 min; raise to 3000+ for very irregular surfaces.
+pose_solver_n_restarts: 1000
+pose_solver_use_de: false              # use differential evolution
+                                        # instead of random restarts
+pose_solver_global_interp: true        # penalise ALL CA atoms inside
+                                        # opposite hull (recommended on)
+pose_solver_interp_weight: 10.0
+
+# Cosmetic-only contig design-region annotation for the contact heatmap.
+# Format: comma-separated residue numbers and ranges, e.g. "33-49,69-78".
+pose_solver_contig_design_region: ""
+
+# Stop-and-resume gate for manual pose inspection:
+#   1. First run with stop_after_pose_solve: true.
+#   2. Open ${outdir}/pose_solver/solved_pose_posed.pdb in ChimeraX,
+#      inspect ${outdir}/plots/pose_*.png — pose looks right?
+#   3. Re-run with stop_after_pose_solve: false; Nextflow --resume
+#      reuses the cached pose, only the downstream stages re-execute.
+stop_after_pose_solve: false
 
 # ── Rosetta pre-validation physics filter ────────────────────────────
 sc_threshold: 0.62

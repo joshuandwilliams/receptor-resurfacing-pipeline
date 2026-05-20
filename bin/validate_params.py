@@ -320,40 +320,51 @@ PARAM_SPECS: List[ParamSpec] = [
     ParamSpec("min_pct_identity","float_range", {"min": 0.0, "max": 100.0}),
     ParamSpec("max_pct_identity","float_range", {"min": 0.0, "max": 100.0}),
 
-    # ── HADDOCK ─────────────────────────────────────────────────────
-    ParamSpec("haddock_sampling","int_range", {"min": 100, "max": 100000}),
-    ParamSpec("haddock_seletop","int_range", {"min": 1, "max": 10000}),
-    ParamSpec("haddock_min_cluster_size","int_range", {"min": 2, "max": 100},
-              "min cluster population accepted by collect_haddock3_dock; "
-              "production default 4, test override 2"),
+    # ── Pose Solver (Branch A docking) ──────────────────────────────
     ParamSpec("rfdiff_contact_cutoff","float_range", {"min": 0.0, "max": 30.0}),
 
-    # Session 7 restructure: restraint params for HADDOCK.  Empty string
-    # allowed everywhere; cross-param "at least one non-empty in Branch A"
-    # is enforced in _branch_a_restraints_present_check below.
-    ParamSpec("haddock_contact_pairs", "regex",
-              {"pattern": r"^(\s*[A-Za-z]\d+-[A-Za-z]\d+(?:\s+|$))*\s*$"},
-              "contact-pair mode: space-separated 'CHAIN+RES-CHAIN+RES' pairs"),
-    ParamSpec("haddock_receptor_active_residues", "regex",
+    # Hard-pin CA-CA pair restraints.  Empty string allowed everywhere;
+    # cross-param "non-empty in Branch A" is enforced in
+    # _branch_a_pose_solver_pairs_present below.
+    #
+    # Format: space-separated 'CHAIN+RES-CHAIN+RES' tokens with optional
+    # '@DIST' suffix overriding the per-pair max distance, e.g.
+    #   "A73-B31 A71-B33 A8-B22"
+    #   "A73-B48@4.5 A71-B50 A8-B39"
+    ParamSpec("pose_solver_pairs", "regex",
+              {"pattern": r"^(\s*[A-Za-z]\d+-[A-Za-z]\d+(@\d+(\.\d+)?)?(?:\s+|$))*\s*$"},
+              "space-separated 'CHAIN+RES-CHAIN+RES[@DIST]' pair tokens"),
+    ParamSpec("pose_solver_exclusions", "regex",
+              {"pattern": r"^(\s*[A-Za-z]\d+-[A-Za-z]\d+@\d+(\.\d+)?(?:\s+|$))*\s*$"},
+              "space-separated 'CHAIN+RES-CHAIN+RES@DIST' exclusion tokens "
+              "(@DIST is mandatory for exclusions)"),
+    ParamSpec("pose_solver_min_pair_distance","float_range", {"min": 0.0, "max": 30.0},
+              "minimum CA-CA distance for pair constraints (Å)"),
+    ParamSpec("pose_solver_max_pair_distance","float_range", {"min": 0.0, "max": 30.0},
+              "maximum CA-CA distance for pair constraints (Å); "
+              "default 6.0 matches the natural-interface CA-CA range "
+              "documented in notes/pipeline_notes/pipeline_notes16.md §4.1"),
+    ParamSpec("pose_solver_pair_sc_clash_cutoff","float_range", {"min": 0.0, "max": 10.0},
+              "heavy-atom clash cutoff between paired-residue sidechains (Å); "
+              "set 0 to disable"),
+    ParamSpec("pose_solver_clash_cutoff","float_range", {"min": 0.0, "max": 10.0},
+              "heavy-atom distance counted as a clash in the post-hoc report (Å)"),
+    ParamSpec("pose_solver_contact_cutoff","float_range", {"min": 0.0, "max": 30.0},
+              "CA-CA cutoff for the contact heatmap (Å)"),
+    ParamSpec("pose_solver_n_restarts","int_range", {"min": 1, "max": 100000},
+              "number of L-BFGS-B random restarts (or DE evaluations / 90)"),
+    ParamSpec("pose_solver_use_de", "bool", {},
+              "use differential evolution instead of L-BFGS-B random restarts"),
+    ParamSpec("pose_solver_global_interp", "bool", {},
+              "penalise ALL CA atoms inside the opposite hull (vs pair-only)"),
+    ParamSpec("pose_solver_interp_weight","float_range", {"min": 0.0, "max": 1e6},
+              "weight on the interpenetration penalty"),
+    ParamSpec("pose_solver_contig_design_region", "regex",
               {"pattern": r"^(\d+(-\d+)?(,\s*\d+(-\d+)?)*)?$"},
-              "active-residues mode: comma-separated receptor residue numbers + ranges"),
-    ParamSpec("haddock_effector_active_residues", "regex",
-              {"pattern": r"^(\d+(-\d+)?(,\s*\d+(-\d+)?)*)?$"},
-              "active-residues mode: comma-separated effector residue numbers + ranges"),
-    ParamSpec("haddock_pair_distance", "regex",
-              {"pattern": r"^\d+(\.\d+)?,\d+(\.\d+)?,\d+(\.\d+)?$"},
-              "pair distance triple 'target,lo_dev,hi_dev' (defaults to 2,2,4)"),
-    ParamSpec("haddock_chosen_cluster", "custom",
-              {"fn": lambda v: None if (v is None or v == "null") else (
-                  None if (isinstance(v, int) and v >= 1) else
-                  f"expected int >= 1 or null, got {v!r}"
-              )},
-              "manual cluster override; null = auto-pick by (pair_contact_fraction, BSA)"),
-    ParamSpec("stop_after_haddock", "bool", {},
-              "halt after HADDOCK_PLOTS for manual cluster inspection"),
-    ParamSpec("haddock_strip_design_sidechains", "bool", {},
-              "strip receptor design-region sidechains to backbone-only GLY "
-              "before docking (A147 / DR1-rotation experiment)"),
+              "cosmetic-only annotation for the contact heatmap: comma-"
+              "separated residue numbers + ranges"),
+    ParamSpec("stop_after_pose_solve", "bool", {},
+              "halt after POSE_SOLVER_PLOTS for manual inspection"),
 
     # ── Orthogonal cascade ──────────────────────────────────────────
     # Which cross_tier values get the AF3 + biophysical + Rosetta
@@ -370,7 +381,9 @@ PARAM_SPECS: List[ParamSpec] = [
     ParamSpec("max_af3_parallel","int_range", {"min": 1, "max": 100},
               "maxForks cap for AF3_NOMSA_ON_SURVIVORS"),
     ParamSpec("rfdiff_container",  "non_empty_str", {},
-              "Singularity image path for RFDiffusion + HADDOCK + MPNN"),
+              "Singularity image path for RFDiffusion + MPNN + scipy "
+              "(used by RFDIFFUSION, POSE_SOLVE, POSE_SOLVER_PREPARE, "
+              "POSE_SOLVER_PLOTS, BUILD_CONTIGS)"),
     ParamSpec("rosetta_container", "non_empty_str", {},
               "Singularity image path for Rosetta"),
     ParamSpec("boltz2_container",  "non_empty_str", {},
@@ -404,44 +417,42 @@ PARAM_SPECS: List[ParamSpec] = [
 # ── Validation engine ────────────────────────────────────────────────
 
 
-def _branch_a_restraints_present(params: dict) -> Optional[str]:
-    """Cross-param rule (Session 7 A137, post-commit-3 amendment): when
-    Branch A is active (params.receptor_input set), the user MUST supply
-    at least ONE HADDOCK restraint — contact pairs, receptor active
-    residues, or effector active residues.  Returns an error message
-    if violated, else None.
+def _branch_a_pose_solver_pairs_present(params: dict) -> Optional[str]:
+    """Cross-param rule: when Branch A is active (params.receptor_input
+    set), the user MUST supply at least one pose_solver_pairs token.
+    The pose solver is constraint-driven; blind docking is not
+    supported.  Returns an error message if violated, else None.
     """
     if not params.get("receptor_input"):
-        return None  # Not Branch A; no HADDOCK at all.
-    contact_pairs = (params.get("haddock_contact_pairs") or "").strip()
-    receptor_active = (params.get("haddock_receptor_active_residues") or "").strip()
-    effector_active = (params.get("haddock_effector_active_residues") or "").strip()
-    if not contact_pairs and not receptor_active and not effector_active:
+        return None  # Not Branch A; pose solver is skipped.
+    pairs = (params.get("pose_solver_pairs") or "").strip()
+    if not pairs:
         return (
-            "Branch A (params.receptor_input set) requires at least one HADDOCK "
-            "restraint — contact pairs, receptor active residues, or effector "
-            "active residues.  Blind docking is not supported by this pipeline; "
-            "see notes/design_audit.md A135 for the manual workflow.  Common cases:\n"
-            "    haddock_contact_pairs: \"A25-C42 A13-C94\"             # hard pin\n"
-            "    haddock_receptor_active_residues: \"25,35,40-44\"     # soft AIR\n"
-            "    haddock_effector_active_residues: \"20-26\"           # 'I want\n"
-            "                                                          # this target\n"
-            "                                                          # face involved'"
+            "Branch A (params.receptor_input set) requires "
+            "params.pose_solver_pairs to contain at least one "
+            "CA-CA pair restraint.  Example:\n"
+            "    pose_solver_pairs: \"A73-B31 A71-B33 A8-B22\"\n"
+            "Use 2-4 pairs covering the intended interface.  See "
+            "notes/pipeline_notes/pipeline_notes16.md for guidance on "
+            "choosing pair residues and distance bounds."
         )
     return None
 
 
-def _chosen_cluster_branch_a_only(params: dict) -> Optional[str]:
-    """params.haddock_chosen_cluster only makes sense in Branch A."""
-    chosen = params.get("haddock_chosen_cluster")
-    if chosen is None or chosen == "null":
+def _pose_solver_pair_distance_bounds_ordered(params: dict) -> Optional[str]:
+    """params.pose_solver_min_pair_distance must be < ...max_pair_distance."""
+    lo = params.get("pose_solver_min_pair_distance")
+    hi = params.get("pose_solver_max_pair_distance")
+    if lo is None or hi is None:
         return None
-    if not params.get("receptor_input"):
-        return (
-            "params.haddock_chosen_cluster only applies in Branch A "
-            "(when receptor_input is set); mode 2 (pre-docked complex) "
-            "already takes a fixed complex."
-        )
+    try:
+        if float(lo) >= float(hi):
+            return (
+                f"params.pose_solver_min_pair_distance ({lo}) must be strictly "
+                f"less than params.pose_solver_max_pair_distance ({hi})."
+            )
+    except (TypeError, ValueError):
+        return None  # type errors are caught by the per-param spec
     return None
 
 
@@ -461,7 +472,8 @@ def validate_params(params: dict) -> List[str]:
             errors.append(f"  - params.{spec.name}: {err}")
 
     # Cross-param rules — only meaningful once per-param shapes are valid.
-    for rule in (_branch_a_restraints_present, _chosen_cluster_branch_a_only):
+    for rule in (_branch_a_pose_solver_pairs_present,
+                 _pose_solver_pair_distance_bounds_ordered):
         msg = rule(params)
         if msg is not None:
             errors.append(f"  - {msg}")

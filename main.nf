@@ -2,18 +2,21 @@
 
 /*
  * =============================================================================
- * Receptor Resurfacing Pipeline (v0.3.0)
+ * Receptor Resurfacing Pipeline (v0.4.0)
  * =============================================================================
  *
- * [HADDOCK3 Docking] → RFDiffusion →
+ * [Pose Solver] → RFDiffusion →
  *   Rosetta Physics Filter → ProteinMPNN → Boltz2
  *
  * Inputs are PDB only:
- *   - Two separate PDBs (receptor + effector): docked with HADDOCK3
- *   - One pre-docked complex PDB: skips HADDOCK and proceeds directly
+ *   - Two separate PDBs (receptor + effector): docked by the constraint-
+ *     driven pose solver (modules/pose_solver.nf) using user-supplied
+ *     CA-CA pair restraints.
+ *   - One pre-docked complex PDB: skips the pose solver and proceeds
+ *     directly to RFDiffusion.
  *
- * Sequences, effector length, and hotspots are derived automatically where
- * possible, minimising manual parameter entry.
+ * Sequences and effector length are derived automatically where possible,
+ * minimising manual parameter entry.
  *
  * Author: Josh Williams
  * Institute: John Innes Centre / The Sainsbury Laboratory
@@ -51,7 +54,8 @@ if (!new File(params.outdir.toString()).isAbsolute()) {
 // OR separate receptor/effector files (each can be .pdb or .fasta).
 // Both inputs must be PDB.  Provide either a single pre-docked complex
 // (params.pdb_file) or two separate PDBs (params.receptor_input +
-// params.effector_input), in which case HADDOCK3 will dock them.
+// params.effector_input), in which case the constraint-driven pose
+// solver (modules/pose_solver.nf) will dock them.
 
 params.pdb_file           = null   // Pre-docked complex PDB
 params.receptor_input     = null   // Receptor PDB
@@ -77,7 +81,7 @@ params.effector_seq       = null
 
 // ── RFDiffusion ─────────────────────────────────────────────────────────
 params.contigs            = null   // RFDiffusion contig string
-params.hotspot            = ""     // Auto-derived from HADDOCK if blank
+params.hotspot            = ""     // User-supplied only; not auto-derived
 params.num_designs        = 10
 params.rfdiff_iterations  = 50
 params.rfdiff_checkpoint  = "Complex_beta_ckpt.pt" // Filename inside /opt/RFdiffusion/models/
@@ -242,26 +246,47 @@ params.max_poly_x         = 5
 params.min_pct_identity   = 0.0
 params.max_pct_identity   = 100.0
 
-// ── HADDOCK3 ────────────────────────────────────────────────────────────
-params.haddock_sampling   = 10000  // Rigid-body sampling (10000=semi-blind)
-params.haddock_seletop    = 400    // Top N rigid-body models passed to flexref
-params.rfdiff_contact_cutoff = 8.0 // Cα–Cα cutoff (Å) for rfdiffusion_filter contact
-                                   // detection on RFDiffusion-designed complexes.
-// HADDOCK restraints (per Session 7 grill-me, notes/design_audit.md Q137).
-// At least one of haddock_contact_pairs or haddock_receptor_active_residues
-// must be non-empty in Branch A; validate_params.py enforces this.
-params.haddock_contact_pairs            = ""    // Hard CA-CA pin pairs, e.g. "A25-C42 A13-C94"
-params.haddock_receptor_active_residues = ""    // Soft AIR receptor side, e.g. "25,35,40-44"
-params.haddock_effector_active_residues = ""    // Soft AIR effector side; empty = entire chain
-params.haddock_pair_distance            = "2,2,4"  // Global pair distance "target,lo_dev,hi_dev"
-params.haddock_chosen_cluster           = null  // Set to a cluster_id to override auto-pick
-params.stop_after_haddock               = false // Halt after HADDOCK_PLOTS for manual inspection
-// Strip design-region sidechains from the receptor before docking
-// (per A147).  Replaces residues in the contig-derived design region
-// with backbone-only GLY in receptor_haddock.pdb.  HADDOCK-only — RFD
-// replaces those residues entirely, so the GLY substitution doesn't
-// reach the designed sequences.  Off by default; opt in per campaign.
-params.haddock_strip_design_sidechains  = false
+// ── Pose Solver (Branch A docking) ──────────────────────────────────────
+// Constraint-driven rigid-body docking driven by user-supplied CA-CA
+// pair restraints.  Deterministic (one pose, no clusters), CA-only,
+// runs in minutes.  See notes/pipeline_notes/pipeline_notes16.md for
+// the geometric rationale behind these defaults.
+params.rfdiff_contact_cutoff       = 8.0   // Cα–Cα cutoff (Å) for rfdiffusion_filter contact
+                                            // detection on RFDiffusion-designed complexes.
+// REQUIRED in Branch A.  Hard-pin CA-CA pairs the solver must satisfy.
+// Format: "RECCHAIN+RES-EFFCHAIN+RES ..." with optional @DIST suffix to
+// override the per-pair max distance, e.g.
+//   pose_solver_pairs: "A73-B31 A71-B33 A8-B22"
+//   pose_solver_pairs: "A73-B48@4.5 A71-B50 A8-B39"
+// 2-4 pairs is the sweet spot; validator enforces non-empty in Branch A.
+params.pose_solver_pairs               = ""
+// Optional repulsive exclusions — pairs that must stay APART by at least
+// DIST Å.  Same format as pairs but with @DIST mandatory.
+params.pose_solver_exclusions          = ""
+// Pair distance window (Å).  notes16: natural CA-CA at real interfaces
+// clusters at 4.5-7 Å, so 6.0 is the right max; tighter (4.0) over-packs.
+params.pose_solver_min_pair_distance   = 3.5
+params.pose_solver_max_pair_distance   = 6.0
+// Heavy-atom clash penalty between paired residue sidechains.  Set 0
+// to disable.  Pair-only; a global heavy-atom clash term is deferred.
+params.pose_solver_pair_sc_clash_cutoff = 2.0
+// Heavy-atom distance counted as a "clash" in the post-hoc report.
+params.pose_solver_clash_cutoff        = 2.0
+// CA-CA cutoff for the contact heatmap.
+params.pose_solver_contact_cutoff      = 8.0
+// Solver knobs.  1000 restarts converges on a typical 80-res HMA in
+// <5 min; raise to 3000+ for very irregular surfaces.
+params.pose_solver_n_restarts          = 1000
+params.pose_solver_use_de              = false   // differential-evolution
+                                                  // instead of random restarts
+params.pose_solver_global_interp       = true    // penalise ALL CA atoms
+                                                  // inside opposite hull
+params.pose_solver_interp_weight       = 10.0
+// Optional cosmetic-only annotation for the contact heatmap.
+params.pose_solver_contig_design_region = ""
+// Halt after POSE_SOLVER_PLOTS for manual inspection.  Resume with
+// --resume after toggling back to false.
+params.stop_after_pose_solve            = false
 
 // ── Infrastructure ──────────────────────────────────────────────────────
 // All container paths (rfdiff_container, rosetta_container, boltz2_container,
@@ -300,13 +325,11 @@ include { WRITE_DUMMY_MAPPING                  } from './modules/preprocessing'
 include { WRITE_DUMMY_MAPPING as WRITE_DUMMY_MAPPING_REC } from './modules/preprocessing'
 include { WRITE_DUMMY_MAPPING as WRITE_DUMMY_MAPPING_EFF } from './modules/preprocessing'
 
-include { HADDOCK3_PREPARE                     } from './modules/haddock'
-include { HADDOCK3_DOCK                        } from './modules/haddock'
-include { HADDOCK3_PLOTS                       } from './modules/haddock'
-include { HADDOCK_CLUSTER_METRICS              } from './modules/haddock'
-include { HADDOCK_CLUSTER_SC                   } from './modules/haddock'
-include { SELECT_HADDOCK_CLUSTER               } from './modules/haddock'
-include { BUILD_CONTIGS                        } from './modules/haddock'
+include { POSE_SOLVER_PREPARE                  } from './modules/pose_solver'
+include { POSE_SOLVE                           } from './modules/pose_solver'
+include { POSE_INTERFACE_METRICS               } from './modules/pose_solver'
+include { POSE_SOLVER_PLOTS                    } from './modules/pose_solver'
+include { BUILD_CONTIGS                        } from './modules/pose_solver'
 
 include { RFDIFFUSION                          } from './modules/rfdiffusion'
 include { RFDIFFUSION_FILTER                   } from './modules/rfdiffusion'
@@ -371,133 +394,97 @@ workflow {
     log.info(_stderr.trim())
 
     // =====================================================================
-    // BRANCH A: Separate receptor + effector PDBs → HADDOCK3 docking
+    // BRANCH A: Separate receptor + effector PDBs → Pose Solver docking
     // =====================================================================
     if (params.receptor_input) {
 
         rec_file = Channel.fromPath(params.receptor_input, checkIfExists: true)
         eff_file = Channel.fromPath(params.effector_input, checkIfExists: true)
 
-        // ── Receptor: PDB used directly, dummy mapping for BUILD_CONTIGS ──
-        receptor_pdb_ch = rec_file
-        // Write an empty dummy mapping (exactly 2 bytes: "{}") so
-        // BUILD_CONTIGS gets a real file.  load_mapping() in build_contigs.py
+        // Empty dummy trim mappings (exactly 2 bytes: "{}") for the
+        // BUILD_CONTIGS API surface.  load_mapping() in build_contigs.py
         // treats files of <=2 bytes as "no mapping" and returns None.
         WRITE_DUMMY_MAPPING_REC(Channel.value("receptor"))
-        rec_trim_mapping_ch = WRITE_DUMMY_MAPPING_REC.out.mapping
-
-        // ── Effector: PDB used directly, dummy mapping for BUILD_CONTIGS ──
-        effector_pdb_ch = eff_file
         WRITE_DUMMY_MAPPING_EFF(Channel.value("effector"))
+        rec_trim_mapping_ch = WRITE_DUMMY_MAPPING_REC.out.mapping
         eff_trim_mapping_ch = WRITE_DUMMY_MAPPING_EFF.out.mapping
 
-        // ── HADDOCK3 docking ────────────────────────────────────────────
-        // Per Session 7 (notes/design_audit.md A131): the contig string
-        // is NOT a HADDOCK restraint source.  Restraints come from the
-        // user's contact_pairs + receptor/effector active residue params.
-        HADDOCK3_PREPARE(
-            receptor_pdb_ch,
-            effector_pdb_ch,
+        // ── Normalise input chain IDs ───────────────────────────────────
+        // Rewrite the receptor PDB to chain params.receptor_chain and
+        // the effector PDB to chain params.effector_chain so the
+        // user-declared chain IDs are present in every downstream PDB.
+        // See notes/pipeline_notes/pipeline_notes16.md for the chain
+        // convention rationale.
+        POSE_SOLVER_PREPARE(
+            rec_file,
+            eff_file,
             params.receptor_chain,
             params.effector_chain,
-            params.haddock_contact_pairs,
-            params.haddock_receptor_active_residues,
-            params.haddock_effector_active_residues,
-            params.haddock_pair_distance,
-            params.contigs,
-            params.haddock_strip_design_sidechains,
-            Channel.value(file("${projectDir}/bin/haddock3_prepare.py"))
+            Channel.value(file("${projectDir}/bin/pose_solver_prepare.py"))
         )
 
-        HADDOCK3_DOCK(
-            HADDOCK3_PREPARE.out.receptor_pdb_out,
-            HADDOCK3_PREPARE.out.effector_pdb_out,
-            HADDOCK3_PREPARE.out.ambig_restraints,
-            HADDOCK3_PREPARE.out.unambig_restraints,
-            params.haddock_sampling,
-            params.haddock_seletop,
-            Channel.value(file("${projectDir}/bin/collect_haddock3_dock.py"))
+        // ── Constraint-driven docking ───────────────────────────────────
+        // The validator enforces non-empty pose_solver_pairs in Branch A
+        // (see bin/validate_params.py:_branch_a_pose_solver_pairs_present).
+        POSE_SOLVE(
+            POSE_SOLVER_PREPARE.out.receptor_pdb_out,
+            POSE_SOLVER_PREPARE.out.effector_pdb_out,
+            params.receptor_chain,
+            params.effector_chain,
+            params.pose_solver_pairs,
+            params.pose_solver_exclusions,
+            params.pose_solver_min_pair_distance,
+            params.pose_solver_max_pair_distance,
+            params.pose_solver_pair_sc_clash_cutoff,
+            params.pose_solver_clash_cutoff,
+            params.pose_solver_contact_cutoff,
+            params.pose_solver_n_restarts,
+            params.pose_solver_use_de,
+            params.pose_solver_global_interp,
+            params.pose_solver_interp_weight,
+            params.pose_solver_contig_design_region,
+            Channel.value(file("${projectDir}/bin/pose_solver.py"))
         )
 
-        // ── Per-cluster metrics (BSA, COM, AIR/pair satisfaction,
-        //    clash counts) — runs in boltz2_container.
-        HADDOCK_CLUSTER_METRICS(
-            HADDOCK3_DOCK.out.haddock_report,
-            HADDOCK3_DOCK.out.cluster_models,
-            HADDOCK3_PREPARE.out.restraints_summary,
-            HADDOCK3_PREPARE.out.ambig_restraints,
-            HADDOCK3_PREPARE.out.unambig_restraints,
-            Channel.value(file("${projectDir}/bin/haddock_cluster_metrics.py")),
-            Channel.value(file("${projectDir}/bin"))
+        // ── Interface metrics on the solved pose (BSA, gap-index,
+        //    clashes, H-bonds).  Runs in boltz2_container (biopython).
+        POSE_INTERFACE_METRICS(
+            POSE_SOLVE.out.posed_pdb,
+            params.receptor_chain,
+            params.effector_chain,
+            Channel.value(file("${projectDir}/bin/pose_interface_metrics.py"))
         )
 
-        // ── Per-cluster Sc (shape complementarity) — runs in
-        //    rosetta_container; merged onto HaddockCluster downstream.
-        HADDOCK_CLUSTER_SC(
-            HADDOCK3_DOCK.out.haddock_report,
-            HADDOCK3_DOCK.out.cluster_models,
-            Channel.value(file("${projectDir}/bin/haddock_cluster_sc.py")),
-            Channel.value(file("${projectDir}/bin"))
+        // ── Diagnostic plot suite (5 plots) ─────────────────────────────
+        POSE_SOLVER_PLOTS(
+            POSE_SOLVE.out.results_json,
+            POSE_INTERFACE_METRICS.out.metrics_json,
+            POSE_SOLVE.out.restart_losses,
+            POSE_SOLVE.out.posed_pdb,
+            params.receptor_chain,
+            params.effector_chain,
+            Channel.value(file("${projectDir}/bin/pose_solver_plots.py"))
         )
 
-        // HADDOCK3_PLOTS depends on cluster_metrics + cluster_sc for the
-        // overview / ranking / pair-satisfaction / clash-breakdown plots,
-        // so it lives AFTER the metric processes.
-        HADDOCK3_PLOTS(
-            HADDOCK3_DOCK.out.capri_scores,
-            HADDOCK3_DOCK.out.cluster_summary,
-            HADDOCK3_DOCK.out.run_dir,
-            HADDOCK3_PREPARE.out.restraints_summary,
-            HADDOCK_CLUSTER_METRICS.out.cluster_metrics,
-            HADDOCK_CLUSTER_SC.out.cluster_sc,
-            params.haddock_contact_pairs,
-            params.haddock_effector_active_residues,
-            Channel.value(file("${projectDir}/bin/haddock3_plots.py"))
-        )
-
-        // ── Stop-and-resume gate (per Session 7 A134) ───────────────────
-        // When params.stop_after_haddock is true, halt before SELECT so
-        // the user can inspect plots + per-cluster best_cluster*.pdb files
-        // (already published to ${outdir}/haddock/) and pick a cluster.
-        // To resume after picking: re-run with
-        //     params.haddock_chosen_cluster: N
-        // (Nextflow -resume reuses cached HADDOCK_DOCK + HADDOCK_CLUSTER_METRICS
-        //  outputs; only SELECT and downstream re-execute.)
-        if (params.stop_after_haddock) {
+        // ── Stop-and-resume gate ────────────────────────────────────────
+        // When params.stop_after_pose_solve is true, halt before
+        // BUILD_CONTIGS so the user can open solved_pose_posed.pdb in
+        // ChimeraX, inspect the plots, and decide whether to commit
+        // GPU time to RFDiffusion.  Resume with --resume after
+        // toggling stop_after_pose_solve back to false.
+        if (params.stop_after_pose_solve) {
             log.warn(
-                "stop_after_haddock=true → pipeline will halt after HADDOCK_PLOTS.\n" +
-                "  Inspect ${params.outdir}/haddock/best_cluster*.pdb and\n" +
-                "  ${params.outdir}/haddock/cluster_metrics.json, then resume with\n" +
-                "  params.haddock_chosen_cluster: <id> in your params file and\n" +
-                "  re-run with --resume.\n" +
-                "  (Cleared by setting stop_after_haddock=false on resume.)"
+                "stop_after_pose_solve=true → pipeline will halt after POSE_SOLVER_PLOTS.\n" +
+                "  Inspect ${params.outdir}/pose_solver/solved_pose_posed.pdb and\n" +
+                "  ${params.outdir}/plots/pose_*.png, then resume with\n" +
+                "  stop_after_pose_solve: false in your params file and re-run with --resume."
             )
             return
         }
 
-        // ── Select chosen cluster (auto or user-specified) ───────────────
-        SELECT_HADDOCK_CLUSTER(
-            HADDOCK3_DOCK.out.haddock_report,
-            HADDOCK_CLUSTER_METRICS.out.cluster_metrics,
-            HADDOCK_CLUSTER_SC.out.cluster_sc,
-            HADDOCK3_PREPARE.out.restraints_summary,
-            HADDOCK3_DOCK.out.cluster_models,
-            receptor_pdb_ch,
-            effector_pdb_ch,
-            params.haddock_contact_pairs,
-            params.haddock_receptor_active_residues,
-            params.haddock_effector_active_residues,
-            params.haddock_pair_distance,
-            // Nextflow refuses to bind a `null` value to a `val` input.
-            // Convert null → "null" string sentinel; select_haddock_cluster.py
-            // handles both "null" and "" as auto-pick triggers.
-            (params.haddock_chosen_cluster != null ? "${params.haddock_chosen_cluster}" : "null"),
-            Channel.value(file("${projectDir}/bin/select_haddock_cluster.py"))
-        )
-
         // ── Build updated contigs & extract sequences ───────────────────
         BUILD_CONTIGS(
-            SELECT_HADDOCK_CLUSTER.out.selected_pdb,
+            POSE_SOLVE.out.posed_pdb,
             params.receptor_chain,
             params.effector_chain,
             params.contigs,
@@ -506,18 +493,18 @@ workflow {
             Channel.value(file("${projectDir}/bin/build_contigs.py"))
         )
 
-        // Hotspot for RFDiffusion: user-only.  Auto-derivation from the
-        // docked complex was removed in Session 7 (A143/A145) because the
-        // contact pattern HADDOCK chose is already visible to RFDiffusion
-        // from the input PDB, so feeding it back as a hotspot bias just
-        // reinforces that pattern and reduces design diversity.  Set
-        // params.hotspot only when you have biological knowledge of
-        // target residues you want contacted (e.g. homologous binding sites).
+        // Hotspot for RFDiffusion: user-supplied only.  No auto-derivation
+        // from the docked complex — the contact pattern is already
+        // visible to RFDiffusion from the input PDB, so feeding it back
+        // as a hotspot bias would just reinforce the docked pose and
+        // reduce design diversity.  Set params.hotspot only when you
+        // have biological knowledge of target residues you want
+        // contacted (e.g. homologous binding sites).
         hotspot_ch = Channel.value(params.hotspot ?: "")
 
         // Channels for downstream steps
-        rfdiff_pdb_ch   = BUILD_CONTIGS.out.rfdiffusion_pdb
-        contigs_ch      = BUILD_CONTIGS.out.contigs_txt.map { it.text.trim() }.first()
+        rfdiff_pdb_ch     = BUILD_CONTIGS.out.rfdiffusion_pdb
+        contigs_ch        = BUILD_CONTIGS.out.contigs_txt.map { it.text.trim() }.first()
         updated_params_ch = BUILD_CONTIGS.out.updated_params
 
     }
@@ -530,11 +517,12 @@ workflow {
 
         // Resolve the raw contig string to PDB-resolved coordinates.
         // Branch A does this inside BUILD_CONTIGS (which also handles
-        // HADDOCK-driven coordinate remapping); Branch B has no HADDOCK
-        // step, so we just call contig_utils.resolve_contigs() via the
-        // RESOLVE_CONTIGS process.  Downstream consumers (including
-        // pipeline_correct_sequences.py) can then assume contigs_ch is
-        // always PDB-resolved regardless of which branch produced it.
+        // pose-solver-driven coordinate remapping); Branch B has no
+        // docking step, so we just call contig_utils.resolve_contigs()
+        // via the RESOLVE_CONTIGS process.  Downstream consumers
+        // (including pipeline_correct_sequences.py) can then assume
+        // contigs_ch is always PDB-resolved regardless of which branch
+        // produced it.
         RESOLVE_CONTIGS(
             rfdiff_pdb_ch,
             params.contigs,
@@ -881,7 +869,7 @@ workflow {
         ].findAll { it }.join(" ")
 
         // Derive the input-structure design region + true interface once.
-        // Both branches of the preprocessing workflow (A: HADDOCK-driven;
+        // Both branches of the preprocessing workflow (A: pose-solver-driven;
         // B: pre-complex) produce rfdiff_pdb_ch and contigs_ch by this
         // point in the graph, so DERIVE_INPUT_INDICES is branch-agnostic.
         DERIVE_INPUT_INDICES(

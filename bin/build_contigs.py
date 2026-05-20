@@ -2,7 +2,7 @@
 """
 build_contigs.py
 ----------------
-Update the RFDiffusion contig string after HADDOCK3 docking.
+Update the RFDiffusion contig string after the docking step.
 
 Given the user's original contig string and the docked complex PDB:
   - Detects renumbering + pLDDT trimming offsets
@@ -26,7 +26,7 @@ from contig_utils import THREE_TO_ONE
 
 def parse_args():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--complex", required=True, help="Docked complex PDB from HADDOCK3")
+    parser.add_argument("--complex", required=True, help="Docked complex PDB from the pose solver")
     parser.add_argument("--receptor-chain", default="A", help="Receptor chain ID")
     parser.add_argument("--effector-chain", default="B", help="Effector chain ID")
     parser.add_argument("--contigs", required=True, help="Original user contig string")
