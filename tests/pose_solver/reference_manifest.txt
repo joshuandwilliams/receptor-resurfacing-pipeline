@@ -1,12 +1,9 @@
 # tests/pose_solver/reference_manifest.txt
-# See header in tests/rfdiffusion/reference_manifest.txt for format.
-#
-# The pose-solver per-module test has not yet had a curated example_output_files/
-# fixture generated.  After the first successful test run, refresh with
-#   sbatch tests/update_example_dataset.slurm.sh \
-#         --module pose_solver \
-#         --updated-output-folder tests/pose_solver/receptor_resurfacing_results
-# and add the resulting fixture artefacts to this manifest.
+# Positive include-list for tests/pose_solver/example_output_files/.
+# One glob per line; matched against receptor_resurfacing_results/.
+# Globs use pathlib syntax: * (one segment), ** (recursive), ? (single char).
+# Lines starting with # or blank are ignored.
+# See tests/_update_example_dataset_impl.py for semantics.
 
 # ── Top-level Nextflow run artefacts ──────────────────────────────
 dag.html
@@ -14,19 +11,21 @@ timeline.html
 trace.txt
 pipeline_report.html
 
-# ── Pose solver outputs (placeholder; refine after first run) ────
-# pose_solver/data/receptor_pose.pdb
-# pose_solver/data/effector_pose.pdb
-# pose_solver/solved_pose_posed.pdb
-# pose_solver/solved_pose_results.json
-# pose_solver/solved_pose_heatmap.png
-# pose_solver/solved_pose_restart_losses.csv
-# pose_solver/interface_metrics.json
-# pose_solver/updated_contigs.txt
-# pose_solver/updated_params.json
-# pose_solver/rfdiffusion_input.pdb
-# plots/pose_loss_breakdown.png
-# plots/pose_pair_distances.png
-# plots/pose_interface_dashboard.png
-# plots/pose_restart_loss_curve.png
-# plots/pose_contig_comparison.png
+# ── Pose solver: chain-normalised inputs ──────────────────────────
+pose_solver/data/receptor_pose.pdb
+pose_solver/data/effector_pose.pdb
+
+# ── Pose solver: solved complex + diagnostics ─────────────────────
+pose_solver/solved_pose_posed.pdb
+pose_solver/solved_pose_results.json
+pose_solver/solved_pose_heatmap.png
+pose_solver/solved_pose_restart_losses.csv
+pose_solver/interface_metrics.json
+
+# ── Pose solver: BUILD_CONTIGS outputs (consumed by RFDiffusion) ──
+pose_solver/updated_contigs.txt
+pose_solver/updated_params.json
+pose_solver/rfdiffusion_input.pdb
+
+# ── Plots ─────────────────────────────────────────────────────────
+plots/*.png
