@@ -85,16 +85,19 @@ LOG = logging.getLogger("boltz2_msa_predict")
 # CLI.  Override with the corresponding env var if you ever need to
 # point at a different container without editing the script.
 # ═══════════════════════════════════════════════════════════════════════
+# Containers are referenced via symlinks in the repo's containers/ dir
+# (see containers/README.md).  The symlinks resolve to the real .img under
+# the user's $HOME, which Singularity auto-mounts — so they also resolve
+# from inside the boltz2 container when this script launches colabfold
+# nested.  parents[2] == repo root (experiments/scripts/<this file>).
+_REPO_ROOT = Path(__file__).resolve().parents[2]
 BOLTZ2_CONTAINER = Path(os.environ.get(
     "BOLTZ2_CONTAINER",
-    # nextflow.config line 21
-    "/hpc-home/jowillia/singularity/Boltz1_Boltz2_Chai1_ColabFold/"
-    "boltz2_negsteer.img",
+    str(_REPO_ROOT / "containers" / "boltz2_negsteer.img"),
 ))
 COLABFOLD_CONTAINER = Path(os.environ.get(
     "COLABFOLD_CONTAINER",
-    # nextflow.config line 22
-    "/hpc-home/jowillia/singularity/ColabFold/colabfold.img",
+    str(_REPO_ROOT / "containers" / "colabfold.img"),
 ))
 
 # Boltz invocation defaults — match BOLTZ2_MSA in

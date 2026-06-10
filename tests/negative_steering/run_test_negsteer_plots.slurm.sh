@@ -97,7 +97,7 @@ IPTM_MIN=0.30
 # Same image as production NEGSTEER_PLOTS process.  Plotting depends only
 # on matplotlib + numpy + stdlib (csv / json) — no GPU, no boltz2 / gemmi
 # / MDAnalysis required.
-RFDIFF_CONTAINER="/hpc-home/jowillia/singularity/HADDOCK_RFDiffusion_ProteinMPNN_MMseqs2/HADDOCK_RFDiffusion_ProteinMPNN_MMseqs2.img"
+RFDIFF_CONTAINER="${PIPELINE_DIR}/containers/HADDOCK_RFDiffusion_ProteinMPNN_MMseqs2.img"
 
 # ── Sanity checks ─────────────────────────────────────────────────────────
 if [ ! -f "${TEST_SCRIPT}" ]; then

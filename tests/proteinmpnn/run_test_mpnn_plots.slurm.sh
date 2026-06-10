@@ -53,7 +53,7 @@ TEST_SCRIPT="${TEST_DIR}/test_mpnn_plots.py"
 # Same image as production MPNN_PLOTS process — kept in sync via
 # nextflow.config (params.rfdiff_container; ProteinMPNN ships in the
 # same container as RFDiffusion for this pipeline).
-RFDIFF_CONTAINER="/hpc-home/jowillia/singularity/HADDOCK_RFDiffusion_ProteinMPNN_MMseqs2/HADDOCK_RFDiffusion_ProteinMPNN_MMseqs2.img"
+RFDIFF_CONTAINER="${PIPELINE_DIR}/containers/HADDOCK_RFDiffusion_ProteinMPNN_MMseqs2.img"
 
 # ── Sanity checks ─────────────────────────────────────────────────────────
 if [ ! -f "${TEST_SCRIPT}" ]; then

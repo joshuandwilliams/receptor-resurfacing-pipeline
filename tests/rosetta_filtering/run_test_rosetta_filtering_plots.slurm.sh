@@ -47,7 +47,7 @@ TEST_SCRIPT="${TEST_DIR}/test_rosetta_filtering_plots.py"
 # ── Container ─────────────────────────────────────────────────────────────
 # Same image as production ROSETTA_FILTER_PLOTS process — kept in sync
 # via nextflow.config (params.rosetta_container).
-ROSETTA_CONTAINER="/hpc-home/jowillia/singularity/Rosetta/Rosetta.img"
+ROSETTA_CONTAINER="${PIPELINE_DIR}/containers/Rosetta.img"
 
 # ── Sanity checks ─────────────────────────────────────────────────────────
 if [ ! -f "${TEST_SCRIPT}" ]; then

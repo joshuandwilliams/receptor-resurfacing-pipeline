@@ -77,6 +77,16 @@ jdk-*/
 *.class
 *.jar
 
+# ----- Singularity containers (containers/) -----
+# The .def build recipes and README.md ARE tracked.  The built images —
+# and the machine-local symlinks that point at them on the HPC software
+# node — are NOT: they are large binaries / per-install paths.  To install
+# the pipeline, drop your own .img/.sif (or symlinks to them) into
+# containers/ using the filenames wired up in nextflow.config.
+containers/*.img
+containers/*.sif
+containers/jdk-17.0.2
+
 # ----- Nextflow home (in case it gets recreated locally) -----
 nxf_home/
 

@@ -29,7 +29,7 @@ set -euo pipefail
 
 # ── Paths ─────────────────────────────────────────────────────────────────
 PIPELINE_DIR="/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline"
-NEXTFLOW_IMG="/hpc-home/jowillia/singularity/NextFlow/NextFlow.img"
+NEXTFLOW_IMG="${PIPELINE_DIR}/containers/NextFlow.img"
 
 TEST_DIR="${PIPELINE_DIR}/tests/negative_steering"
 NXF_HOME="${PIPELINE_DIR}/nxf_home"
@@ -37,7 +37,7 @@ NXF_WORK="${TEST_DIR}/work"
 NXF_TEMP="${TEST_DIR}/tmp"
 
 # ── Java ──────────────────────────────────────────────────────────────────
-export JAVA_HOME="/hpc-home/jowillia/singularity/jdk-17.0.2"
+export JAVA_HOME="${PIPELINE_DIR}/containers/jdk-17.0.2"
 export PATH="${JAVA_HOME}/bin:${PATH}"
 
 # ── Nextflow environment ──────────────────────────────────────────────────

@@ -100,8 +100,8 @@ export PYTHONPATH="${REPO_ROOT}${PYTHONPATH:+:${PYTHONPATH}}"
 # numpy / gemmi from the boltz2_negsteer image).  The MSA itself is
 # run via a nested singularity exec by the Python script, against the
 # colabfold container — boltz2_msa_predict.py composes that call from
-# its HPC CONSTANTS block.  Path mirrors nextflow.config line 21.
-BOLTZ2_CONTAINER="/hpc-home/jowillia/singularity/Boltz1_Boltz2_Chai1_ColabFold/boltz2_negsteer.img"
+# its HPC CONSTANTS block.  Symlink mirrors params.boltz2_container.
+BOLTZ2_CONTAINER="${REPO_ROOT}/containers/boltz2_negsteer.img"
 
 PY_SCRIPT="${SCRIPT_DIR}/boltz2_msa_predict.py"
 if [ ! -f "${PY_SCRIPT}" ]; then

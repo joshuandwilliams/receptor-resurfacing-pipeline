@@ -36,18 +36,18 @@ fi
 
 # ── Paths ─────────────────────────────────────────────────────────────────
 PIPELINE_DIR="/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline"
-NEXTFLOW_IMG="/hpc-home/jowillia/singularity/NextFlow/NextFlow.img"
+NEXTFLOW_IMG="${PIPELINE_DIR}/containers/NextFlow.img"
 # Combined container providing HADDOCK3, RFDiffusion, ProteinMPNN and
 # MMseqs2 (variable name kept as RFDIFF_CONTAINER for backwards
 # compatibility with the .nf modules that reference it as
 # params.rfdiff_container).
-RFDIFF_CONTAINER="/hpc-home/jowillia/singularity/HADDOCK_RFDiffusion_ProteinMPNN_MMseqs2/HADDOCK_RFDiffusion_ProteinMPNN_MMseqs2.img"
+RFDIFF_CONTAINER="${PIPELINE_DIR}/containers/HADDOCK_RFDiffusion_ProteinMPNN_MMseqs2.img"
 AF2_DATA_DIR="/nbi/Reference-Data/AlphaFold/db-v2.3.2"
 
 EXPERIMENT_DIR="$(dirname "${PARAMS_FILE}")"
 
 # ── Java ──────────────────────────────────────────────────────────────────
-export JAVA_HOME="/hpc-home/jowillia/singularity/jdk-17.0.2"
+export JAVA_HOME="${PIPELINE_DIR}/containers/jdk-17.0.2"
 export PATH="${JAVA_HOME}/bin:${PATH}"
 
 # ── Nextflow environment ──────────────────────────────────────────────────

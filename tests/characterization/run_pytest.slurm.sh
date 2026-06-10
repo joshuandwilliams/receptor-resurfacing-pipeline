@@ -39,7 +39,7 @@ set -euo pipefail
 
 # ── Paths ─────────────────────────────────────────────────────────────────
 PIPELINE_DIR="/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline"
-PYTEST_IMG="/hpc-home/jowillia/singularity/pytest/pytest_runner.img"
+PYTEST_IMG="${PIPELINE_DIR}/containers/pytest_runner.img"
 
 TEST_DIR="${PIPELINE_DIR}/tests/characterization"
 

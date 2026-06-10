@@ -124,8 +124,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 export PYTHONPATH="${REPO_ROOT}${PYTHONPATH:+:${PYTHONPATH}}"
 
-# Boltz2 container path mirrors nextflow.config line 21.
-BOLTZ2_CONTAINER="/hpc-home/jowillia/singularity/Boltz1_Boltz2_Chai1_ColabFold/boltz2_negsteer.img"
+# Boltz2 container symlink, mirroring params.boltz2_container in nextflow.config.
+BOLTZ2_CONTAINER="${REPO_ROOT}/containers/boltz2_negsteer.img"
 
 PY_SCRIPT="${SCRIPT_DIR}/boltz2_msa_predict.py"
 if [ ! -f "${PY_SCRIPT}" ]; then

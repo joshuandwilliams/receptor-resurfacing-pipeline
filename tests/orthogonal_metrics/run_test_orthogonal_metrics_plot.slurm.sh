@@ -82,7 +82,7 @@ TEST_SCRIPT="${TEST_DIR}/test_orthogonal_metrics_plots.py"
 # ── Container ─────────────────────────────────────────────────────────────
 # Same image as production ORTHOGONAL_METRICS_PLOTS process.  Plotting
 # only depends on matplotlib + numpy + stdlib csv — no GPU needed.
-RFDIFF_CONTAINER="/hpc-home/jowillia/singularity/HADDOCK_RFDiffusion_ProteinMPNN_MMseqs2/HADDOCK_RFDiffusion_ProteinMPNN_MMseqs2.img"
+RFDIFF_CONTAINER="${PIPELINE_DIR}/containers/HADDOCK_RFDiffusion_ProteinMPNN_MMseqs2.img"
 
 # ── Sanity checks ─────────────────────────────────────────────────────────
 if [ ! -f "${TEST_SCRIPT}" ]; then
