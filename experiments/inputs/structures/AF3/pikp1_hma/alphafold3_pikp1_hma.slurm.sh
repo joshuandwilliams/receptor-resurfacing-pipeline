@@ -16,7 +16,7 @@ export TF_FORCE_UNIFIED_MEMORY=true
 export XLA_CLIENT_MEM_FRACTION=3.2
 
 AF3_MODEL_DIR="/hpc-home/jowillia/singularity/AlphaFold3"
-AF3_DATA_DIR="${HOME}/af3_db"
+AF3_DATA_DIR="${HOME}/singularity/AlphaFold3/af3_db"
 JSON_INPUT="data/pikp1_hma_monomer_af3.json"
 OUTPUT_DIR="./alphafold3_pikp1_hma_output"
 

@@ -19,12 +19,16 @@
  *   orthogonal_flags, passes_orthogonal_filters
  *
  * Filter cascade:
- *   - af3_nomsa_best_ra_eff < orthogonal_filter_af3_ra_max → hard drop on fail
+ *   - af3_nomsa_best_ra_eff < orthogonal_filter_af3_ra_max → INFORMATIONAL
+ *     flag only (af3_nomsa_ra_eff_too_high); never gates passes.  An absent
+ *     AF3 prediction (AF3 is skip-on-error, see negsteer_af3_nomsa.nf) emits
+ *     the equally non-gating af3_nomsa_missing flag.
  *   - sc              >= orthogonal_filter_sc_min     → flag on fail
  *   - bsa             >= orthogonal_filter_bsa_min    → flag on fail
  *   - interface_plddt >= orthogonal_filter_plddt_min  → flag on fail
  *
- * passes_orthogonal_filters is 1 only when AF3 passes AND no flags present.
+ * passes_orthogonal_filters is 1 when no NON-AF3 flag is present; AF3
+ * agreement is reported but does not gate.
  * =============================================================================
  */
 

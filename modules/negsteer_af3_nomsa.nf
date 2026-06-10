@@ -6,8 +6,9 @@
  *
  * Three processes:
  *
- *   AF3_SETUP_DB               — idempotently build $HOME/af3_db symlink farm
- *                                (combined v3.0.0 + v2.3.2 BFD/MGnify).
+ *   AF3_SETUP_DB               — idempotently build the
+ *                                $HOME/singularity/AlphaFold3/af3_db symlink
+ *                                farm (combined v3.0.0 + v2.3.2 BFD/MGnify).
  *                                Runs once, feeds all survivor fan-outs.
  *
  *   AF3_NOMSA_ON_SURVIVORS     — per survivor, write an AF3 JSON with:
@@ -48,7 +49,7 @@
  * Same pattern as the standalone af3.nf module: on NBI the databases
  * are split across two reference-data dirs (v3.0.0 and v2.3.2), and
  * AF3 requires a single --db_dir.  This process builds that flat union
- * via symlinks under $HOME/af3_db.
+ * via symlinks under $HOME/singularity/AlphaFold3/af3_db.
  *
  * Emits a sentinel path so downstream processes can depend on it
  * without passing the full directory through the channel.
@@ -59,13 +60,13 @@ process AF3_SETUP_DB {
 
     output:
     path "af3_db_ready.flag", emit: ready_flag
-    val  "${System.getenv('HOME')}/af3_db", emit: db_dir
+    val  "${System.getenv('HOME')}/singularity/AlphaFold3/af3_db", emit: db_dir
 
     script:
     """
     set -euo pipefail
 
-    AF3_DATA_DIR="\${HOME}/af3_db"
+    AF3_DATA_DIR="\${HOME}/singularity/AlphaFold3/af3_db"
     mkdir -p "\${AF3_DATA_DIR}"
 
     # ─── Link v3.0.0 databases ────────────────────────────────────────

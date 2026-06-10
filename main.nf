@@ -234,12 +234,13 @@ params.af3_nomsa_seeds = [42, 123, 456]
 
 // Filter cascade thresholds — first-pass, to be retuned after Task 8
 // AUROC (three-target cohort).  Per todo_list3 P0-31: below-threshold
-// survivors are FLAGGED in orthogonal_flags, not dropped — except
-// af3_nomsa agreement failure, which is a hard drop.
+// survivors are FLAGGED in orthogonal_flags, not dropped.  AF3-no-MSA is
+// INFORMATIONAL — its ra_eff threshold and a missing/failed AF3 prediction
+// (AF3 is skip-on-error) both emit non-gating flags only.
 params.orthogonal_filter_sc_min     = 0.55   // Lawrence-Colman Sc
 params.orthogonal_filter_bsa_min    = 600    // Å² (Overath et al.)
 params.orthogonal_filter_plddt_min  = 0.75   // mean interface pLDDT
-params.orthogonal_filter_af3_ra_max = 5.0    // ra_eff threshold, hard drop
+params.orthogonal_filter_af3_ra_max = 5.0    // ra_eff threshold, informational
 
 // ── Quality control ─────────────────────────────────────────────────────
 params.max_poly_x         = 5
@@ -1085,7 +1086,12 @@ workflow {
     // ── Merge the three streams into the final survivors CSV ──────────
     NEGSTEER_ORTHOGONAL_METRICS(
         extended_csv_ch,
-        AF3_PARSE_OUTPUT.out.summary_csv.collect(),
+        // .ifEmpty([]) so a fully-skipped AF3 stream (errorStrategy
+        // 'ignore' on the AF3 processes) still emits an empty list rather
+        // than nothing — otherwise the merge would stall waiting on AF3.
+        // The merge treats absent AF3 rows as the non-gating
+        // af3_nomsa_missing flag, so survivors are kept regardless.
+        AF3_PARSE_OUTPUT.out.summary_csv.collect().ifEmpty([]),
         NEGSTEER_BIOPHYSICAL_METRICS.out.summary_csv.collect(),
         NEGSTEER_ROSETTA_METRICS.out.summary_csv.collect(),
         Channel.value(file("${projectDir}/bin/merge_orthogonal_metrics.py"))
