@@ -64,7 +64,7 @@ PASS=0; FAIL=0; WARN=0
 ok()   { printf '  [ OK ] %s\n' "$*"; PASS=$((PASS+1)); }
 bad()  { printf '  [FAIL] %s\n' "$*"; FAIL=$((FAIL+1)); }
 warn() { printf '  [WARN] %s\n' "$*"; WARN=$((WARN+1)); }
-hdr()  { printf '\n── %s ─────────────────────────────────────────────\n' "$*"; }
+hdr()  { printf '\n── %s  [+%ss] ──────────────────────────────\n' "$*" "${SECONDS}"; }
 
 # ── Banner ────────────────────────────────────────────────────────────────
 echo "============================================================"
@@ -135,61 +135,64 @@ for entry in "${CONTAINERS[@]}"; do
     fi
 done
 
-hdr "Container images load (singularity exec ... true)"
-if [ "${HAVE_SINGULARITY}" -eq 1 ]; then
-    for entry in "${CONTAINERS[@]}"; do
-        f="${entry%%|*}"; path="${CONTAINERS_DIR}/${f}"
-        [ -e "${path}" ] || { warn "${f}: skipped (not resolvable)"; continue; }
-        if singularity exec "${path}" true 2>/dev/null; then
-            ok "${f}: image runs"
-        else
-            bad "${f}: 'singularity exec true' failed"
-        fi
+# ── Container images: one parallel exec per image ─────────────────────────
+# Cold-starting a multi-GB .img over the networked /hpc-home mount is the
+# slow part, so each image is loaded EXACTLY ONCE (all of its checks folded
+# into a single exec) and all images run CONCURRENTLY — wall-time is the
+# slowest single image, not the sum.  Every exec is wrapped in `timeout` so
+# a hung mount surfaces as a FAIL instead of stalling the whole job.
+# The boltz2 image is run with --nv and doubles as the in-container GPU
+# check (torch.cuda.is_available()).
+hdr "Container images (parallel, one exec each)"
+EXEC_TIMEOUT=420
+if [ "${HAVE_SINGULARITY}" -ne 1 ]; then
+    warn "skipping all in-container checks (no singularity)"
+else
+    CRES="$(mktemp -d)"
+    # spawn <order> <required|optional> <label> <nv:0|1> <image-file> <cmd...>
+    spawn() {
+        local order="$1" sev="$2" label="$3" nv="$4" f="$5"; shift 5
+        local p="${CONTAINERS_DIR}/${f}" nvflag=""
+        [ "${nv}" = "1" ] && nvflag="--nv"
+        (
+            if [ ! -e "${p}" ]; then
+                printf 'WARN|%s|%s\n' "${label}" "image not available"
+            elif detail="$(timeout "${EXEC_TIMEOUT}" singularity exec ${nvflag} "${p}" "$@" 2>/dev/null)"; then
+                printf 'OK|%s|%s\n' "${label}" "${detail}"
+            elif [ $? -eq 124 ]; then
+                printf '%s|%s|%s\n' "$([ "${sev}" = optional ] && echo WARN || echo FAIL)" \
+                    "${label}" "timed out after ${EXEC_TIMEOUT}s"
+            elif [ "${sev}" = optional ]; then
+                printf 'WARN|%s|%s\n' "${label}" "not found"
+            else
+                printf 'FAIL|%s|%s\n' "${label}" "check failed"
+            fi
+        ) > "${CRES}/${order}" &
+    }
+
+    spawn 1 required "NextFlow.img (java + nextflow dist)" 0 NextFlow.img \
+        bash -lc 'v=$(java -version 2>&1 | head -1); test -f /usr/local/bin/nextflow && printf "%s + nextflow dist" "$v"'
+    spawn 2 required "HADDOCK img (torch)" 0 HADDOCK_RFDiffusion_ProteinMPNN_MMseqs2.img \
+        python -c 'import torch; print("torch", torch.__version__)'
+    spawn 3 required "boltz2 img (torch + GPU via --nv)" 1 boltz2_negsteer.img \
+        bash -lc 'command -v boltz >/dev/null || { echo "boltz CLI missing"; exit 1; }; python -c "import torch,sys; ok=torch.cuda.is_available(); print(\"torch\", torch.__version__, \"| cuda\", ok, \"|\", torch.cuda.get_device_name(0) if ok else \"no GPU\"); sys.exit(0 if ok else 1)"'
+    spawn 4 required "pytest img (pytest)" 0 pytest_runner.img \
+        python -c 'import pytest; print("pytest", pytest.__version__)'
+    spawn 5 optional "Rosetta img (rosetta app on PATH)" 0 Rosetta.img \
+        bash -lc 'command -v relax.default.linuxgccrelease || command -v score_jd2.default.linuxgccrelease'
+    spawn 6 optional "colabfold img (colabfold_search/mmseqs)" 0 colabfold.img \
+        bash -lc 'command -v colabfold_search || command -v mmseqs'
+
+    wait
+    for o in 1 2 3 4 5 6; do
+        IFS='|' read -r st label detail < "${CRES}/${o}"
+        case "${st}" in
+            OK)   ok   "${label} — ${detail}" ;;
+            WARN) warn "${label}: ${detail}" ;;
+            *)    bad  "${label}: ${detail}" ;;
+        esac
     done
-else
-    warn "skipping image-load checks (no singularity)"
-fi
-
-# ── Representative tools inside the images ────────────────────────────────
-hdr "Tools inside images"
-img() { echo "${CONTAINERS_DIR}/$1"; }
-incheck() {
-    # incheck <required|optional> <label> <image-file> <cmd...>
-    local sev="$1" label="$2" image; image="$(img "$3")"; shift 3
-    if [ "${HAVE_SINGULARITY}" -ne 1 ] || [ ! -e "${image}" ]; then
-        warn "${label}: skipped (image not available)"; return
-    fi
-    if singularity exec "${image}" "$@" >/dev/null 2>&1; then
-        ok "${label}"
-    elif [ "${sev}" = "optional" ]; then
-        warn "${label}: not found"
-    else
-        bad "${label}"
-    fi
-}
-incheck required "NextFlow.img: java available"          NextFlow.img java -version
-incheck required "NextFlow.img: nextflow dist present"   NextFlow.img test -f /usr/local/bin/nextflow
-incheck required "HADDOCK img: python + torch import"    HADDOCK_RFDiffusion_ProteinMPNN_MMseqs2.img python -c "import torch"
-incheck required "boltz2 img: python + torch import"     boltz2_negsteer.img python -c "import torch"
-incheck required "boltz2 img: boltz CLI present"         boltz2_negsteer.img bash -lc "command -v boltz"
-incheck required "pytest img: pytest import"             pytest_runner.img python -c "import pytest"
-incheck optional "Rosetta img: a rosetta app on PATH"    Rosetta.img bash -lc "command -v relax.default.linuxgccrelease || command -v score_jd2.default.linuxgccrelease"
-incheck optional "colabfold img: colabfold_search"       colabfold.img bash -lc "command -v colabfold_search || command -v mmseqs"
-
-# ── GPU passthrough INTO a container (the headline check) ─────────────────
-hdr "GPU inside a container (--nv)"
-BOLTZ_IMG="$(img boltz2_negsteer.img)"
-if [ "${HAVE_SINGULARITY}" -eq 1 ] && [ -e "${BOLTZ_IMG}" ]; then
-    if singularity exec --nv "${BOLTZ_IMG}" \
-         python -c "import torch,sys; sys.exit(0 if torch.cuda.is_available() else 1)" 2>/dev/null; then
-        dev="$(singularity exec --nv "${BOLTZ_IMG}" \
-                 python -c "import torch; print(torch.cuda.get_device_name(0))" 2>/dev/null)"
-        ok "torch.cuda.is_available() == True inside boltz2 image (${dev})"
-    else
-        bad "torch.cuda.is_available() == False inside boltz2 image (GPU not passed through)"
-    fi
-else
-    warn "skipping in-container GPU check (boltz2 image unavailable)"
+    rm -rf "${CRES}"
 fi
 
 # ── OpenJDK symlink (JAVA_HOME for Nextflow) ──────────────────────────────
@@ -212,7 +215,9 @@ hdr "Reference data + AlphaFold3 (advisory)"
 for d in "${AF2_DATA_DIR}" "${AF3_DB_V3}" "${AF3_MODEL_DIR}"; do
     if [ -d "${d}" ]; then ok "present: ${d}"; else warn "missing: ${d}"; fi
 done
-if source package "${AF3_PACKAGE_ID}" >/dev/null 2>&1 && command -v run_alphafold >/dev/null 2>&1; then
+# `source package` is a shell builtin so it can't be `timeout`-wrapped
+# directly — run it inside a time-bounded login subshell instead.
+if timeout 120 bash -lc "source package ${AF3_PACKAGE_ID} >/dev/null 2>&1 && command -v run_alphafold >/dev/null 2>&1"; then
     ok "AF3 native package loads (run_alphafold on PATH)"
 else
     warn "AF3 native package '${AF3_PACKAGE_ID}' not loadable here (only needed for AF3 orthogonal validation)"
