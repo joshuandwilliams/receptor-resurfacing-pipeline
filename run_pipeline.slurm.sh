@@ -15,12 +15,12 @@ set -euo pipefail
 
 # ── Usage check ───────────────────────────────────────────────────────────
 if [ "$#" -lt 1 ]; then
-    echo "Usage: sbatch run_pipeline_slurm.sh <path/to/params.yml> [extra nextflow args]"
+    echo "Usage: sbatch run_pipeline.slurm.sh <path/to/params.yml> [extra nextflow args]"
     echo ""
     echo "Params file can specify either:"
-    echo "  pdb_file:          Pre-docked complex PDB (skips HADDOCK)"
-    echo "  receptor_input:    Receptor PDB (+ effector_input PDB → HADDOCK3 docks them)"
-    echo "  effector_input:    Effector PDB"
+    echo "  pdb_file:          Pre-docked complex PDB (skips the pose solver)"
+    echo "  receptor_input:    Receptor monomer PDB (+ effector_input → pose solver docks them)"
+    echo "  effector_input:    Effector monomer PDB (Branch A also requires pose_solver_pairs)"
     echo ""
     echo "Both inputs must be PDB files."
     exit 1
@@ -37,10 +37,11 @@ fi
 # ── Paths ─────────────────────────────────────────────────────────────────
 PIPELINE_DIR="/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline"
 NEXTFLOW_IMG="${PIPELINE_DIR}/containers/NextFlow.img"
-# Combined container providing HADDOCK3, RFDiffusion, ProteinMPNN and
-# MMseqs2 (variable name kept as RFDIFF_CONTAINER for backwards
-# compatibility with the .nf modules that reference it as
-# params.rfdiff_container).
+# Combined container providing RFDiffusion, ProteinMPNN and MMseqs2.
+# Its filename/recipe still bundle HADDOCK3, but the haddock3 CLI is
+# unused — Branch A docking is now the pose solver (modules/pose_solver.nf).
+# Variable name kept as RFDIFF_CONTAINER for backwards compatibility with
+# the .nf modules that reference it as params.rfdiff_container.
 RFDIFF_CONTAINER="${PIPELINE_DIR}/containers/HADDOCK_RFDiffusion_ProteinMPNN_MMseqs2.img"
 AF2_DATA_DIR="/nbi/Reference-Data/AlphaFold/db-v2.3.2"
 
@@ -76,7 +77,7 @@ fi
 
 # ── Launch ────────────────────────────────────────────────────────────────
 echo "============================================================"
-echo "Receptor Resurfacing Pipeline v0.2.0 — Nextflow Launcher"
+echo "Receptor Resurfacing Pipeline v0.4.0 — Nextflow Launcher"
 echo "============================================================"
 echo "Params file:     ${PARAMS_FILE}"
 echo "Experiment dir:  ${EXPERIMENT_DIR}"

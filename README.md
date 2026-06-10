@@ -9,42 +9,49 @@ quality metrics from multiple orthogonal validators.
 
 This codebase is undergoing structured remediation following
 [`notes/codebase_remediation_plan.md`](notes/codebase_remediation_plan.md).
-Active work happens on the `remediation` branch; `main` is the pristine
-baseline. The single source of truth for *where the work currently
-stands* is [`notes/remediation_state.md`](notes/remediation_state.md) —
-read that at the start of every session.
+Active work happens on the `phase4-impl` branch; `main` is the
+safe-fallback baseline (Phase 4 spec, no implementation code). Start
+every session by reading
+[`notes/SESSION_HANDOFF.md`](notes/SESSION_HANDOFF.md) for orientation;
+[`notes/remediation_state.md`](notes/remediation_state.md) is the
+authoritative session log and branch state.
 
 ## What the pipeline does
 
-The input is a complex PDB containing a receptor (the protein to
-redesign) and an effector (the target it must bind). Branch B takes a
-pre-docked complex directly; Branch A docks a receptor + effector pair
-with HADDOCK3 first.
+The input is PDB only. Branch B takes a single pre-docked complex PDB
+(receptor + effector already positioned). Branch A takes two separate
+monomer PDBs and docks them with the constraint-driven pose solver
+before redesign.
 
-### Branch A — HADDOCK input contract
+### Branch A — pose solver input contract
 
 When you supply `params.receptor_input` + `params.effector_input`,
 each must be a **monomer PDB** (not a pre-aligned complex split into
-chains).  HADDOCK regenerates the complex using your restraint
-parameters.  Internally the HADDOCK stage relabels your input chains
-to `A` (receptor) and `B` (effector) regardless of what chain letters
-your input PDBs use; downstream stages assume the A/B convention.
-You still set `params.receptor_chain` / `params.effector_chain` to
-the letters in *your* input PDBs so HADDOCK_PREPARE can find the
-right atoms to relabel.
+chains). The constraint-driven pose solver
+([`modules/pose_solver.nf`](modules/pose_solver.nf)) places the two
+monomers into a compact, clash-free arrangement that satisfies
+user-supplied CA–CA pair restraints, giving RFDiffusion a good
+starting point. Its job is **geometric placement** only — energetics
+are redesigned downstream, so the pose needs to be geometrically
+sensible, not energetically optimal.
 
-HADDOCK's job in this pipeline is **geometric placement** — placing
-the two monomers in a compact, clash-free arrangement that gives
-RFDiffusion a good starting point.  Energetics are redesigned
-downstream, so cluster ranking is driven by pair contact fraction
-(highest first) with BSA as the tiebreaker, not the original HADDOCK
-score.  See `params_example.yml` and `notes/design_audit.md` Session 7
-for the full restraint vocabulary (contact-pair mode vs
-active-residues mode) and the optional manual-pick checkpoint
-(`params.stop_after_haddock` → inspect → resume with
-`params.haddock_chosen_cluster: N`).
+Branch A **requires** `params.pose_solver_pairs`: one or more
+hard-pinned CA–CA contacts, written as space-separated,
+chain-prefixed residue pairs — e.g. `"A73-B31 A71-B33 A8-B22"`, with
+an optional `@distance` target per pair (e.g. `"A73-B48@4.5"`). `A`
+is the receptor, `B` the effector. See the "Pose Solver" block in
+[`params_example.yml`](params_example.yml) for the rest of the knobs
+(exclusions, min/max pair distance, clash and contact cutoffs,
+restart count, the differential-evolution toggle, and interpolation
+weight).
 
-From the complex, RFDiffusion generates candidate receptor backbones
+An optional manual-pick checkpoint lets you inspect the solved pose
+before the expensive design stages: run with
+`params.stop_after_pose_solve: true`, open
+`${outdir}/pose_solver/solved_pose_posed.pdb` in ChimeraX, then resume
+with `stop_after_pose_solve: false` (`-resume` reuses the solved pose).
+
+From this complex, RFDiffusion generates candidate receptor backbones
 around the fixed effector pose, Rosetta filters them by interface
 shape complementarity, and ProteinMPNN designs amino-acid sequences for
 the survivors. Each designed sequence is then validated through a
@@ -70,9 +77,9 @@ bin/         Pipeline scripts (Python, called from Nextflow processes)
 modules/     Nextflow modules — one per pipeline stage
 tests/       Per-module tests, characterization tests, reference data,
              and the curated fixtures each per-module test runs against
-containers/  Singularity definition files for HPC execution
+containers/  Singularity .def recipes; image + JDK symlinks (git-ignored) go here
 notes/       Inventory documents, remediation plan, decisions, glossaries
-scripts/     Repo tooling (sync_to_hpc.sh, etc.)
+scripts/     Repo tooling (sync_to_hpc.sh, check_environment.slurm.sh, …)
 main.nf      Top-level workflow
 nextflow.config   Container paths and per-process SLURM resources
 params_example.yml   Annotated parameter starter
