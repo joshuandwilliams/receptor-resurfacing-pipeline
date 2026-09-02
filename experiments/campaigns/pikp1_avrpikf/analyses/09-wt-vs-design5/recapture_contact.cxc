@@ -1,0 +1,16 @@
+# Re-render the contact panel from the hand-positioned session after editing
+# fix_sidechains.cxc.
+#
+#     ChimeraX recapture_contact.cxc      (GUI: no OpenGL under --nogui on macOS)
+#
+# NO camera changes and NOTHING hidden. The panel is the same view as the
+# overview panels, at the same camera, and the close-up is made afterwards by
+# cropping the saved PNG in crop_contact.py. Earlier versions re-aimed the
+# camera and hid the distant cartoon, which left white space behind the contact
+# and cut the complex off.
+
+close session
+open d26_s1_contact.cxs
+open fix_sidechains.cxc
+save renders/panel_d_contact_full.png width 4800 supersample 3 transparentBackground true
+exit

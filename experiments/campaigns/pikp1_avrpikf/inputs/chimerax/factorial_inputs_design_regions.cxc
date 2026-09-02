@@ -1,0 +1,53 @@
+# PikF factorial inputs × 3 contigs, with design regions highlighted.
+# 6 models = 2 input poses (crystal / posed v2) × 3 contigs (full / auto-5A / auto-3A).
+# Aligned on chain B (effector / PikF) so receptors fan out around the shared target.
+#
+# Per-design region residue numbers from notes16 §8.2.
+
+cd /Users/jowillia/Documents/GitHub/receptor-resurfacing-pipeline/experiments/campaigns/pikp1_avrpikf/inputs
+
+# Models 1-3 = CRYSTAL input (pikp1_avrpikf_pik_interface_complex.pdb)
+open pikp1_avrpikf_pik_interface_complex.pdb
+open pikp1_avrpikf_pik_interface_complex.pdb
+open pikp1_avrpikf_pik_interface_complex.pdb
+
+# Models 4-6 = POSED v2 input (pikp1_avrpikf_pose_solved_v2.pdb)
+open pikp1_avrpikf_pose_solved_v2.pdb
+open pikp1_avrpikf_pose_solved_v2.pdb
+open pikp1_avrpikf_pose_solved_v2.pdb
+
+rename #1 crystal_full
+rename #2 crystal_auto5A
+rename #3 crystal_auto3A
+rename #4 posed_full
+rename #5 posed_auto5A
+rename #6 posed_auto3A
+
+# Base colours: receptor cornflower blue, effector light green
+color /A cornflower blue
+color /B light green
+
+# Design regions (red).  Per notes16 §8.2.
+# FULL contig is hand-tuned, identical on both inputs:  A33-45, A73-78
+color #1/A:33-45,73-78 red
+color #4/A:33-45,73-78 red
+
+# CRYSTAL auto-5A:  A3-5, A32-39, A43-49, A68-78
+color #2/A:3-5,32-39,43-49,68-78 red
+
+# CRYSTAL auto-3A:  A3, A32-33, A39, A43, A68-70, A74-78
+color #3/A:3,32-33,39,43,68-70,74-78 red
+
+# POSED auto-5A:  A3-5, A32-40, A43-47, A69-78
+color #5/A:3-5,32-40,43-47,69-78 red
+
+# POSED auto-3A:  A3, A33-36, A39, A43, A71, A74-78
+color #6/A:3,33-36,39,43,71,74-78 red
+
+# Align on the effector (chain B) so the targets stack and receptors fan out
+matchmaker #2-6/B to #1/B pairing ss
+
+view
+
+# Save full session for re-opening
+save /Users/jowillia/Documents/GitHub/receptor-resurfacing-pipeline/experiments/campaigns/pikp1_avrpikf/inputs/chimerax/factorial_inputs_design_regions.cxs

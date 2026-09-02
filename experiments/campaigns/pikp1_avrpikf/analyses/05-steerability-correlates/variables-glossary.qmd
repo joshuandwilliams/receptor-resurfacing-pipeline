@@ -1,0 +1,818 @@
+---
+title: "Variable glossary — correlates of success analyses"
+subtitle: "crystal_full_test_contig (n=128, 38 hits)"
+date: "2026-05-21"
+format:
+    html:
+        code-fold: true
+        toc: true
+        toc-depth: 3
+        number-sections: true
+        theme: flatly
+        self-contained: true
+jupyter: receptor-analysis
+---
+
+## Purpose
+
+This document defines every variable available for the correlates-of-success
+analyses on the `crystal_full_test_contig` run. For each variable it records:
+where it comes from, what it measures, what it is correlated with by
+construction, and whether it is valid to include in Analysis 1 (hit
+prediction).
+
+A dedicated section at the end (§6) investigates the likely codependencies
+between variables empirically and recommends which to keep when two variables
+encode overlapping information.
+
+---
+
+## Pipeline overview
+
+```
+Stage 0 — Crystal input pose (fixed)
+    ↓  RFDiffusion (64 backbone designs)
+Stage 1 — Backbone PDB  →  Rosetta filtering (sc ≥ 0.3)
+    ↓  ProteinMPNN (2 sequences per backbone = 128 total)
+Stage 2 — Designed sequences  →  Sequence QC
+    ↓  Boltz-2 via negsteer
+Stage 3a — Cold-start Boltz prediction
+    → all 3 seeds pass: representative = initial  [stage: initial]
+    → fewer than 3 seeds pass: proceed to steering
+Stage 3b — Steering (mutations introduced to improve specificity)
+    → no contamination detected in any seed: representative = steered design
+                                              [stage: steered]
+    → contamination detected: trigger reversion
+Stage 3c — Reversion (mutated positions reverted to native)
+    → pose_holds: mutations genuine (binding survived reversion)
+    → pose_collapses: mutations not genuine (binding collapsed on reversion)
+    → new_contamination: reversion introduced new contamination
+    [all three: stage = reversion]
+    ↓
+Stage 4 — Outcome: cross_tier (A / B / C / none)
+```
+
+**Key constraint:** A variable from stage N is downstream of all stage N−1
+variables. Variables within the same stage are co-measured and cannot
+causally predict one another.
+
+The Rosetta filtering step computes interface metrics on the RFDiffusion
+backbone using Rosetta-placed sidechains. Its primary purpose is the shape
+complementarity filter (sc ≥ 0.3); the other metrics are by-products of the
+same run. Crucially, these sidechains are not the final MPNN-designed
+sequence — they are Rosetta's own generic rotamer placements on the backbone.
+This limits the validity of sidechain-dependent metrics such as packing
+quality and H-bond satisfaction.
+
+All Boltz metrics come from a single Boltz-2 run per design. They are
+co-measured and cannot causally predict one another.
+
+---
+
+## Data
+
+```{python}
+import sys, warnings, json
+sys.path.insert(0, ".")
+warnings.filterwarnings("ignore")
+import pandas as pd
+import numpy as np
+from pathlib import Path
+from IPython.display import display
+
+HPC_BASE = Path("/Volumes/HPC-Home/receptor_design/receptor-resurfacing-pipeline"
+                "/experiments/campaigns/pikp1_avrpikf/runs")
+base = HPC_BASE / "crystal_full_test_contig/results"
+
+neg  = pd.read_csv(base / "negative_steering/cross_sequence_summary.csv")
+neg  = neg[neg["row_type"] == "steered"].copy()
+neg["design_idx"] = neg["source_passing_summary"].str.extract(r"design_(\d+)_seq")[0].astype(float)
+neg["seq_idx"]    = neg["source_passing_summary"].str.extract(r"seq_(\d+)/")[0].astype(float)
+meta = pd.read_csv(base / "sequences/scored_metadata.csv")
+rf   = pd.DataFrame(json.load(open(base / "rosetta_filtering/rosetta_filter_metrics.json"))["designs"])
+rf["design_idx"] = rf["design_stem"].str.extract(r"design_(\d+)")[0].astype(float)
+
+df = (neg.merge(meta, left_on=["design_idx","seq_idx"], right_on=["design","seq"],
+                how="left", suffixes=("_neg",""))
+         .merge(rf, on="design_idx", how="left"))
+df.drop(columns=[c for c in df.columns if c.endswith("_neg")], inplace=True)
+
+# Derived variables
+lo, hi = df["dG_separated"].quantile([0.01, 0.99])
+df["dG_separated_win"] = df["dG_separated"].clip(lo, hi)
+df["loop1_len"]        = df["design_region_length_observed"].str.split("|").str[0].astype(float)
+df["num_changes_loop"] = df["num_changes"].astype(str).str.split("|").str[0].astype(float)
+df["num_changes_tail"] = df["num_changes"].astype(str).str.split("|").str[1].astype(float)
+df["mpnn_dr_ratio"]    = df["design_region_score"] / df["mpnn_score"].replace(0, np.nan)
+df["hit"]              = df["cross_tier"].isin(["A","B","C"]).astype(int)
+
+HYDROPHOBIC = set("VILMFYW"); POSITIVE = set("KR"); NEGATIVE = set("DE"); AROMATIC = set("FYW")
+def aa_f(seq):
+    if not seq or pd.isna(seq): return {}
+    n = len(seq)
+    return {"loop_hydrophob_frac": sum(c in HYDROPHOBIC for c in seq)/n,
+            "loop_net_charge":     sum(c in POSITIVE for c in seq)-sum(c in NEGATIVE for c in seq),
+            "loop_has_proline":    int("P" in seq),
+            "loop_aromatic_frac":  sum(c in AROMATIC for c in seq)/n}
+for k,v in df["designed_residues"].str.split("|").str[0].apply(aa_f).apply(pd.Series).items():
+    df[k] = v
+
+# Pipeline stage (three categories)
+_REVERSION = {"pose_holds", "pose_collapses", "new_contamination"}
+df["rep_stage"] = df.apply(
+    lambda r: "initial" if r["rep_design"] == "initial"
+              else ("reversion" if r["rep_outcome"] in _REVERSION else "steered"), axis=1)
+
+stage_hit = df.groupby("rep_stage")["hit"].agg(["sum","count","mean"]).rename(
+    columns={"sum":"hits","count":"n","mean":"hit_rate"})
+stage_hit["hit_rate"] = (stage_hit["hit_rate"] * 100).round(1).astype(str) + "%"
+
+print(f"Dataset: {len(df)} designs, {df['hit'].sum()} hits ({df['hit'].mean()*100:.1f}%)")
+print(f"\nHit rate by pipeline stage of representative:")
+display(stage_hit)
+```
+
+The `initial` stage has a 100% hit rate because cold-start only uses the
+initial prediction as the representative when **all 3 seeds** passed the
+negsteer threshold. It is therefore selected by construction from the
+highest-confidence predictions — not a surprising result.
+
+The `steered` stage has a low hit rate, but this is also unsurprising once
+the logic is considered. Reversion is only triggered when **contamination is
+detected** — and contamination can only occur if the target is correctly
+placed at the true interface (because contamination checks whether mutations
+at contact positions affect binding). Designs where steering runs but
+reversion is *not* triggered are those where the target was never correctly
+placed to begin with. The binder may have been steered to avoid a scrambled
+receptor at a *different* interface entirely, with 6 mutations used to
+achieve that — and if the target is not at the correct interface, such a
+design has little chance of being a hit. The steered population therefore
+contains many designs where Boltz never placed the effector correctly, and
+the low hit rate reflects this rather than any problem with the number of
+mutations per se.
+
+The more interesting question — and a candidate for a future analysis — is
+**what determines whether Boltz-2 places the target correctly in the first
+place**, since this appears to be the primary gate before any downstream
+filtering is useful.
+
+---
+
+## Variables by pipeline stage
+
+### Stage 1 — Rosetta filtering
+
+The Rosetta run at this stage places its own generic sidechains on the
+RFDiffusion backbone and computes interface metrics. These are properties
+of the backbone geometry, not the MPNN-designed sequence. **Metrics that
+depend on sidechain quality are unreliable here**: `packstat` is 0.000 for
+every design (confirmed below), and `delta_unsatHbonds` is computed on
+Rosetta's generic rotamers rather than the final sequence.
+
+```{python}
+rosetta_cols = ["sc_value","dG_separated","dSASA_int","dG_dSASA_density",
+                "packstat","delta_unsatHbonds","nres_int"]
+print("Rosetta metric value ranges:")
+for col in rosetta_cols:
+    v = pd.to_numeric(rf[col], errors="coerce")
+    unique = v.nunique()
+    flag = " ← CONSTANT" if unique == 1 else ""
+    print(f"  {col:25s}  min={v.min():8.3f}  max={v.max():8.3f}  "
+          f"std={v.std():7.3f}  n_unique={unique}{flag}")
+```
+
+`packstat` is constant 0.000 across all designs — it has no information
+content and is excluded from all analyses.
+
+```{python}
+rfd_vars = pd.DataFrame([
+    dict(variable="sc_value",
+         range=f"{pd.to_numeric(rf.sc_value,errors='coerce').min():.3f} – "
+               f"{pd.to_numeric(rf.sc_value,errors='coerce').max():.3f}",
+         definition="Rosetta shape complementarity between binder and receptor surfaces. "
+                    "Measures how well the backbone surfaces interlock geometrically. "
+                    "The primary filter criterion (sc ≥ 0.3 applied). "
+                    "Computed from surface representations — meaningful from backbone alone.",
+         correlated_with="Weakly correlated with all other Rosetta metrics (|r| < 0.1). "
+                         "Independent signal.",
+         valid_analysis_1="Yes — backbone-meaningful, independent"),
+
+    dict(variable="dG_separated_win",
+         range=f"{df.dG_separated_win.min():.1f} – {df.dG_separated_win.max():.1f} REU",
+         definition="Rosetta binding energy (REU) winsorised at 1st/99th percentile. "
+                    "Raw values reach +1088 REU in a small number of designs. "
+                    "Computed on generic Rosetta sidechains — an approximation of binding "
+                    "energy that does not reflect the actual MPNN-designed sequence. "
+                    "r = 0.999 with dG_dSASA_density.",
+         correlated_with="dG_dSASA_density (r = 0.999 — same information). "
+                         "Also correlated with dSASA_int and nres_int.",
+         valid_analysis_1="No — better captured by Boltz iptm/pLDDT on the designed "
+                          "sequence. If kept, use dG_separated_win only, not both."),
+
+    dict(variable="dG_dSASA_density",
+         range=f"{pd.to_numeric(rf.dG_dSASA_density,errors='coerce').min():.3f} – "
+               f"{pd.to_numeric(rf.dG_dSASA_density,errors='coerce').max():.3f}",
+         definition="dG_separated / dSASA_int. Binding energy per unit buried area. "
+                    "r = 0.999 with dG_separated — contains essentially no additional "
+                    "information beyond dG_separated alone.",
+         correlated_with="dG_separated (r = 0.999 — exclude one)",
+         valid_analysis_1="No — redundant with dG_separated_win"),
+
+    dict(variable="dSASA_int",
+         range=f"{pd.to_numeric(rf.dSASA_int,errors='coerce').min():.0f} – "
+               f"{pd.to_numeric(rf.dSASA_int,errors='coerce').max():.0f} Å²",
+         definition="Buried interface area upon complex formation. Computed from backbone "
+                    "surface representations — meaningful without sidechains.",
+         correlated_with="nres_int (r = 0.842 — see §6)",
+         valid_analysis_1="Yes — backbone-meaningful. Prefer over nres_int (continuous)."),
+
+    dict(variable="packstat",
+         range="0.000 (constant)",
+         definition="Rosetta packing statistics. Requires well-modelled sidechains. "
+                    "Returns 0 for all designs in this dataset because the backbone "
+                    "lacks the sidechain context needed to compute this score.",
+         correlated_with="Nothing — constant",
+         valid_analysis_1="No — constant, zero variance"),
+
+    dict(variable="delta_unsatHbonds",
+         range=f"{pd.to_numeric(rf.delta_unsatHbonds,errors='coerce').min():.0f} – "
+               f"{pd.to_numeric(rf.delta_unsatHbonds,errors='coerce').max():.0f}",
+         definition="Buried polar atoms lacking an H-bond partner at the interface. "
+                    "Computed on Rosetta's generic rotamers, not the MPNN sequence — "
+                    "the actual unsatisfied H-bond count for the designed sequence "
+                    "would differ.",
+         correlated_with="dSASA_int (r = 0.498), nres_int (r = 0.349)",
+         valid_analysis_1="Use with caution — sidechain-dependent, computed on "
+                          "non-native rotamers"),
+
+    dict(variable="nres_int",
+         range=f"{pd.to_numeric(rf.nres_int,errors='coerce').min():.0f} – "
+               f"{pd.to_numeric(rf.nres_int,errors='coerce').max():.0f}",
+         definition="Number of residues at the interface as defined by Rosetta.",
+         correlated_with="dSASA_int (r = 0.842 — see §6)",
+         valid_analysis_1="No — redundant with dSASA_int (prefer continuous measure)"),
+
+    dict(variable="loop1_len",
+         range=f"{df.loop1_len.min():.0f} – {df.loop1_len.max():.0f} residues",
+         definition="Length chosen by RFDiffusion for the central de novo loop, within "
+                    "the 10–20 residue constraint. A backbone-level decision made before "
+                    "MPNN runs.",
+         correlated_with="num_changes_loop (r ≈ 1 — see §6)",
+         valid_analysis_1="Yes — use instead of num_changes_loop"),
+])
+display(rfd_vars.style.hide(axis="index")
+        .set_properties(**{"text-align":"left","white-space":"pre-wrap"})
+        .set_table_styles([{"selector":"th","props":[("text-align","left")]}]))
+```
+
+### Stage 2 — MPNN sequence design
+
+```{python}
+mpnn_vars = pd.DataFrame([
+    dict(variable="mpnn_score",
+         range=f"{df.mpnn_score.min():.3f} – {df.mpnn_score.max():.3f}",
+         definition="Negative log-probability of the full designed sequence given the "
+                    "backbone. Lower = MPNN considers the sequence more natural for this "
+                    "backbone geometry. Computed over all positions (fixed scaffold + "
+                    "de novo regions).",
+         correlated_with="design_region_score (r = 0.775 — see §6)",
+         valid_analysis_1="Yes"),
+
+    dict(variable="design_region_score",
+         range=f"{df.design_region_score.min():.3f} – {df.design_region_score.max():.3f}",
+         definition="Negative log-probability restricted to de novo positions only. "
+                    "More targeted measure of how natural the designed loop and tail "
+                    "sequences are for the backbone.",
+         correlated_with="mpnn_score (r = 0.775 — see §6)",
+         valid_analysis_1="Yes — more targeted than mpnn_score for the designed region"),
+
+    dict(variable="mpnn_dr_ratio",
+         range=f"{df.mpnn_dr_ratio.min():.2f} – {df.mpnn_dr_ratio.max():.2f}",
+         definition="design_region_score / mpnn_score. Values > 1 mean the de novo "
+                    "positions are harder to design than the fixed scaffold.",
+         correlated_with="mpnn_score (r = −0.452), design_region_score (r = 0.205)",
+         valid_analysis_1="No — derived from mpnn_score and design_region_score; "
+                          "does not add independent information over its two components"),
+
+    dict(variable="num_changes_loop",
+         range=f"{df.num_changes_loop.min():.0f} – {df.num_changes_loop.max():.0f}",
+         definition="Positions in the de novo loop that differ from the native sequence. "
+                    "There is no reason to expect ProteinMPNN to produce sequences that "
+                    "resemble the native — it optimises for the backbone geometry, not "
+                    "sequence recovery. Not treated as a meaningful variable.",
+         correlated_with="loop1_len (r ≈ 1 — see §6)",
+         valid_analysis_1="No — use loop1_len instead"),
+
+    dict(variable="num_changes_tail",
+         range="always 6",
+         definition="Positions in the tail that differ from native. Constant — the tail "
+                    "is always 6 residues and MPNN always redesigns all 6.",
+         correlated_with="Nothing — constant",
+         valid_analysis_1="No — constant, zero variance"),
+
+    dict(variable="loop_hydrophob_frac",
+         range=f"{df.loop_hydrophob_frac.min():.3f} – {df.loop_hydrophob_frac.max():.3f}",
+         definition="Fraction of VILMFYW residues in the designed loop.",
+         correlated_with="loop_aromatic_frac (aromatics ⊂ hydrophobics)",
+         valid_analysis_1="Yes — actionable via proteinmpnn_bias_AA"),
+
+    dict(variable="loop_net_charge",
+         range=f"{df.loop_net_charge.min():.0f} – {df.loop_net_charge.max():.0f}",
+         definition="(K+R) − (D+E) count in the designed loop.",
+         correlated_with="loop_hydrophob_frac (negatively — charged ≠ hydrophobic)",
+         valid_analysis_1="Yes — actionable via proteinmpnn_bias_AA"),
+
+    dict(variable="loop_has_proline",
+         range="0 or 1",
+         definition="Binary: 1 if the designed loop contains at least one proline. "
+                    "Proline restricts backbone ϕ to ~−60° and disrupts secondary "
+                    "structure elements.",
+         correlated_with="Nothing — independent binary",
+         valid_analysis_1="Yes — actionable via proteinmpnn_omit_AA"),
+
+    dict(variable="loop_aromatic_frac",
+         range=f"{df.loop_aromatic_frac.min():.3f} – {df.loop_aromatic_frac.max():.3f}",
+         definition="Fraction of FYW residues in the designed loop.",
+         correlated_with="loop_hydrophob_frac (subset — partially redundant)",
+         valid_analysis_1="Yes, but partially redundant with loop_hydrophob_frac"),
+])
+display(mpnn_vars.style.hide(axis="index")
+        .set_properties(**{"text-align":"left","white-space":"pre-wrap"})
+        .set_table_styles([{"selector":"th","props":[("text-align","left")]}]))
+```
+
+### Stage 3 — Boltz-2 structural predictions
+
+All of the following are co-measured from a single Boltz-2 run. They
+are downstream of both the backbone and the MPNN-designed sequence.
+Including them alongside Boltz metrics for hit prediction is valid for
+understanding which Boltz quality metrics characterise successful designs,
+but they cannot be used to predict hits before Boltz is run.
+
+#### Structural confidence metrics
+
+```{python}
+boltz_vars = pd.DataFrame([
+    dict(variable="rep_iptm_median",
+         range=f"{pd.to_numeric(df.rep_iptm_median,errors='coerce').min():.3f} – "
+               f"{pd.to_numeric(df.rep_iptm_median,errors='coerce').max():.3f}",
+         definition="Interface predicted TM-score. Boltz's confidence in the relative "
+                    "orientation of binder and receptor chains at the interface.",
+         correlated_with="rep_ipae_median (r = −0.986), rep_ptm_median (r = 0.985), "
+                         "rep_pae_pass_frac_median (r = 0.949) — see §6",
+         valid_analysis_1="Yes — representative of the iptm/ipae/ptm/pae_pass_frac cluster"),
+
+    dict(variable="rep_ptm_median",
+         range=f"{pd.to_numeric(df.rep_ptm_median,errors='coerce').min():.3f} – "
+               f"{pd.to_numeric(df.rep_ptm_median,errors='coerce').max():.3f}",
+         definition="Overall predicted TM-score for the full complex. Less specific to "
+                    "the interface than iptm.",
+         correlated_with="rep_iptm_median (r = 0.985) — see §6",
+         valid_analysis_1="No — redundant with iptm (r = 0.985)"),
+
+    dict(variable="rep_interface_plddt_median",
+         range=f"{pd.to_numeric(df.rep_interface_plddt_median,errors='coerce').min():.3f} – "
+               f"{pd.to_numeric(df.rep_interface_plddt_median,errors='coerce').max():.3f}",
+         definition="Median per-residue pLDDT at the binder–receptor interface. "
+                    "Boltz's confidence in the geometry of the contact surface specifically.",
+         correlated_with="rep_iptm_median (r = 0.779) — correlated but not redundant; "
+                         "captures local interface residue confidence vs global chain orientation",
+         valid_analysis_1="Yes — distinct from iptm despite moderate correlation"),
+
+    dict(variable="rep_ipae_median",
+         range=f"{pd.to_numeric(df.rep_ipae_median,errors='coerce').min():.2f} – "
+               f"{pd.to_numeric(df.rep_ipae_median,errors='coerce').max():.2f}",
+         definition="Interface predicted aligned error. Boltz's uncertainty in the "
+                    "relative positioning of residues across the interface.",
+         correlated_with="rep_iptm_median (r = −0.986) — inverse measure of same quantity",
+         valid_analysis_1="No — redundant with iptm (r = −0.986)"),
+
+    dict(variable="rep_pae_pass_frac_median",
+         range=f"{pd.to_numeric(df.rep_pae_pass_frac_median,errors='coerce').min():.3f} – "
+               f"{pd.to_numeric(df.rep_pae_pass_frac_median,errors='coerce').max():.3f}",
+         definition="Fraction of PAE matrix entries below a threshold. Summary statistic "
+                    "of the PAE distribution.",
+         correlated_with="rep_iptm_median (r = 0.949) — redundant summary",
+         valid_analysis_1="No — redundant with iptm"),
+
+    dict(variable="rep_independent_receptor_rmsd_median",
+         range=f"{pd.to_numeric(df.rep_independent_receptor_rmsd_median,errors='coerce').min():.2f} – "
+               f"{pd.to_numeric(df.rep_independent_receptor_rmsd_median,errors='coerce').max():.2f} Å",
+         definition="RMSD between the receptor predicted alone and the receptor within "
+                    "the complex prediction. High = the binder induces a receptor "
+                    "conformation Boltz considers unusual when the receptor folds alone.",
+         correlated_with="rep_iptm_median (r = −0.539), rep_interface_plddt_median (r = −0.598). "
+                         "Moderate correlations — partially independent signal.",
+         valid_analysis_1="Yes — captures receptor misfolding, partially independent of iptm"),
+
+    dict(variable="rep_independent_effector_rmsd_median",
+         range=f"{pd.to_numeric(df.rep_independent_effector_rmsd_median,errors='coerce').min():.2f} – "
+               f"{pd.to_numeric(df.rep_independent_effector_rmsd_median,errors='coerce').max():.2f} Å",
+         definition="Same as receptor RMSD but for the binder chain.",
+         correlated_with="rep_independent_receptor_rmsd_median (r = 0.234) — mostly independent",
+         valid_analysis_1="Yes"),
+])
+display(boltz_vars.style.hide(axis="index")
+        .set_properties(**{"text-align":"left","white-space":"pre-wrap"})
+        .set_table_styles([{"selector":"th","props":[("text-align","left")]}]))
+```
+
+#### Contact geometry metrics
+
+```{python}
+contact_vars = pd.DataFrame([
+    dict(variable="rep_n_contact_residues_median",
+         definition="Total receptor residues contacted by the binder in the Boltz prediction.",
+         in_composite_score="No",
+         valid_analysis_1="Yes"),
+
+    dict(variable="rep_true_jaccard_median",
+         definition="Jaccard similarity between predicted contacts and the native interface. "
+                    "= n_shared_true / |union(predicted, native)|.",
+         in_composite_score="YES — direct ingredient of cross_composite_score "
+                            "(= true_jaccard − 0.05 × ra_eff)",
+         valid_analysis_1="No — ingredient of outcome definition"),
+
+    dict(variable="rep_n_shared_true_median",
+         definition="Raw count of contacts shared with the native interface. "
+                    "Numerator of rep_true_jaccard_median.",
+         in_composite_score="Indirectly — numerator of true_jaccard",
+         valid_analysis_1="No — encodes same information as true_jaccard"),
+
+    dict(variable="rep_wrong_jaccard_median",
+         definition="Jaccard similarity between predicted contacts and the scrambled "
+                    "negative-control receptor. High = binder contacts non-discriminative "
+                    "receptor positions.",
+         in_composite_score="Not a direct ingredient, but correlated: r = +0.341 with "
+                            "cross_composite_score and r = −0.334 with ra_eff. "
+                            "Designs that make many contacts overall tend to score highly "
+                            "on both true and wrong Jaccard, so wrong_jaccard is entangled "
+                            "with the outcome through the contact-size confound.",
+         valid_analysis_1="No — correlated with composite score; exclude alongside "
+                          "true_jaccard"),
+
+    dict(variable="rep_n_shared_wrong_median",
+         definition="Raw count of contacts shared with the scrambled receptor. "
+                    "Numerator of rep_wrong_jaccard_median.",
+         in_composite_score="Inherits the same entanglement as wrong_jaccard",
+         valid_analysis_1="No — excluded for same reason as wrong_jaccard"),
+
+    dict(variable="rep_weighted_jaccard_median",
+         definition="Weighted combination of true and wrong Jaccard scores.",
+         in_composite_score="Indirectly — composite includes true_jaccard",
+         valid_analysis_1="No"),
+])
+display(contact_vars.style.hide(axis="index")
+        .set_properties(**{"text-align":"left","white-space":"pre-wrap"})
+        .set_table_styles([{"selector":"th","props":[("text-align","left")]}]))
+```
+
+### Stage 4 — Steering outcome
+
+```{python}
+steering_vars = pd.DataFrame([
+    dict(variable="rep_stage",
+         definition="Pipeline stage of the representative design. "
+                    "'initial': all 3 cold-start seeds passed; initial prediction selected. "
+                    "'steered': steering ran, no contamination detected (no_reversion). "
+                    "'reversion': contamination detected, reversion triggered — covers "
+                    "pose_holds, pose_collapses, and new_contamination.",
+         tautological="YES — initial = 100% hit rate by construction. "
+                      "Exclude from full-cohort model.",
+         valid_analysis_1="No — tautological for full cohort"),
+
+    dict(variable="rep_total_mutations_median",
+         definition="Mutations introduced by steering (median across seeds). "
+                    "Always 0 for initial-stage designs. "
+                    "Steered population (n=61): bimodal at 3 and 6, limited variation. "
+                    "Reversion population (n=45): range 0–6, more spread.",
+         tautological="Partially — 0 mutations ≡ initial stage (100% hit rate). "
+                      "Within steered designs the bimodal distribution (3 or 6) "
+                      "limits its value as a predictor. The reversion population has "
+                      "more variation and may be more informative, though whether a "
+                      "sub-analysis is worthwhile remains unclear.",
+         valid_analysis_1="No for full cohort."),
+
+    dict(variable="rep_n_pass",
+         definition="Seeds (out of 3) that passed the negsteer threshold.",
+         tautological="YES — definitional: hit requires n_pass ≥ 1.",
+         valid_analysis_1="No — definitional"),
+
+    dict(variable="rep_ra_eff_vs_truth_median",
+         definition="Ranked accuracy of effector placement vs the true interface. "
+                    "Direct ingredient of cross_composite_score.",
+         tautological="YES — ingredient of cross_composite_score "
+                      "(= true_jaccard − 0.05 × ra_eff)",
+         valid_analysis_1="No — excluded. Valid as a target variable."),
+
+    dict(variable="rep_cycle",
+         definition="Steering cycle of the representative. Always cycle_0 in this dataset.",
+         tautological="No — but zero variance.",
+         valid_analysis_1="No — constant"),
+])
+display(steering_vars.style.hide(axis="index")
+        .set_properties(**{"text-align":"left","white-space":"pre-wrap"})
+        .set_table_styles([{"selector":"th","props":[("text-align","left")]}]))
+```
+
+---
+
+## Summary validity table
+
+```{python}
+summary = pd.DataFrame([
+    dict(feature="sc_value",                          stage="Rosetta",  verdict="✓  backbone-meaningful, independent"),
+    dict(feature="dG_separated_win",                  stage="Rosetta",  verdict="✗  sidechain-dependent; Boltz iptm is better"),
+    dict(feature="dG_dSASA_density",                  stage="Rosetta",  verdict="✗  r=0.999 with dG_separated"),
+    dict(feature="dSASA_int",                         stage="Rosetta",  verdict="✓  backbone-meaningful"),
+    dict(feature="packstat",                          stage="Rosetta",  verdict="✗  constant 0"),
+    dict(feature="delta_unsatHbonds",                 stage="Rosetta",  verdict="?  sidechain-dependent rotamers"),
+    dict(feature="nres_int",                          stage="Rosetta",  verdict="✗  r=0.842 with dSASA_int"),
+    dict(feature="loop1_len",                         stage="Rosetta",  verdict="✓"),
+    dict(feature="mpnn_score",                        stage="MPNN",     verdict="✓"),
+    dict(feature="design_region_score",               stage="MPNN",     verdict="✓"),
+    dict(feature="mpnn_dr_ratio",                     stage="MPNN",     verdict="✗  derived; no info beyond mpnn_score + design_region_score"),
+    dict(feature="num_changes_loop",                  stage="MPNN",     verdict="✗  r≈1 with loop1_len"),
+    dict(feature="num_changes_tail",                  stage="MPNN",     verdict="✗  constant"),
+    dict(feature="loop_hydrophob_frac",               stage="MPNN",     verdict="✓"),
+    dict(feature="loop_net_charge",                   stage="MPNN",     verdict="✓"),
+    dict(feature="loop_has_proline",                  stage="MPNN",     verdict="✓"),
+    dict(feature="loop_aromatic_frac",                stage="MPNN",     verdict="?  partial overlap with hydrophob_frac"),
+    dict(feature="rep_iptm_median",                   stage="Boltz",    verdict="✓  representative of confidence cluster"),
+    dict(feature="rep_ptm_median",                    stage="Boltz",    verdict="✗  r=0.985 with iptm"),
+    dict(feature="rep_interface_plddt_median",        stage="Boltz",    verdict="✓  distinct from iptm"),
+    dict(feature="rep_ipae_median",                   stage="Boltz",    verdict="✗  r=−0.986 with iptm"),
+    dict(feature="rep_pae_pass_frac_median",          stage="Boltz",    verdict="✗  r=0.949 with iptm"),
+    dict(feature="rep_independent_receptor_rmsd",     stage="Boltz",    verdict="✓"),
+    dict(feature="rep_independent_effector_rmsd",     stage="Boltz",    verdict="✓"),
+    dict(feature="rep_n_contact_residues_median",     stage="Contact",  verdict="✓"),
+    dict(feature="rep_wrong_jaccard_median",          stage="Contact",  verdict="✗  correlated with composite score (r=0.341)"),
+    dict(feature="rep_n_shared_wrong_median",         stage="Contact",  verdict="✗  same entanglement as wrong_jaccard"),
+    dict(feature="rep_true_jaccard_median",           stage="Contact",  verdict="✗  ingredient of composite score"),
+    dict(feature="rep_n_shared_true_median",          stage="Contact",  verdict="✗  numerator of true_jaccard"),
+    dict(feature="rep_weighted_jaccard_median",       stage="Contact",  verdict="✗  composite includes true_jaccard"),
+    dict(feature="rep_total_mutations_median",        stage="Steering", verdict="✗  tautological (full cohort)"),
+    dict(feature="rep_stage",                         stage="Steering", verdict="✗  tautological"),
+    dict(feature="rep_n_pass",                        stage="Steering", verdict="✗  definitional"),
+    dict(feature="rep_ra_eff_vs_truth_median",        stage="Steering", verdict="✗  ingredient of composite score"),
+    dict(feature="rep_cycle",                         stage="Steering", verdict="✗  constant"),
+])
+
+def colour_verdict(val):
+    if val.startswith("✓"):  return "background-color: #e8f5e9"
+    if val.startswith("✗"):  return "background-color: #ffebee"
+    return "background-color: #fff9c4"
+
+display(summary.style.hide(axis="index")
+        .map(colour_verdict, subset=["verdict"])
+        .set_properties(**{"text-align":"left"})
+        .set_table_styles([{"selector":"th","props":[("text-align","left")]}]))
+```
+
+---
+
+## Investigating likely codependencies
+
+This section empirically tests relationships between variables that are likely
+to be redundant. For each group, a correlation matrix is shown and a
+recommendation made for which variable to retain.
+
+### num_changes_loop vs loop1_len
+
+**Question:** Is `num_changes_loop` an independent measure of how much the
+designed sequence diverges from native, or is it simply a proxy for loop
+length?
+
+ProteinMPNN rarely reproduces native residue identities in the design region
+because the RFDiffusion-generated backbone has different local geometry from
+the native protein — MPNN optimises for the new backbone rather than
+recovering the original sequence context. If sequence recovery is near-zero
+for all designs regardless of loop length, then `num_changes_loop` carries
+no information beyond the loop length itself.
+
+```{python}
+seq_recovery = (1 - df["num_changes_loop"] / df["loop1_len"]).mean() * 100
+r_loop = np.corrcoef(df["loop1_len"], df["num_changes_loop"])[0, 1]
+
+import matplotlib.pyplot as plt
+fig, axes = plt.subplots(1, 2, figsize=(10, 4))
+
+axes[0].scatter(df["loop1_len"], df["num_changes_loop"], alpha=0.5, s=20, color="steelblue")
+axes[0].set_xlabel("loop1_len (residues)")
+axes[0].set_ylabel("num_changes_loop")
+axes[0].set_title(f"loop1_len vs num_changes_loop\nr = {r_loop:.4f}")
+axes[0].plot([df.loop1_len.min(), df.loop1_len.max()],
+             [df.loop1_len.min(), df.loop1_len.max()], 'r--', alpha=0.5, label="y=x")
+axes[0].legend()
+
+axes[1].hist(1 - df["num_changes_loop"] / df["loop1_len"], bins=20,
+             color="steelblue", edgecolor="white")
+axes[1].set_xlabel("Sequence recovery (fraction)")
+axes[1].set_ylabel("Count")
+axes[1].set_title(f"Loop sequence recovery\nmean = {seq_recovery:.1f}%")
+plt.tight_layout()
+plt.show()
+
+print(f"Correlation: r = {r_loop:.4f}")
+print(f"Mean sequence recovery: {seq_recovery:.1f}%")
+print(f"Max sequence recovery: {(1 - df.num_changes_loop / df.loop1_len).max()*100:.1f}%")
+```
+
+**Result:** r = {r_loop:.4f}. Mean loop sequence recovery is {seq_recovery:.1f}% —
+confirming that MPNN almost never reproduces a native residue in the design
+region. `num_changes_loop` is effectively the same variable as `loop1_len`
+and is excluded from all analyses in favour of `loop1_len`.
+
+### Rosetta metric redundancies
+
+**Question:** Which Rosetta metrics carry independent information, and which
+are redundant?
+
+```{python}
+r_cols = ["sc_value","dG_separated","dSASA_int","dG_dSASA_density",
+          "delta_unsatHbonds","nres_int"]
+r_corr = rf[r_cols].apply(pd.to_numeric, errors="coerce").corr().round(3)
+
+fig, ax = plt.subplots(figsize=(7, 5))
+im = ax.imshow(r_corr.values, cmap="RdBu_r", vmin=-1, vmax=1)
+ax.set_xticks(range(len(r_cols))); ax.set_xticklabels(r_cols, rotation=40, ha="right", fontsize=8)
+ax.set_yticks(range(len(r_cols))); ax.set_yticklabels(r_cols, fontsize=8)
+for i in range(len(r_cols)):
+    for j in range(len(r_cols)):
+        v = r_corr.values[i, j]
+        if not np.isnan(v):
+            ax.text(j, i, f"{v:.2f}", ha="center", va="center", fontsize=7,
+                    color="white" if abs(v) > 0.7 else "black")
+plt.colorbar(im, ax=ax, shrink=0.8)
+ax.set_title("Rosetta metric correlations")
+plt.tight_layout()
+plt.show()
+```
+
+**Findings:**
+
+- `dG_separated_win` and `dG_dSASA_density`: r = 0.999 — exclude one.
+  `dG_separated_win` is retained as the more interpretable raw quantity.
+- `dSASA_int` and `nres_int`: r = 0.842 — highly correlated. Retain
+  `dSASA_int` as the continuous measure; exclude the count `nres_int`.
+- `sc_value`: |r| < 0.10 with all other Rosetta metrics — entirely
+  independent signal. Retain.
+- `delta_unsatHbonds`: moderate correlations with `dSASA_int` (0.498) and
+  `dG_separated_win` (0.436). Partially independent, but computed on
+  non-native rotamers; treat as uncertain.
+
+**Recommendation:** Retain `sc_value`, `dSASA_int`. Retain
+`delta_unsatHbonds` tentatively. Exclude `dG_dSASA_density`, `nres_int`,
+`packstat`.
+
+### Boltz confidence metric redundancies
+
+**Question:** Among the Boltz confidence metrics, which carry independent
+information?
+
+```{python}
+b_cols = ["rep_iptm_median","rep_ptm_median","rep_interface_plddt_median",
+          "rep_ipae_median","rep_pae_pass_frac_median",
+          "rep_independent_receptor_rmsd_median","rep_independent_effector_rmsd_median"]
+b_corr = df[b_cols].apply(pd.to_numeric, errors="coerce").corr().round(3)
+short = ["iptm","ptm","iface_plddt","ipae","pae_pass","recep_rmsd","eff_rmsd"]
+
+fig, ax = plt.subplots(figsize=(7, 6))
+im = ax.imshow(b_corr.values, cmap="RdBu_r", vmin=-1, vmax=1)
+ax.set_xticks(range(len(short))); ax.set_xticklabels(short, rotation=40, ha="right", fontsize=9)
+ax.set_yticks(range(len(short))); ax.set_yticklabels(short, fontsize=9)
+for i in range(len(short)):
+    for j in range(len(short)):
+        v = b_corr.values[i, j]
+        if not np.isnan(v):
+            ax.text(j, i, f"{v:.2f}", ha="center", va="center", fontsize=7,
+                    color="white" if abs(v) > 0.7 else "black")
+plt.colorbar(im, ax=ax, shrink=0.8)
+ax.set_title("Boltz structural metric correlations")
+plt.tight_layout()
+plt.show()
+```
+
+**Findings:**
+
+- `iptm`, `ptm`, `ipae`, `pae_pass_frac` form a tight cluster: |r| > 0.94
+  between all pairs. They all measure global complex confidence from the
+  same PAE/pTM outputs — retain `iptm` only as the most interpretable.
+- `interface_plddt`: r = 0.779 with iptm — correlated but not redundant.
+  It captures per-residue confidence specifically at the contact surface,
+  which is a distinct aspect from global chain-orientation confidence.
+  Retain.
+- `receptor_rmsd` and `effector_rmsd`: r = 0.234 with each other —
+  largely independent. Both retained.
+
+**Recommendation:** Retain `iptm`, `interface_plddt`, `receptor_rmsd`,
+`effector_rmsd`. Exclude `ptm`, `ipae`, `pae_pass_frac`.
+
+### MPNN score redundancies
+
+**Question:** Do `mpnn_score`, `design_region_score`, and `mpnn_dr_ratio`
+each carry independent information?
+
+```{python}
+m_cols = ["mpnn_score","design_region_score","mpnn_dr_ratio"]
+m_corr = df[m_cols].apply(pd.to_numeric, errors="coerce").corr().round(3)
+
+fig, ax = plt.subplots(figsize=(4, 3))
+im = ax.imshow(m_corr.values, cmap="RdBu_r", vmin=-1, vmax=1)
+ax.set_xticks([0,1,2]); ax.set_xticklabels(m_cols, rotation=20, ha="right", fontsize=9)
+ax.set_yticks([0,1,2]); ax.set_yticklabels(m_cols, fontsize=9)
+for i in range(3):
+    for j in range(3):
+        ax.text(j, i, f"{m_corr.values[i,j]:.3f}", ha="center", va="center",
+                fontsize=9, color="white" if abs(m_corr.values[i,j]) > 0.7 else "black")
+plt.colorbar(im, ax=ax, shrink=0.8)
+ax.set_title("MPNN score correlations")
+plt.tight_layout()
+plt.show()
+```
+
+**Findings:**
+
+- `mpnn_score` and `design_region_score`: r = 0.775 — correlated but not
+  redundant. `mpnn_score` reflects the full receptor–binder complex;
+  `design_region_score` isolates the de novo positions. Both are informative
+  for different questions.
+- `mpnn_dr_ratio`: r = −0.452 with `mpnn_score` and 0.205 with
+  `design_region_score`. It captures how much harder the de novo region is
+  to design relative to the fixed scaffold, which is partially independent.
+  However, being a derived ratio it adds complexity without a clear
+  biological interpretation advantage. Retain tentatively.
+
+**Recommendation:** Retain `mpnn_score` and `design_region_score`. Exclude
+`mpnn_dr_ratio` — it is derived from the other two and does not add
+independent information.
+
+### Contact metric entanglement with composite score
+
+**Question:** Is `rep_wrong_jaccard_median` sufficiently independent of the
+composite score to be used as a predictor of hit outcome?
+
+```{python}
+wj = pd.to_numeric(df["rep_wrong_jaccard_median"], errors="coerce")
+ra = pd.to_numeric(df["rep_ra_eff_vs_truth_median"], errors="coerce")
+cs = pd.to_numeric(df["cross_composite_score"], errors="coerce")
+
+mask1 = wj.notna() & ra.notna()
+mask2 = wj.notna() & cs.notna()
+r_ra  = np.corrcoef(wj[mask1], ra[mask1])[0, 1]
+r_cs  = np.corrcoef(wj[mask2], cs[mask2])[0, 1]
+
+import matplotlib.pyplot as plt
+fig, axes = plt.subplots(1, 2, figsize=(9, 4))
+for ax, y, ylabel, r, title in [
+    (axes[0], ra[mask1], "ra_eff (lower=better)", r_ra,
+     f"wrong_jaccard vs ra_eff\nr = {r_ra:.3f}"),
+    (axes[1], cs[mask2], "cross_composite_score", r_cs,
+     f"wrong_jaccard vs composite score\nr = {r_cs:.3f}"),
+]:
+    ax.scatter(wj[y.index], y, alpha=0.4, s=18,
+               c=df.loc[y.index, "hit"].map({0: "#aaa", 1: "#E57373"}))
+    ax.set_xlabel("rep_wrong_jaccard_median")
+    ax.set_ylabel(ylabel)
+    ax.set_title(title)
+plt.tight_layout()
+plt.show()
+
+print(f"r(wrong_jaccard, ra_eff) = {r_ra:.3f}")
+print(f"r(wrong_jaccard, composite_score) = {r_cs:.3f}")
+```
+
+**Result:** `rep_wrong_jaccard_median` is correlated with both `ra_eff`
+(r = {r_ra:.3f}) and `cross_composite_score` (r = {r_cs:.3f}). The
+positive correlation with composite score is counterintuitive — it arises
+because designs that make many contacts overall score highly on both
+wrong and true Jaccard, and the true Jaccard component dominates composite
+score. Despite not being a direct ingredient of the formula, wrong_jaccard
+is entangled with the outcome through this contact-size confound and is
+excluded from Analysis 1.
+
+---
+
+## Final recommended feature set
+
+```{python}
+final = pd.DataFrame([
+    dict(feature="sc_value",                       stage="Rosetta", rationale="Independent backbone geometry metric"),
+    dict(feature="dSASA_int",                      stage="Rosetta", rationale="Buried interface area; backbone-meaningful"),
+    dict(feature="delta_unsatHbonds",              stage="Rosetta", rationale="Tentative: sidechain-dependent but partially independent"),
+    dict(feature="loop1_len",                      stage="Rosetta", rationale="RFDiffusion loop length decision"),
+    dict(feature="mpnn_score",                     stage="MPNN",    rationale="Global sequence designability"),
+    dict(feature="design_region_score",            stage="MPNN",    rationale="De novo region designability"),
+    dict(feature="loop_hydrophob_frac",            stage="MPNN",    rationale="Loop composition — actionable"),
+    dict(feature="loop_net_charge",                stage="MPNN",    rationale="Loop composition — actionable"),
+    dict(feature="loop_has_proline",               stage="MPNN",    rationale="Loop composition — actionable"),
+    dict(feature="rep_iptm_median",                stage="Boltz",   rationale="Representative of global confidence cluster"),
+    dict(feature="rep_interface_plddt_median",     stage="Boltz",   rationale="Interface-specific confidence; distinct from iptm"),
+    dict(feature="rep_independent_receptor_rmsd",  stage="Boltz",   rationale="Receptor misfolding in complex"),
+    dict(feature="rep_independent_effector_rmsd",  stage="Boltz",   rationale="Binder misfolding in complex"),
+    dict(feature="rep_n_contact_residues_median",  stage="Contact", rationale="Total interface size from Boltz"),
+])
+display(final.style.hide(axis="index")
+        .set_properties(**{"background-color":"#e8f5e9","text-align":"left"})
+        .set_table_styles([{"selector":"th","props":[("text-align","left")]}]))
+```

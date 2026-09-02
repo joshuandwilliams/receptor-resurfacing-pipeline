@@ -1,0 +1,9 @@
+SIZE
+  per-region slopes positive: 6/8  (sign test p = 0.29)
+  common slope   +0.0340
+  varying slope  +0.0409 [+0.0077, +0.0741]  p = 0.02
+  LRT for slope variation chi2 = 44.71, p = 0.0000
+PLACEMENT
+  terminal +0.953, Wald p = 0.065, exact permutation p = 0.146 (48 assignments, 3 terminal regions of 12)
+SCAFFOLD DRIFT (now a trivial range after the .trb correction)
+  motif_rmsd_within +0.703 [+0.335, +1.071]  p = 1.8e-04

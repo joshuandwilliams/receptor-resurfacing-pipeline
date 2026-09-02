@@ -1,0 +1,13 @@
+run,region,region_id,terminal,replaced_first,replaced_last,n_replaced,frac_strand,frac_helix,frac_loop,ss_class
+full (2 regions),1,full (2 regions)|1,0,33,45,13,0.6153846153846154,0.0,0.38461538461538464,strand
+full (2 regions),2,full (2 regions)|2,1,73,78,6,0.3333333333333333,0.0,0.6666666666666666,loop
+auto 5 A (4 regions),1,auto 5 A (4 regions)|1,0,3,5,3,1.0,0.0,0.0,strand
+auto 5 A (4 regions),2,auto 5 A (4 regions)|2,0,32,39,8,0.75,0.0,0.25,strand
+auto 5 A (4 regions),3,auto 5 A (4 regions)|3,0,43,49,7,1.0,0.0,0.0,strand
+auto 5 A (4 regions),4,auto 5 A (4 regions)|4,1,68,78,11,0.6363636363636364,0.0,0.36363636363636365,strand
+auto 3 A (6 regions),1,auto 3 A (6 regions)|1,0,3,3,1,1.0,0.0,0.0,strand
+auto 3 A (6 regions),2,auto 3 A (6 regions)|2,0,32,33,2,1.0,0.0,0.0,strand
+auto 3 A (6 regions),3,auto 3 A (6 regions)|3,0,39,39,1,0.0,0.0,1.0,loop
+auto 3 A (6 regions),4,auto 3 A (6 regions)|4,0,43,43,1,1.0,0.0,0.0,strand
+auto 3 A (6 regions),5,auto 3 A (6 regions)|5,0,68,70,3,1.0,0.0,0.0,strand
+auto 3 A (6 regions),6,auto 3 A (6 regions)|6,1,74,78,5,0.2,0.0,0.8,loop

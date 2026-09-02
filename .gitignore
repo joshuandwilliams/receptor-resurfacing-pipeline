@@ -95,8 +95,11 @@ archive/
 scratch/
 
 # ----- Experiments — campaign outputs -----
+# analyses/ is tracked: it holds the code behind the thesis figures.
+# Run outputs are not, they are large and regenerable from the HPC.
 experiments/campaigns/*/results/
-experiments/campaigns/*/analyses/
+experiments/campaigns/*/runs/*/results/
+experiments/campaigns/*/runs/*/work/
 experiments/campaigns/*/work/
 experiments/campaigns/*/.nextflow*
 experiments/campaigns/*/*.out
@@ -140,3 +143,11 @@ work/
 .nextflow/
 .nextflow.log*
 receptor_resurfacing_results/
+
+# ----- Editor / assistant local state -----
+.claude/
+
+# Raw agroinfiltration and blot photographs. Lab record, ~1 GB of TIFF and
+# pptx per campaign, and the analyses read them from the run tree rather than
+# from git.
+experiments/campaigns/*/runs/*/agroinfiltrations/

@@ -1,0 +1,299 @@
+---
+title: "gBlock selection"
+subtitle: "crystal_full_contig_d26_seqvar"
+date: "2026-08-19"
+format:
+    html:
+        code-fold: true
+        toc: true
+        toc-depth: 2
+        number-sections: true
+        theme: flatly
+        self-contained: true
+jupyter: receptor-analysis
+---
+
+Selecting sequences to order as gBlocks.
+
+Source table is `results/orthogonal_metrics/survivors_with_orthogonal_metrics_gblocks.csv`,
+produced by `scripts/make_gblocks.py`. Local copy in `data/`.
+
+```{python}
+from pathlib import Path
+import pandas as pd
+import matplotlib.pyplot as plt
+import numpy as np
+import itertools
+from scipy.cluster.hierarchy import linkage, fcluster, dendrogram
+from scipy.spatial.distance import squareform
+
+plt.rcParams.update({"figure.dpi": 140, "savefig.bbox": "tight", "font.size": 9})
+pd.set_option("display.max_colwidth", 40)
+
+OUT = Path("outputs"); OUT.mkdir(exist_ok=True)
+df = pd.read_csv(Path("data") / "survivors_with_orthogonal_metrics_gblocks.csv")
+IPSAE = "rep_ipsae_min_median"
+```
+
+## Tier A pool
+
+```{python}
+steered = df[df["row_type"] == "steered"].copy()
+regions = steered["designed_residues"].str.split("|")
+steered["region1"] = regions.str[0]
+steered["region2"] = regions.str[1]
+
+tier_a = steered[steered["cross_tier"] == "A"].sort_values("cross_rank_by_composite").reset_index(drop=True)
+tier_a.to_csv(OUT / "tier_A_candidates.csv", index=False)
+
+pd.crosstab(steered["cross_tier"], "n").reindex(["A", "B", "C", "none"])
+```
+
+- 54 of 127 steered sequences are Tier A.
+- All 54 pass the orthogonal filters.
+- All 54 designed sequences are distinct.
+
+```{python}
+tier_a[["mpnn_sequence", "cross_rank_by_composite", "cross_composite_score",
+        IPSAE, "rep_outcome", "region1", "region2"]]
+```
+
+## SNK-EKE check
+
+SNK-EKE is a published engineered Pikp-1 variant. Wild type region 2 is `SQANKD`
+and SNK-EKE is `EQAKED`. They differ at positions 1, 4 and 5.
+
+The question is whether hits recovered that variant from training data.
+
+```{python}
+WT, SNK = "SQANKD", "EQAKED"
+diff_pos = [i for i in range(6) if WT[i] != SNK[i]]
+
+pd.DataFrame({
+    "position": [i + 1 for i in diff_pos],
+    "SNK-EKE residue": [SNK[i] for i in diff_pos],
+    "n of 54 matching": [int((tier_a["region2"].str[i] == SNK[i]).sum()) for i in diff_pos],
+})
+```
+
+- Position 1 matches in 50 of 54 candidates.
+- Positions 4 and 5 match in zero candidates.
+- No candidate matches more than one of the three.
+
+```{python}
+by_tier = (steered.assign(is_E=steered["region2"].str[0].eq("E"))
+                  .groupby("cross_tier")["is_E"]
+                  .agg(n="size", n_with_E="sum"))
+by_tier["percent_E"] = (by_tier["n_with_E"] / by_tier["n"] * 100).round(1)
+by_tier.reindex(["A", "B", "C", "none"])
+```
+
+- E at position 1 appears in 119 of 127 steered sequences.
+- Failures carry it at 96.1%, Tier A at 92.6%.
+- No enrichment in hits, so it is not a recovered SNK-EKE signature.
+
+**Keep all 54.**
+
+## ipSAE
+
+```{python}
+thresholds = [0.5, 0.6, 0.7, 0.8]
+pd.DataFrame({
+    "threshold": thresholds,
+    "n above": [int((tier_a[IPSAE] > t).sum()) for t in thresholds],
+})
+```
+
+- 32, 24, 12 and 2 candidates exceed 0.5, 0.6, 0.7 and 0.8.
+- Highest value is 0.8247 (design_26_seq_107).
+- Median is 0.5738.
+
+```{python}
+tier_a[tier_a["region2"].str[0] != "E"][
+    ["mpnn_sequence", "region2", IPSAE, "cross_rank_by_composite"]]
+```
+
+- The 4 candidates without E span 0.0157 to 0.8247.
+- design_26_seq_107 is the highest ipSAE in the whole pool.
+
+## Diversity above ipSAE 0.6
+
+All candidates share the design 26 backbone. Diversity comes only from the 25
+designed positions.
+
+```{python}
+pool = tier_a[tier_a[IPSAE] > 0.6].sort_values(IPSAE, ascending=False).reset_index(drop=True).copy()
+pool["designed"] = pool["region1"] + pool["region2"]
+N_R1, N_POS = 19, 25
+
+seqs = pool["designed"].tolist()
+n = len(seqs)
+D = np.zeros((n, n))
+for i, j in itertools.combinations(range(n), 2):
+    D[i, j] = D[j, i] = sum(a != b for a, b in zip(seqs[i], seqs[j]))
+upper = D[np.triu_indices(n, 1)]
+
+pd.DataFrame({"minimum": [upper.min()], "median": [np.median(upper)],
+              "maximum": [upper.max()]}, index=["Hamming distance"])
+```
+
+- 24 candidates, all distinct.
+- Median pair differs at 7 of 25 designed positions.
+- Closest pair differs at 2.
+
+```{python}
+INK, MUTED, BAR, QUIET = "#1f2933", "#7b8794", "#4a7fb5", "#c3d4e6"
+heights = np.array([len({s[i] for s in seqs}) for i in range(N_POS)])
+labels = [f"R1:{i+1}" if i < N_R1 else f"R2:{i-N_R1+1}" for i in range(N_POS)]
+
+fig, ax = plt.subplots(figsize=(9, 3))
+ax.bar(np.arange(N_POS), heights, width=0.62, linewidth=0,
+       color=[BAR if h > 1 else QUIET for h in heights])
+for x, h in enumerate(heights):
+    if h >= 4:
+        ax.text(x, h + 0.12, str(h), ha="center", va="bottom", fontsize=8, color=INK)
+ax.axvline(N_R1 - 0.5, color=MUTED, linewidth=1, linestyle=(0, (4, 3)))
+ax.set_xticks(range(N_POS)); ax.set_xticklabels(labels, rotation=90, fontsize=7)
+ax.set_ylabel("Distinct residues among the 24", fontsize=9)
+ax.set_yticks(range(0, heights.max() + 1))
+ax.tick_params(length=0, colors=MUTED)
+ax.grid(axis="y", color="#e4e7eb", linewidth=0.6); ax.set_axisbelow(True)
+for side in ("top", "right", "left"):
+    ax.spines[side].set_visible(False)
+ax.spines["bottom"].set_color("#e4e7eb")
+plt.show()
+```
+
+- Pale bars are positions fixed across all 24 candidates.
+- Six of 25 positions never vary.
+- R1:16 is most variable with 7 residues, then R1:9 and R1:17 with 5.
+
+```{python}
+Z = linkage(squareform(D), method="average")
+pd.DataFrame([{"cut": t, "n clusters": len(set(fcluster(Z, t, criterion="distance"))),
+               "largest": max(pd.Series(fcluster(Z, t, criterion="distance")).value_counts())}
+              for t in range(2, 9)]).set_index("cut")
+```
+
+- At a 4-difference cut there are 16 clusters.
+- The largest cluster holds 3 candidates.
+- Clusters merge into large groups only at cut 6 and above.
+
+```{python}
+pool["cluster"] = fcluster(Z, 4, criterion="distance")
+
+fig, (ax_d, ax_h) = plt.subplots(1, 2, figsize=(12, 6.4),
+                                 gridspec_kw={"width_ratios": [1, 2.1]})
+dn = dendrogram(Z, labels=pool["mpnn_sequence"].tolist(), orientation="left",
+                ax=ax_d, color_threshold=0, link_color_func=lambda _: MUTED)
+ax_d.set_xlabel("Hamming distance", fontsize=9)
+ax_d.tick_params(labelsize=7, length=0, colors=INK)
+for side in ("top", "right", "left"):
+    ax_d.spines[side].set_visible(False)
+ax_d.spines["bottom"].set_color("#e4e7eb")
+
+order = dn["leaves"]
+tick = [pool["mpnn_sequence"][i].replace("design_26_", "") for i in order]
+im = ax_h.imshow(D[np.ix_(order, order)], cmap="Blues", vmin=0, vmax=D.max())
+ax_h.set_xticks(range(n)); ax_h.set_xticklabels(tick, rotation=90, fontsize=7)
+ax_h.set_yticks(range(n)); ax_h.set_yticklabels(tick, fontsize=7)
+ax_h.tick_params(length=0, colors=INK)
+for side in ax_h.spines:
+    ax_h.spines[side].set_visible(False)
+cb = fig.colorbar(im, ax=ax_h, fraction=0.040, pad=0.02)
+cb.set_label("positions differing (of 25)", fontsize=8)
+cb.ax.tick_params(labelsize=7, length=0, colors=MUTED)
+cb.outline.set_visible(False)
+fig.tight_layout()
+plt.show()
+```
+
+- Colour runs light for similar to dark for different.
+- The white diagonal is each sequence against itself.
+- Pale off-diagonal cells are rare, so there are no tight groups.
+
+```{python}
+np.fill_diagonal(D, np.inf)
+pool["nearest"] = [pool["mpnn_sequence"][k].replace("design_26_", "") for k in D.argmin(axis=1)]
+pool["nearest_distance"] = D.min(axis=1).astype(int)
+np.fill_diagonal(D, 0)
+pool.to_csv(OUT / "ipsae_pool_with_clusters.csv", index=False)
+
+pool[["mpnn_sequence", IPSAE, "cross_rank_by_composite", "cluster",
+      "nearest", "nearest_distance"]]
+```
+
+- Each candidate's closest partner in the pool.
+- 7 candidates sit within 3 differences of another.
+
+## Final 10
+
+Rule. Sort all 54 Tier A by ipSAE min, descending. Take each candidate if it
+differs by more than 3 designed positions from every candidate already taken.
+Stop at 10.
+
+```{python}
+ranked = tier_a.sort_values(IPSAE, ascending=False).reset_index(drop=True)
+ranked["designed"] = ranked["region1"] + ranked["region2"]
+rseqs = ranked["designed"].tolist()
+m = len(rseqs)
+
+Dall = np.zeros((m, m), int)
+for i, j in itertools.combinations(range(m), 2):
+    Dall[i, j] = Dall[j, i] = sum(a != b for a, b in zip(rseqs[i], rseqs[j]))
+
+taken, dropped = [], []
+for i in range(m):
+    if all(Dall[i, j] > 3 for j in taken):
+        taken.append(i)
+        if len(taken) == 10:
+            break
+    else:
+        dropped.append(i)
+
+final = ranked.loc[taken].copy()
+final["ipsae_rank"] = range(1, len(final) + 1)
+final.to_csv(OUT / "final_10.csv", index=False)
+final[["ipsae_rank", "mpnn_sequence", IPSAE, "cross_rank_by_composite",
+       "cross_composite_score", "designed"]]
+```
+
+- All 10 have ipSAE min above 0.70.
+- Composite ranks span 1 to 51.
+- Every pair differs at 4 or more of the 25 designed positions.
+
+```{python}
+pd.DataFrame([
+    {"mpnn_sequence": ranked["mpnn_sequence"][i], IPSAE: ranked[IPSAE][i],
+     "too close to": ", ".join(f"{ranked['mpnn_sequence'][j].replace('design_26_','')} ({Dall[i, j]})"
+                               for j in taken if Dall[i, j] <= 3)}
+    for i in dropped])
+```
+
+- Only 2 candidates are dropped by the distance rule.
+- design_26_seq_18 differs from seq_40 at 2 positions.
+- design_26_seq_109 differs from seq_29 and seq_81 at 3 positions each.
+
+```{python}
+final[["mpnn_sequence", "corrected_receptor", "gblock_sequence"]].to_csv(
+    OUT / "final_10_sequences.csv", index=False)
+final[["mpnn_sequence", "corrected_receptor"]]
+```
+
+- Sequences written to `outputs/final_10_sequences.csv`.
+- gBlocks are 280 bp including the Golden Gate tails.
+
+```{python}
+subset = df[df["mpnn_sequence"].isin(final["mpnn_sequence"])].copy()
+subset = (subset.set_index("mpnn_sequence")
+                .loc[final["mpnn_sequence"]]
+                .reset_index()[df.columns])
+subset.to_csv(OUT / "survivors_with_orthogonal_metrics_gblocks_final10.csv", index=False)
+
+print(f"rows    {len(subset)}")
+print(f"columns {len(subset.columns)} (unchanged from the source table)")
+```
+
+- Subset of the gblocks file, 10 rows, all original columns.
+- Row order follows ipSAE rank.
+- Written to `outputs/survivors_with_orthogonal_metrics_gblocks_final10.csv`.

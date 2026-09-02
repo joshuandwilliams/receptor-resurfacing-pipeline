@@ -1,0 +1,69 @@
+# Renders the four structure panels of the thesis design-region figure.
+#
+# Panel A is the input complex, receptor cornflower blue, effector light green,
+# both design regions coloured. Panel B is three designs at design region 1
+# lengths of 10, 15 and 20, receptor only, superimposed on the fixed
+# N-terminal block and drawn at one camera so the rebuilt length compares
+# between them. A and B use different cameras: A frames the complex, B frames
+# the domain face-on.
+#
+# Paths are relative, so run from this directory. ChimeraX cannot save
+# images under --nogui on macOS, where it has no OpenGL context, so this
+# needs the GUI:
+#   cd analyses/01-design-region-backbones
+#   ChimeraX render_design_regions.cxc
+# The rendered PNGs are kept in renders/ so the figure can be rebuilt
+# without re-rendering.
+#
+# Design region 1 starts at residue 33 in every design and runs for its
+# observed length. Design region 2 is the final 6 residues.
+
+open ../../inputs/pikp1_avrpikf_complex_ab.pdb
+open ../../runs/crystal_full_test_contig/results/rfdiffusion/design_18.pdb
+open ../../runs/crystal_full_test_contig/results/rfdiffusion/design_40.pdb
+open ../../runs/crystal_full_test_contig/results/rfdiffusion/design_48.pdb
+rename #1 input
+rename #2 d18
+rename #3 d40
+rename #4 d48
+dssp
+hide atoms
+show cartoon
+color cornflower blue
+color /B light green
+color #1/A:33-45 red
+color #1/A:73-78 purple
+color #2/A:33-42 red
+color #2/A:70-75 purple
+color #3/A:33-47 red
+color #3/A:75-80 purple
+color #4/A:33-52 red
+color #4/A:80-85 purple
+align #2/A:1-32@CA toAtoms #4/A:1-32@CA
+align #3/A:1-32@CA toAtoms #4/A:1-32@CA
+set bgColor white
+lighting flat
+graphics silhouettes true width 1.5
+hide #2,3,4 models
+view orient
+turn x 225
+turn y 345
+turn z 45
+view #1
+save renders/input.png width 2600 supersample 2 transparentBackground true
+hide #1 models
+hide /B cartoon
+show #4 models
+view orient
+turn x 255
+turn z 50
+view #4
+zoom 0.97
+save renders/design_48_len20.png width 3000 supersample 2 transparentBackground true
+hide #4 models
+show #2 models
+save renders/design_18_len10.png width 3000 supersample 2 transparentBackground true
+hide #2 models
+show #3 models
+save renders/design_40_len15.png width 3000 supersample 2 transparentBackground true
+exit

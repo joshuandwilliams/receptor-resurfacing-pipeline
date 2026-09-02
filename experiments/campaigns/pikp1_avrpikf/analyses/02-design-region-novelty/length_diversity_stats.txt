@@ -1,0 +1,11 @@
+full region 1, n=64 designs, lengths 10-20
+diversity = mean chamfer distance to same-length designs only
+  linear     slope +0.0574 A/res  p=1.05e-06  R2=0.321
+  quadratic  quad  +0.00053  p=0.882  (F-test vs linear p=0.882, not supported)
+  group-level Spearman over the 11 lengths: rho=+0.71, p=0.0146
+  diversity at 10 res 0.65 A, at 20 res 1.14 A
+full region 2 (C-terminal, 6 res, n=64): 2.31 +- 0.18 A
+
+NOTE: distance-to-all-designs instead of within-length produces a spurious
+U shape, because RFdiffusion sampled lengths unevenly around 15 and the
+extremes score as distant for being a minority rather than for varying.

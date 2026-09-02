@@ -1,0 +1,486 @@
+---
+title: "Analysis 2 — Boltz-2 confidence across pipeline stages"
+subtitle: "crystal_full_test_contig: how do steering mutations affect Boltz confidence?"
+date: "2026-05-24"
+format:
+    html:
+        code-fold: true
+        toc: true
+        toc-depth: 3
+        number-sections: true
+        theme: flatly
+        self-contained: true
+jupyter: receptor-analysis
+---
+
+## Background
+
+The post-Boltz features in Analysis 1 (iptm, interface pLDDT, receptor RMSD)
+were strongly predictive of hits, but those metrics reflect the
+**representative** design — which for steered and reversion designs is a
+post-mutation prediction, not the original cold-start prediction.
+
+This raises the question: do steering mutations systematically change Boltz
+confidence, and if so in which direction?
+
+The negsteer pipeline provides a natural paired experiment. For every seed
+where reversion was triggered, we have three Boltz predictions of the **same
+backbone and sequence identity context**, differing only in the mutations
+present:
+
+1. **Initial** — cold-start prediction before any steering mutations
+2. **Steered** — prediction with steering mutations added (the mutations
+   negsteer chose to improve specificity)
+3. **Reverted** — prediction after contaminating mutations were removed
+
+Comparing these three within each seed controls for backbone geometry and
+sequence identity. Any change in Boltz confidence is therefore attributable
+to the mutations, not to between-design variation.
+
+The verdict tells us whether the mutations were genuine:
+
+- **pose_holds** — reversion was triggered; after removing the contaminating
+  mutations, binding was retained. The steering mutations created real
+  interface contacts.
+- **pose_collapses** — reversion was triggered; after removing the
+  contaminating mutations, binding collapsed. The mutations were not
+  creating genuine contacts.
+
+---
+
+## Hypotheses
+
+**H0:** Steering mutations do not systematically change Boltz-2 confidence.
+Any observed differences between the three stages are random noise.
+
+*Rationale:* If Boltz evaluates each sequence independently without memory
+of previous predictions, mutations that change a few residues may have no
+consistent directional effect on confidence metrics.
+
+**H1:** Steering mutations that create genuine interface contacts (pose_holds)
+cause a systematic increase in Boltz confidence, while mutations that do not
+create genuine contacts (pose_collapses) do not. After reversion removes the
+contaminating mutations, confidence in pose_holds designs is retained (the
+underlying design is genuinely good) but pose_collapses designs show no
+recovery.
+
+*Rationale:* When steering mutations land at the true interface, they improve
+packing and contact geometry, which Boltz should recognise as a more
+coherent binding mode — increasing iptm and interface pLDDT. For
+pose_collapses, the mutations were not at the true interface, so they
+contribute nothing to genuine binding and Boltz confidence should be
+unaffected.
+
+---
+
+## Data
+
+```{python}
+import sys, warnings
+sys.path.insert(0, ".")
+warnings.filterwarnings("ignore")
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.lines as mlines
+from pathlib import Path
+from IPython.display import display
+
+OUT_DIR = Path("plots")
+OUT_DIR.mkdir(exist_ok=True)
+
+RUNS_DIR = Path(
+    "/Volumes/HPC-Home/receptor_design/receptor-resurfacing-pipeline"
+    "/experiments/campaigns/pikp1_avrpikf/runs"
+    "/crystal_full_test_contig/results/negative_steering/runs"
+)
+
+METRICS = {
+    "iptm":          ("steered_iptm",                      "reverted_iptm",                      "Boltz iptm (higher = more confident)"),
+    "interface_plddt":("steered_interface_plddt",           "reverted_interface_plddt",            "Interface pLDDT (higher = more confident)"),
+    "receptor_rmsd": ("steered_independent_receptor_rmsd",  "reverted_independent_receptor_rmsd",  "Receptor RMSD (Å) (lower = better folding)"),
+}
+
+records = []
+for design_dir in sorted(RUNS_DIR.iterdir()):
+    if not design_dir.is_dir():
+        continue
+    f = design_dir / "all_results_multicycle_with_metrics.csv"
+    if not f.exists():
+        continue
+    df = pd.read_csv(f)
+
+    init_row = df[df["design"] == "initial"]
+    if len(init_row) == 0:
+        continue
+
+    init_vals = {
+        m: pd.to_numeric(init_row[sc], errors="coerce").iloc[0]
+        for m, (sc, _, _) in METRICS.items()
+    }
+
+    rev_rows = df[df["reversion_verdict"].isin(["pose_holds", "pose_collapses"])]
+    for _, row in rev_rows.iterrows():
+        # Subject ID includes the steering attempt (design column, e.g. design_00_s2)
+        # so that seeds with different verdicts from the same design are distinct subjects
+        subject_id = f"{design_dir.name}__{row['design']}"
+        rec = {
+            "design_seq": design_dir.name,
+            "subject":    subject_id,
+            "seed":       row.get("seed_index", np.nan),
+            "verdict":    row["reversion_verdict"],
+            "n_mutations":pd.to_numeric(row.get("steered_total_mutations", np.nan), errors="coerce"),
+        }
+        for m, (sc, rc, _) in METRICS.items():
+            rec[f"init_{m}"]    = init_vals[m]
+            rec[f"steered_{m}"] = pd.to_numeric(row[sc], errors="coerce")
+            rec[f"reverted_{m}"]= pd.to_numeric(row[rc], errors="coerce")
+        records.append(rec)
+
+paired = pd.DataFrame(records)
+paired = paired.dropna(subset=[f"init_{m}" for m in METRICS]
+                     + [f"steered_{m}" for m in METRICS]
+                     + [f"reverted_{m}" for m in METRICS])
+
+ph = paired[paired["verdict"] == "pose_holds"]
+pc = paired[paired["verdict"] == "pose_collapses"]
+
+print(f"Total paired triplets: {len(paired)}")
+print(f"  pose_holds:    {len(ph)}  (genuine interface contacts)")
+print(f"  pose_collapses:{len(pc)}  (non-genuine contacts)")
+print(f"\nMedian mutations per triplet:")
+print(f"  pose_holds:    {ph['n_mutations'].median():.0f}")
+print(f"  pose_collapses:{pc['n_mutations'].median():.0f}")
+```
+
+---
+
+## Results
+
+### Trajectory plots
+
+Each line shows one seed tracked across the three stages. Lines are coloured
+by verdict: blue = pose_holds, red = pose_collapses. Thick coloured lines
+show the median trajectory for each group.
+
+```{python}
+fig, axes = plt.subplots(1, 3, figsize=(14, 5))
+stages = ["Initial", "Steered\n(+mutations)", "Reverted\n(−contaminants)"]
+x = [0, 1, 2]
+
+COLOURS = {"pose_holds": "#1565C0", "pose_collapses": "#B71C1C"}
+LABELS  = {"pose_holds": "pose_holds (genuine)", "pose_collapses": "pose_collapses (non-genuine)"}
+
+for ax, (metric, (_, _, ylabel)) in zip(axes, METRICS.items()):
+    ic = f"init_{metric}"; sc = f"steered_{metric}"; rc = f"reverted_{metric}"
+
+    for verdict, grp, col in [
+        ("pose_holds",    ph, COLOURS["pose_holds"]),
+        ("pose_collapses",pc, COLOURS["pose_collapses"]),
+    ]:
+        # Individual trajectories (thin, transparent)
+        for _, row in grp.iterrows():
+            ax.plot(x, [row[ic], row[sc], row[rc]],
+                    color=col, alpha=0.12, linewidth=0.8)
+
+        # Median trajectory (thick)
+        medians = [grp[ic].median(), grp[sc].median(), grp[rc].median()]
+        ax.plot(x, medians, color=col, linewidth=2.5,
+                marker="o", markersize=6, label=LABELS[verdict])
+
+    ax.set_xticks(x)
+    ax.set_xticklabels(stages, fontsize=9)
+    ax.set_ylabel(ylabel, fontsize=9)
+    ax.set_title(metric.replace("_", " "), fontsize=10)
+    if ax == axes[0]:
+        ax.legend(fontsize=8)
+
+fig.suptitle("Boltz-2 metrics across pipeline stages — paired within-seed comparison\n"
+             "crystal_full_test_contig  (thin lines = individual seeds, thick = group median)",
+             fontsize=10)
+plt.tight_layout()
+plt.savefig(OUT_DIR / "a2_trajectory_all_metrics.png", bbox_inches="tight")
+plt.show()
+```
+
+### Change at each transition
+
+The two key transitions are:
+
+- **Δ steer** = steered − initial (effect of adding steering mutations)
+- **Δ revert** = reverted − steered (effect of removing contaminating mutations)
+
+```{python}
+fig, axes = plt.subplots(1, 3, figsize=(14, 4))
+
+for ax, (metric, (_, _, ylabel)) in zip(axes, METRICS.items()):
+    ic = f"init_{metric}"; sc = f"steered_{metric}"; rc = f"reverted_{metric}"
+
+    data_steer  = [ph[sc] - ph[ic], pc[sc] - pc[ic]]
+    data_revert = [ph[rc] - ph[sc], pc[rc] - pc[sc]]
+
+    positions = [0.8, 1.2, 2.8, 3.2]
+    colours   = [COLOURS["pose_holds"], COLOURS["pose_collapses"]] * 2
+    data_all  = data_steer + data_revert
+
+    bp = ax.boxplot(data_all, positions=positions, widths=0.28,
+                    patch_artist=True, notch=False,
+                    medianprops=dict(color="white", linewidth=2))
+    for patch, col in zip(bp["boxes"], colours):
+        patch.set_facecolor(col)
+        patch.set_alpha(0.7)
+
+    ax.axhline(0, color="black", linewidth=0.8, linestyle="--")
+    ax.set_xticks([1, 3])
+    ax.set_xticklabels(["Δ steer\n(+mutations)", "Δ revert\n(−contaminants)"], fontsize=9)
+    ax.set_ylabel(f"Change in {ylabel.split('(')[0].strip()}", fontsize=9)
+    ax.set_title(metric.replace("_", " "), fontsize=10)
+
+legend_handles = [
+    mlines.Line2D([], [], color=COLOURS["pose_holds"],    linewidth=6, label="pose_holds"),
+    mlines.Line2D([], [], color=COLOURS["pose_collapses"],linewidth=6, label="pose_collapses"),
+]
+axes[0].legend(handles=legend_handles, fontsize=8)
+
+fig.suptitle("Change in Boltz-2 metrics at each transition\n"
+             "Positive = increase, Negative = decrease",
+             fontsize=10)
+plt.tight_layout()
+plt.savefig(OUT_DIR / "a2_deltas_boxplot.png", bbox_inches="tight")
+plt.show()
+```
+
+### Summary table
+
+```{python}
+rows = []
+for metric, (_, _, label) in METRICS.items():
+    ic = f"init_{metric}"; sc = f"steered_{metric}"; rc = f"reverted_{metric}"
+    for verdict, grp in [("pose_holds", ph), ("pose_collapses", pc)]:
+        d_steer  = (grp[sc] - grp[ic]).median()
+        d_revert = (grp[rc] - grp[sc]).median()
+        rows.append({
+            "Metric":          metric,
+            "Verdict":         verdict,
+            "Initial (median)":  round(grp[ic].median(), 3),
+            "Steered (median)":  round(grp[sc].median(), 3),
+            "Reverted (median)": round(grp[rc].median(), 3),
+            "Δ steer (median)":  round(d_steer, 3),
+            "Δ revert (median)": round(d_revert, 3),
+        })
+
+summary = pd.DataFrame(rows)
+
+def colour_delta(val):
+    if not isinstance(val, (int, float)) or np.isnan(val): return ""
+    # For RMSD: negative delta is good (lower RMSD). For iptm/plddt: positive is good.
+    return "background-color: #e8f5e9" if val > 0.01 else (
+           "background-color: #ffebee" if val < -0.01 else "")
+
+display(summary.style.hide(axis="index")
+        .map(colour_delta, subset=["Δ steer (median)", "Δ revert (median)"])
+        .set_properties(**{"text-align": "left"})
+        .set_table_styles([{"selector": "th", "props": [("text-align", "left")]}]))
+```
+
+*Note: for iptm and interface pLDDT, positive Δ = improvement. For receptor
+RMSD, negative Δ = improvement (lower RMSD = better folded receptor).*
+
+---
+
+## Statistical analysis — mixed ANOVA and post-hoc Tukey
+
+### Design
+
+A **mixed two-way ANOVA** tests whether receptor RMSD differs systematically
+across:
+
+- **Within-subjects factor: stage** (initial, steered, reverted) — each seed
+  is measured at all three stages, so this is a repeated-measures factor.
+- **Between-subjects factor: verdict** (pose_holds, pose_collapses) — each
+  seed belongs to exactly one verdict group.
+- **Interaction: stage × verdict** — tests whether the pattern of RMSD change
+  across stages differs between verdict groups.
+
+Each subject is one unique (design, seq, seed, steering_attempt) combination.
+The initial RMSD is the same for all seeds from the same design-sequence pair,
+which violates strict independence at that level. This is noted as a limitation
+but does not affect the steered → reverted paired comparisons.
+
+Post-hoc pairwise comparisons use Tukey HSD (Bonferroni corrected p-values
+from pingouin) to identify which specific stage pairs differ significantly
+within each verdict.
+
+```{python}
+import pingouin as pg
+
+# Reshape to long format: one row per (subject, stage)
+long_rows = []
+for _, row in paired.iterrows():
+    for stage, col in [
+        ("initial",  "init_receptor_rmsd"),
+        ("steered",  "steered_receptor_rmsd"),
+        ("reverted", "reverted_receptor_rmsd"),
+    ]:
+        long_rows.append({
+            "subject":      row["subject"],
+            "verdict":      row["verdict"],
+            "stage":        stage,
+            "receptor_rmsd": row[col],
+        })
+
+long_df = pd.DataFrame(long_rows).dropna(subset=["receptor_rmsd"])
+
+# Enforce stage ordering for display
+stage_order = ["initial", "steered", "reverted"]
+long_df["stage"] = pd.Categorical(long_df["stage"], categories=stage_order, ordered=True)
+
+print(f"Long-format dataset: {len(long_df)} rows  "
+      f"({long_df['subject'].nunique()} subjects × 3 stages)")
+print(f"  pose_holds:    {(long_df.verdict=='pose_holds').sum() // 3} subjects")
+print(f"  pose_collapses:{(long_df.verdict=='pose_collapses').sum() // 3} subjects")
+```
+
+### Mixed ANOVA results
+
+```{python}
+aov = pg.mixed_anova(
+    dv="receptor_rmsd",
+    within="stage",
+    between="verdict",
+    subject="subject",
+    data=long_df,
+)
+
+display(aov[["Source","DF1","DF2","F","p_unc","np2","eps"]]
+        .rename(columns={"DF1":"df1","DF2":"df2",
+                         "p_unc":"p (uncorrected)",
+                         "np2":"η²p (partial)",
+                         "eps":"ε (sphericity)"})
+        .style.hide(axis="index")
+        .format({"F": "{:.3f}", "p (uncorrected)": "{:.4f}",
+                 "η²p (partial)": "{:.4f}",
+                 "ε (sphericity)": lambda x: f"{x:.3f}" if pd.notna(x) else "—"})
+        .map(lambda v: "background-color: #e8f5e9"
+             if isinstance(v, float) and v < 0.05 else "",
+             subset=["p (uncorrected)"])
+        .set_properties(**{"text-align": "left"}))
+```
+
+Greenhouse–Geisser corrected p-values are reported for within-subjects effects
+to account for potential violations of the sphericity assumption.
+η² (generalised) is the effect size: small ≈ 0.01, medium ≈ 0.06, large ≈ 0.14.
+
+### Post-hoc pairwise comparisons — receptor RMSD
+
+```{python}
+posthoc = pg.pairwise_tests(
+    dv="receptor_rmsd",
+    within="stage",
+    between="verdict",
+    subject="subject",
+    data=long_df,
+    padjust="bonf",
+)
+
+# Select informative columns
+cols = ["Contrast","stage","A","B","T","dof","p_unc","p_corr","hedges"]
+display(posthoc[cols]
+        .rename(columns={"p_unc":"p (uncorrected)","p_corr":"p (Bonferroni)","hedges":"Hedges g"})
+        .round({"T": 3, "p (uncorrected)": 4, "p (Bonferroni)": 4, "Hedges g": 3})
+        .style.hide(axis="index")
+        .map(lambda v: "background-color: #e8f5e9" if isinstance(v, float) and v < 0.05 else "",
+             subset=["p (Bonferroni)"])
+        .set_properties(**{"text-align": "left"}))
+```
+
+Significant p-values (< 0.05 after Bonferroni correction) are highlighted
+green. Cohen's d is the standardised effect size for each pairwise comparison.
+
+### Visualising the group means with confidence intervals
+
+```{python}
+fig, ax = plt.subplots(figsize=(7, 5))
+
+for verdict, col, label in [
+    ("pose_holds",    "#1565C0", "pose_holds (genuine)"),
+    ("pose_collapses","#B71C1C", "pose_collapses (non-genuine)"),
+]:
+    grp = long_df[long_df["verdict"] == verdict]
+    means = grp.groupby("stage")["receptor_rmsd"].mean().reindex(stage_order)
+    sems  = grp.groupby("stage")["receptor_rmsd"].sem().reindex(stage_order)
+    x = range(len(stage_order))
+    ax.errorbar(x, means, yerr=sems * 1.96, fmt="o-",
+                color=col, linewidth=2, markersize=7,
+                capsize=4, label=label)
+
+ax.set_xticks(range(len(stage_order)))
+ax.set_xticklabels(["Initial\n(cold-start)", "Steered\n(+mutations)",
+                    "Reverted\n(−contaminants)"], fontsize=10)
+ax.set_ylabel("Receptor RMSD (Å)", fontsize=10)
+ax.set_title("Mean receptor RMSD (±95% CI) by stage and verdict", fontsize=11)
+ax.legend(fontsize=9)
+plt.tight_layout()
+plt.savefig(OUT_DIR / "a2_rmsd_means_ci.png", bbox_inches="tight")
+plt.show()
+```
+
+---
+
+## Interpretation
+
+> *[Your interpretation here.]*
+>
+> *Questions to address:*
+>
+> **Trajectory plots and delta boxplots:**
+>
+> - *For pose_holds designs: does adding steering mutations increase or*
+>   *decrease iptm and interface pLDDT? Is the direction consistent across*
+>   *individual seeds (do most lines move upward), or is it a median effect*
+>   *driven by outliers?*
+>
+> - *After reversion in pose_holds designs: does iptm recover, stay the*
+>   *same, or drop? What does this tell you about whether the genuine*
+>   *contact mutations are the source of Boltz's confidence, or whether the*
+>   *underlying design was already good enough without them?*
+>
+> - *Receptor RMSD may show a different pattern from iptm and pLDDT.*
+>   *What does it mean if RMSD increases with steering mutations but recovers*
+>   *after reversion — or does not recover?*
+>
+> - *The initial iptm for pose_holds designs is lower than for*
+>   *pose_collapses. Why might designs that will form genuine interface*
+>   *contacts start at lower cold-start Boltz confidence?*
+>
+> **Statistical results:**
+>
+> - *Is the main effect of stage significant? If so, receptor RMSD changes*
+>   *systematically across the pipeline — this is the core test of whether*
+>   *the mutations have a real effect.*
+>
+> - *Is the stage × verdict interaction significant? A significant interaction*
+>   *means the pattern of RMSD change across stages is different for*
+>   *pose_holds vs pose_collapses, which would be the key statistical*
+>   *support for H1.*
+>
+> - *In the post-hoc table, which specific stage pairs are significant?*
+>   *The most important comparisons are:*
+>   *(a) initial vs steered within pose_holds — did mutations worsen RMSD?*
+>   *(b) steered vs reverted within pose_holds — did removing contaminants*
+>   *    recover RMSD?*
+>   *(c) steered vs reverted within pose_collapses — did reversion make*
+>   *    things worse (i.e. was the steered sequence the only thing holding*
+>   *    the complex together)?*
+>
+> - *What is the effect size (η²) for the significant terms? A large η² for*
+>   *the stage × verdict interaction would mean verdict identity explains a*
+>   *substantial fraction of the variance in how receptor RMSD responds to*
+>   *mutations.*
+>
+> **Implications:**
+>
+> - *The representative Boltz metrics in Analysis 1 (cross_sequence_summary)*
+>   *are post-steering/post-reversion. In light of this analysis, what*
+>   *exactly are those features capturing — the quality of the original*
+>   *design, or the quality of the mutations that steering added?*

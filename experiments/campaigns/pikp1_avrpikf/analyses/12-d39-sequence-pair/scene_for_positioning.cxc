@@ -1,0 +1,135 @@
+# Full d39 figure scene, set up for hand positioning.
+#
+# Everything is already applied: models, superposition, colours, side chains,
+# Arg18, dashed distances and every label. All that is left to do by hand is
+# rotate the structure and drag the labels.
+#
+# ONE LABEL PER RESIDUE. ChimeraX allows a single label per residue, so an atom
+# label and a residue label on the same residue, or two atom labels on it,
+# overwrite each other. The three distance values are therefore anchored on
+# NEIGHBOURING residues that carry no name of their own:
+#
+#   "2.97 A"  on residue 44, next to Asp45      (d39_s0)
+#   "2.68 A"  on residue 40, next to Arg39      (d39_s0)
+#   "3.43 A"  on residue 44, next to Val36      (d39_s1)
+#
+# d39_s1 names Val36, the partner in its one remaining contact, plus Thr45 and
+# Lys39, the residues that replaced d39_s0's Asp45 and Arg39 and so removed the
+# other two contacts.
+#
+# They start next to the wrong side chain on purpose. Drag them onto their
+# dashed lines.
+#
+# HOW TO USE
+#   right-click drag             moves a label (mode is set below)
+#   left-click drag              rotates
+#   hide #2 models / show #3 models    switch to the other design
+#   label #2/A:18@CB height 0.5        resize one label, keeps its position
+#
+# WHEN DONE
+#   save positioned.cxs
+# in this folder, then say so. The session stores the camera and every label
+# offset, and the final panels are rendered from it by capture_positioned.cxc,
+# so nothing has to be redone by hand.
+
+close session
+
+open data/wt_pikp1_avrpikf.pdb
+open data/d39_s0_coldstart_s2.pdb
+open data/d39_s1_coldstart_s1.pdb
+rename #1 wt
+rename #2 d39_s0
+rename #3 d39_s1
+
+windowsize 1600 1200
+dssp
+hide atoms
+show cartoon
+set bgColor white
+lighting flat
+graphics silhouettes true width 1.5
+
+# Superpose both designs on the wild-type receptor, then hide the effectors.
+matchmaker #2/A to #1/A
+matchmaker #3/A to #1/A
+hide /B cartoon
+hide /B atoms
+
+# Shared palette with render_wt_vs_design5.cxc.
+color cornflower blue
+color #1/A:33-45 red
+color #2/A:33-48 red
+color #3/A:33-48 red
+color #1/A:73-78 purple
+color #2/A:76-81 purple
+color #3/A:76-81 purple
+color #1/A:14-26 tan
+color #2/A:14-26 tan
+color #3/A:14-26 tan
+
+# The six design region 1 positions that differ between the two sequences.
+# Side chain atoms only, so the cartoon stays design-region red.
+show #2/A:36,39,40,44,45,46 atoms
+show #3/A:36,39,40,44,45,46 atoms
+style #2/A:36,39,40,44,45,46 stick
+style #3/A:36,39,40,44,45,46 stick
+size #2/A:36,39,40,44,45,46 stickRadius 0.15
+size #3/A:36,39,40,44,45,46 stickRadius 0.15
+color #2/A:36,39,40,44,45,46 & sidechain dark slate gray target a
+color #3/A:36,39,40,44,45,46 & sidechain dark slate gray target a
+color #2/A:36,39,40,44,45,46 & sidechain byhetero target a
+color #3/A:36,39,40,44,45,46 & sidechain byhetero target a
+
+# Arg18, the one helix A residue whose contact with the loop differs.
+show #2/A:18 atoms
+show #3/A:18 atoms
+style #2/A:18 stick
+style #3/A:18 stick
+size #2/A:18 stickRadius 0.15
+size #3/A:18 stickRadius 0.15
+color #2/A:18 & sidechain tan target a
+color #3/A:18 & sidechain tan target a
+color #2/A:18 & sidechain byhetero target a
+color #3/A:18 & sidechain byhetero target a
+
+hide H
+
+# Dashed contacts. d39_s0 keeps a salt bridge to Asp45 and a guanidinium pair
+# with Arg39; in d39_s1 both partners are substituted away and only a van der
+# Waals approach to the Val36 methyl is left.
+~distance
+distance #2/A:18@NE #2/A:45@OD2
+distance #2/A:18@NH2 #2/A:39@NH2
+distance #3/A:18@NE #3/A:36@CG2
+distance style color black dashes 8 radius 0.05 decimalPlaces 2
+label delete pseudobonds
+
+# Residue names, one per residue.
+label #2/A:18 residues text "Arg18" height 0.7 color black
+label #2/A:39 residues text "Arg39" height 0.7 color black
+label #2/A:45 residues text "Asp45" height 0.7 color black
+label #3/A:18 residues text "Arg18" height 0.7 color black
+label #3/A:39 residues text "Lys39" height 0.7 color black
+label #3/A:45 residues text "Thr45" height 0.7 color black
+
+# Distance values, on neighbouring residues that carry no name.
+label #2/A:44 residues text "2.97 A" height 0.7 color black
+label #2/A:40 residues text "2.68 A" height 0.7 color black
+label #3/A:36 residues text "Val36" height 0.7 color black
+label #3/A:44 residues text "3.43 A" height 0.7 color black
+
+view orient
+turn x 225
+turn y 345
+turn z 45
+turn y -30
+turn x -10
+view
+zoom 1.15
+
+# Right-click drags labels.
+mousemode rightMode "move label"
+
+hide #1 models
+hide #3 models
+show #2 models

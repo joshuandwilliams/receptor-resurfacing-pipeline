@@ -1,0 +1,74 @@
+# Render the final panels from the hand-positioned session.
+#
+# scene_for_positioning.cxc sets the scene up; the camera and every label
+# offset are then fixed by hand and saved with
+#
+#     save positioned.cxs
+#
+# This script reopens that session and writes the panels from it, so the hand
+# positioning is preserved exactly and never has to be repeated. It sets no
+# camera and moves no label.
+#
+# WHAT IT REMOVES, AND WHY. The dashed contacts in the wild type and in d39_s1
+# are dropped on Mark's advice: they are not hydrogen bonds and drawing them in
+# the same style as a real one is misleading.
+#
+#   wild type   Arg18 NE to the Arg41 and Leu40 backbone carbonyls, 3.42 and
+#               3.43 A. Long for an N...O bond, where 2.8-3.2 A is typical, and
+#               the geometry is not checked here.
+#   d39_s1      Arg18 NE to the Val36 methyl, 3.43 A. A carbon, so it cannot
+#               hydrogen bond at all.
+#
+#   d39_s0      Arg18 NH2 to the Arg39 guanidinium, 2.68 A. Two positively
+#               charged groups, so repulsive rather than bonding.
+#
+# Only the 2.97 A Arg18 to Asp45 salt bridge is left, which is the one real
+# hydrogen bond of the four.
+#
+# The side chains and residue names stay. Leu40, Arg41 and Val36 all lie inside
+# design region 1, so they are covered by the key as design region 1 side
+# chains and do not depend on a contact being drawn.
+#
+# Run from this directory, in the GUI, because ChimeraX on macOS cannot save
+# images under --nogui (no OpenGL):
+#     ChimeraX capture_positioned.cxc
+#
+# Then compose with:
+#     python3 build_thesis_panels.py
+
+close session
+open positioned.cxs
+
+# Drop the non-hydrogen-bond dashes and their value labels.
+~distance #1
+~distance #3
+~distance #2/A:18@NH2 #2/A:39@NH2
+label delete #1/A:42 residues
+label delete #1/A:39 residues
+label delete #3/A:44 residues
+label delete #2/A:40 residues
+# Val36 was labelled only because it anchored the removed 3.43 A dash. Its side
+# chain stays, as one of the six differing positions, but unnamed like the
+# other five. That leaves 18, 39 and 45 named in both design panels, so the eye
+# reads Asp45 to Thr45 and Arg39 to Lys39 against an unchanged Arg18.
+label delete #3/A:36 residues
+
+# Thr45 and Lys39 are re-asserted here because they did not survive into the
+# saved session. They are the two substitutions that remove the Asp45 salt
+# bridge, so panel B needs them named to be readable against d39_s0.
+label #3/A:45 residues text "Thr45" height 0.7 color black
+label #3/A:39 residues text "Lys39" height 0.7 color black
+
+# One model at a time at the session's camera, so the panels stay size-matched.
+hide #1,2,3 models
+show #1 models
+save renders/panel_a_wt.png width 4800 supersample 3 transparentBackground true
+hide #1 models
+show #2 models
+save renders/panel_b_d39_s0.png width 4800 supersample 3 transparentBackground true
+hide #2 models
+show #3 models
+save renders/panel_c_d39_s1.png width 4800 supersample 3 transparentBackground true
+
+save positioned_nodashes.cxs
+exit

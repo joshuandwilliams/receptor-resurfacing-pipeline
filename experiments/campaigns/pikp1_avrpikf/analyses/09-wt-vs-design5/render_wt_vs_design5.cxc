@@ -1,0 +1,143 @@
+# Two panels for the d26_s1 result: the wild-type Pikp-1 HMA / AVR-PikF complex
+# and the negative-steered d26_s1 prediction, drawn in the same orientation at
+# one camera so the rebuilt design region 1 can be compared directly.
+#
+# The previous version of this figure was two screen captures taken at
+# different scales, which is why its caption had to admit the panels were not
+# size-matched. Here both models are superimposed on the fixed N-terminal block
+# that neither design touches, and the camera is set once and never moved
+# between the two saves, so the scale is identical by construction.
+#
+# Run from this directory:
+#   ChimeraX --offscreen --nogui --exit --script render_wt_vs_design5.cxc
+
+open data/wt_pikp1_avrpikf.pdb
+open data/d26_s1_steered_design01_s0.pdb
+rename #1 wt
+rename #2 d26
+
+# Fix the window aspect first, otherwise the saved image inherits whatever
+# shape the ChimeraX window happens to have and the panels need rescaling
+# afterwards, which is the problem this figure is being rebuilt to avoid.
+windowsize 2000 1500
+
+dssp
+hide atoms
+show cartoon
+set bgColor white
+# Flat shading and silhouettes, matching render_design_regions.cxc so the two
+# structure figures in this chapter look like one set.
+lighting flat
+graphics silhouettes true width 1.5
+
+# Shared palette with the RFdiffusion design-region figure.
+color cornflower blue
+color /B light green
+# Design region 1: 33-45 in the wild type, 33-51 in d26_s1, which samples 19
+# residues against the wild-type 13. Design region 2 is the C-terminal six.
+color #1/A:33-45 red
+color #1/A:73-78 purple
+color #2/A:33-51 red
+color #2/A:79-84 purple
+# The three negative-steering mutations this representative carries. They sit
+# on the competing AVR-Pia surface, outside both design regions.
+color #2/A:22,26,31 goldenrod
+
+# Superimpose on the EFFECTOR, not on the receptor scaffold. Both complexes
+# hold the same AVR-PikF, so matching on it puts the effector in the same place
+# in both panels and any difference the reader sees is a difference in the
+# receptor. Aligning on the receptor N-terminal block instead left the two
+# effectors in different positions, which is what the figure is comparing.
+align #2/B@CA toAtoms #1/B@CA
+
+# Same camera as panel A of the RFdiffusion design-region figure, so the
+# interface is presented from the orientation that figure established. Framed
+# on the union of the two models so neither is clipped, then left alone.
+view orient
+turn x 225
+turn y 345
+turn z 45
+view
+zoom 1.15
+
+hide #2 models
+# 4800 px so that after cropping to the ink the panel still holds more pixels
+# than it is printed with. At 3000 the crop came out 881 px and was being
+# upsampled to 1260 px on the page, which is what produced the ragged black
+# edges along the silhouettes.
+save renders/panel_a_wt.png width 4800 supersample 3 transparentBackground true
+show #2 models
+hide #1 models
+save renders/panel_b_d26_s1.png width 4800 supersample 3 transparentBackground true
+
+# The contact the extended loop could make. The closest Ca-Ca pair between
+# design region 1 and the effector is Thr41 to Gln34 at 6.60 A, but the side
+# chains are more specific: Asp42 of the rebuilt loop puts its carboxylate
+# 3.72 A from the Arg8 guanidinium of AVR-PikF, inside the usual 4 A
+# salt-bridge criterion. That is the interaction worth drawing.
+# The atoms must be displayed or the distance pseudobond has nothing to hang
+# from and silently does not draw.
+show #2/A:42 #2/B:8 atoms
+style #2/A:42 #2/B:8 stick
+size #2/A:42 #2/B:8 stickRadius 0.15
+color #2/A:42 & sidechain byhetero
+color #2/B:8 & sidechain byhetero
+distance #2/A:42@OD1 #2/B:8@NH1
+distance style color black dashes 8 radius 0.09 decimalPlaces 2
+label #2/A:42 text "Asp42" height 1.7 color black offset 0.9,0.9,0
+label #2/B:8 text "Arg8" height 1.7 color black offset 0.9,-1.5,0
+
+# Third panel: an actual close-up. The previous version framed the residues
+# but left the whole complex displayed, so the frame filled with the rest of
+# the structure and the panel looked like the overview again. Here everything
+# outside the contact neighbourhood is hidden first, which is what gives the
+# labels clear space to sit in.
+hide #2 cartoon
+show #2/A:38-46 cartoon
+show #2/B:5-12 cartoon
+# Ser39 also reaches the effector, at 3.68 A to Asn11, so it is shown too.
+# It is a hydroxyl to a backbone-adjacent carbon rather than a charged pair,
+# so it is drawn but not measured.
+show #2/A:39 #2/B:11 atoms
+style #2/A:39 #2/B:11 stick
+size #2/A:39 #2/B:11 stickRadius 0.12
+color #2/A:39 & sidechain byhetero
+color #2/B:11 & sidechain byhetero
+# Frame the shown neighbourhood, then ease out just enough for the labels.
+# zoom takes a factor, so values below 1 zoom OUT; 0.42 shrank the close-up to
+# a fifth of the frame.
+view #2/A:38-46 #2/B:5-12
+# Spun about the vertical screen axis, like turning a plate on a table, so the
+# receptor loop and the effector separate left to right and the gap between
+# them becomes a vertical band of whitespace for the labels. turn z instead
+# rotates the whole scene in the plane of the page, like a clock on a wall,
+# which moves the picture without opening any space up.
+turn y 40
+zoom 0.80
+
+# Labels placed well off the atoms, into the empty part of the frame, and
+# larger now that the panel is a close-up rather than a whole domain.
+# The distance monitor draws its own value onto the dashed line. Deleting all
+# labels here removes it, so the residue names and one value label can then be
+# placed where they do not sit on anything. Doing this the other way round left
+# two "3.72" labels at different sizes and dropped the Asp42 name, because an
+# atom label on OD1 displaces the residue label on 42.
+distance style color black dashes 8 radius 0.05
+label delete
+
+label #2/A:42 text "Asp42" height 1.1 color black offset -4.8,-1.8,0
+label #2/A:39 text "Ser39" height 1.1 color black offset -4.8,2.4,0
+label #2/B:8 text "Arg8" height 1.1 color black offset 3.6,1.6,0
+label #2/A:42@OD1 text "3.72 A" height 1.0 color black offset 0.4,-3.6,0
+distance style color black dashes 8 radius 0.05 decimalPlaces 2
+
+save renders/panel_d_contact.png width 4800 supersample 3 transparentBackground true
+
+# Restore the full cartoon so anything rendered after this is unaffected.
+show #2 cartoon
+
+# Both together, in case an overlay reads better than a side-by-side.
+show #1 models
+color #1 grey
+transparency #1 55
+save renders/panel_c_overlay.png width 4800 supersample 3 transparentBackground true

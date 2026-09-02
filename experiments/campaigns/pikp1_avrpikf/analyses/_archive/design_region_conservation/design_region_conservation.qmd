@@ -1,0 +1,149 @@
+---
+title: "Where in the design regions does ProteinMPNN keep the wild type?"
+subtitle: "crystal_full_test_contig, 128 sequences from 64 backbones"
+date: "2026-08-30"
+format:
+    html:
+        code-fold: true
+        toc: true
+        toc-depth: 3
+        number-sections: true
+        theme: flatly
+        self-contained: true
+jupyter: receptor-analysis
+---
+
+## The question
+
+Counting distinct sequences says how much variety ProteinMPNN produced. It does
+not say where that variety sits. Design region 1 spans two β-strands and the
+loop that links them, and RFdiffusion absorbs the sampled extra length into the
+strands, so the interesting question is whether the sequence follows the
+structure.
+
+Length is the obstacle. Design region 1 runs from 10 to 20 residues against a
+wild-type 13, so position 5 of one design is not position 5 of another. Raw
+per-position entropy over a ragged set answers a different question than the one
+asked, and it treats a conservative substitution as no better than a
+non-conservative one.
+
+Each design region is therefore aligned to its wild-type counterpart with
+BLOSUM62 at gap open −10 and extend −0.5, the settings the benchmarking repo
+took from ChimeraX's matchmaker. Every wild-type position is then scored by the
+mean substitution score of whatever aligned to it across the 128 sequences.
+Insertions push positions out of the alignment rather than shifting the frame,
+so the aligned fraction is a second readout that locates where the extra length
+goes.
+
+`conservation_extract.py` writes `design_region_conservation.csv` from
+`data/crystal_full_test_contig.scored_metadata.csv`, which is the pipeline's own
+sequence table, committed so this document renders without HPC access.
+
+---
+
+## Setup
+
+```{python}
+from pathlib import Path
+
+import matplotlib.pyplot as plt
+import pandas as pd
+
+HERE = Path.cwd()
+if not (HERE / "design_region_conservation.csv").exists():
+    HERE = Path("experiments/campaigns/pikp1_avrpikf/analyses"
+                "/design_region_conservation")
+
+cons = pd.read_csv(HERE / "design_region_conservation.csv")
+meta = pd.read_csv(HERE / "data" / "crystal_full_test_contig.scored_metadata.csv")
+
+wt = str(meta["native_residues"].iloc[0]).split("|")
+print(f"{len(meta)} sequences from {meta['design'].nunique()} backbones")
+print(f"wild-type design region 1: {wt[0]} ({len(wt[0])} residues)")
+print(f"wild-type design region 2: {wt[1]} ({len(wt[1])} residues)")
+```
+
+---
+
+## Per-position conservation
+
+```{python}
+#| label: fig-conservation
+#| fig-cap: "Mean BLOSUM62 score of the residues aligned to each wild-type position, across the 128 designed sequences. Bars are shaded by the fraction of designs in which the position stayed in the alignment. Positive scores mean the wild-type residue was kept or conservatively swapped."
+fig, axes = plt.subplots(1, 2, figsize=(10.0, 4.0),
+                         gridspec_kw={"width_ratios": [13, 6]})
+for ax, region in zip(axes, [1, 2]):
+    b = cons[cons.design_region == region]
+    colours = plt.get_cmap("Blues")(0.25 + 0.6 * b.aligned_fraction)
+    ax.bar(b.wt_position, b.mean_blosum62, color=colours,
+           edgecolor="black", linewidth=0.6)
+    ax.axhline(0, color="black", lw=0.8)
+    ax.set_xticks(b.wt_position)
+    ax.set_xticklabels([f"{r}{p}" for r, p in zip(b.wt_residue, b.wt_position)],
+                       fontsize=8)
+    ax.set_title(f"Design region {region}", fontsize=11)
+    ax.set_xlabel("wild-type position")
+axes[0].set_ylabel("mean BLOSUM62 score")
+fig.tight_layout()
+plt.show()
+```
+
+```{python}
+cons.round(3)
+```
+
+---
+
+## What this shows
+
+```{python}
+dr1 = cons[cons.design_region == 1]
+top = dr1.nlargest(2, "mean_blosum62")
+bot = dr1.nsmallest(2, "mean_blosum62")
+gap = dr1.nsmallest(2, "aligned_fraction")
+print("most conserved in DR1:",
+      ", ".join(f"{r.wt_residue}{r.wt_position} {r.mean_blosum62:+.2f}"
+                for r in top.itertuples()))
+print("least conserved in DR1:",
+      ", ".join(f"{r.wt_residue}{r.wt_position} {r.mean_blosum62:+.2f}"
+                for r in bot.itertuples()))
+print("least often aligned in DR1:",
+      ", ".join(f"{r.wt_residue}{r.wt_position} {r.aligned_fraction:.2f}"
+                for r in gap.itertuples()))
+print(f"DR2 mean across positions: "
+      f"{cons[cons.design_region == 2].mean_blosum62.mean():+.2f}")
+```
+
+* Design region 1 is conserved at its two ends and rebuilt in the middle. Val2
+  scores +3.99 and Ile12 scores +3.64, so the hydrophobic residue at each end is
+  kept or conservatively swapped in nearly every design. Leu8 and Arg9 are the
+  only positions with negative means, at −1.48 and −0.89.
+* The extra length is inserted where the sequence diverges. Leu8 and Arg9 are
+  also the least often aligned positions, at 0.69 and 0.80, against 0.93 or
+  higher everywhere else in the region. Sequence divergence and length
+  insertion pick out the same two positions.
+* This is the sequence counterpart of the RFdiffusion result. The backbone
+  analysis found that anchoring the design region in fixed β-strands forces
+  RFdiffusion to rebuild those strands rather than replace them. ProteinMPNN
+  does the same thing in sequence, keeping the strand anchors and varying the
+  loop between them.
+* Design region 2 is a different case and should not be described as conserved
+  without saying conserved against what. Every one of its six positions has a
+  negative mean BLOSUM62 score, so ProteinMPNN moved away from the wild-type
+  residue at all of them. It is more similar *between designs* than design
+  region 1, which is a statement about diversity rather than about wild-type
+  recovery.
+
+Caveats.
+
+* A mean over 128 alignments hides the shape of the distribution. Val2 has a
+  standard deviation of 0.09 and is genuinely invariant, whereas Gly6 has a
+  mean of +1.36 with a standard deviation of 3.61 and is bimodal rather than
+  moderately conserved.
+* The alignment is to the wild type only. Two designs can both score poorly at
+  a position while being identical to each other, so this measures wild-type
+  recovery and not diversity. The cluster counts measure diversity.
+* Design region 1 spans two strands and a loop, but the assignment of positions
+  to strand or loop here is inferred from the conservation pattern and from the
+  RFdiffusion renders rather than computed from per-design secondary structure.
+  A DSSP pass over the 64 backbones would settle it.

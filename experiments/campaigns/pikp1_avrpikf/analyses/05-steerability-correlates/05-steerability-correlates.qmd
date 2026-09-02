@@ -1,0 +1,294 @@
+---
+title: "Analysis 1 — Hit prediction"
+subtitle: "crystal_full_test_contig (n=128, 38 hits)"
+date: "2026-05-24"
+format:
+    html:
+        code-fold: true
+        toc: true
+        toc-depth: 3
+        number-sections: true
+        theme: flatly
+        self-contained: true
+jupyter: receptor-analysis
+---
+
+## Background
+
+A hit is defined as a design with cross_tier ∈ {A, B, C} — a negsteer outcome
+where the binder discriminates between the true receptor and the scrambled
+negative control.
+
+This analysis asks what features predict hit outcome. The features are split
+into two groups with different practical implications:
+
+**Pre-Boltz features** (Rosetta backbone geometry + MPNN sequence properties)
+are available before the expensive Boltz-2 prediction step. If these predict
+hits, designs could in principle be filtered upstream to save compute.
+
+**Post-Boltz features** (Boltz-2 structural confidence and contact metrics)
+are co-measured with the outcome in the same Boltz run. They cannot be used
+for pre-screening, but they describe which aspects of the Boltz prediction
+quality characterise successful designs — a mechanistic picture of what
+separates hits from non-hits.
+
+The two groups are modelled separately. Mixing them in a single model would
+cause the Boltz features to dominate and obscure any pre-Boltz signal.
+
+Features excluded and why are documented in `00_glossary.qmd`.
+
+---
+
+## Setup
+
+```{python}
+import sys
+sys.path.insert(0, ".")
+from helpers import (
+    load_run, RUNS, OUT_DIR, SEED,
+    backbone_cv, fit_and_shap, lgbm_classifier,
+    beeswarm, dependence, top_features,
+    STAGE_COLOURS,
+)
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from IPython.display import display
+
+df = load_run("crystal", RUNS["crystal"])
+
+print(f"n = {len(df)} designs  |  hits = {df['hit'].sum()} ({df['hit'].mean()*100:.1f}%)")
+print(f"Backbone groups (design_idx): {df['design_idx'].nunique()}")
+```
+
+### Feature sets
+
+```{python}
+FEATS_PRE_BOLTZ = [
+    # Rosetta / backbone stage
+    "sc_value",           # shape complementarity
+    "dSASA_int",          # buried interface area
+    "delta_unsatHbonds",  # unsatisfied H-bonds (tentative: Rosetta rotamers)
+    "loop1_len",          # RFDiffusion loop length choice
+    # MPNN / sequence stage
+    "mpnn_score",
+    "design_region_score",
+    "loop_hydrophob_frac",
+    "loop_net_charge",
+    "loop_has_proline",
+]
+
+FEATS_POST_BOLTZ = [
+    "rep_iptm_median",
+    "rep_interface_plddt_median",
+    "rep_independent_receptor_rmsd_median",
+    "rep_independent_effector_rmsd_median",
+    "rep_n_contact_residues_median",
+]
+
+stage_legend = pd.DataFrame([
+    {"Group": "Pre-Boltz — Rosetta",  "Colour": "red",   "Features": "sc_value, dSASA_int, delta_unsatHbonds, loop1_len"},
+    {"Group": "Pre-Boltz — MPNN",     "Colour": "blue",  "Features": "mpnn_score, design_region_score, loop_hydrophob_frac, loop_net_charge, loop_has_proline"},
+    {"Group": "Post-Boltz — Boltz",   "Colour": "green", "Features": "rep_iptm_median, rep_interface_plddt_median, rep_independent_receptor_rmsd_median, rep_independent_effector_rmsd_median, rep_n_contact_residues_median"},
+])
+display(stage_legend.style.hide(axis="index"))
+```
+
+---
+
+## Part A — Pre-Boltz prediction
+
+### Hypotheses
+
+**H0:** No backbone geometry or sequence feature measured before Boltz is run
+predicts hit outcome. Hit probability is uniform across the space of designs
+that pass the sc ≥ 0.3 Rosetta filter.
+
+*Rationale:* The design pipeline applies a coarse quality filter at the Rosetta
+stage, but the 64 passing backbones may be broadly equivalent in hit potential.
+Similarly, MPNN sequence probability may be unrelated to the specificity that
+negsteer rewards.
+
+**H1:** One or more upstream features predict hit outcome, meaning designs could
+be filtered before running the expensive Boltz step.
+
+*Rationale:* RFDiffusion's loop length choice constrains the backbone geometry
+in ways that may favour or disfavour correct effector placement. Sequence
+composition (charge, proline, hydrophobicity) may influence how Boltz folds the
+complex and therefore which designs produce high-confidence interface predictions.
+
+### Model
+
+LightGBM binary classifier. Cross-validation uses `GroupShuffleSplit` by
+backbone (`design_idx`) so sibling sequences from the same backbone always land
+in the same fold, preventing leakage between the two MPNN samples per backbone.
+
+```{python}
+groups = df["design_idx"]
+X_pre  = df[FEATS_PRE_BOLTZ].apply(pd.to_numeric, errors="coerce").fillna(
+         df[FEATS_PRE_BOLTZ].apply(pd.to_numeric, errors="coerce").median())
+y      = df["hit"]
+
+model_pre = lgbm_classifier()
+auc_mean, auc_std = backbone_cv(model_pre, X_pre, y, groups, "roc_auc")
+print(f"Pre-Boltz CV AUC = {auc_mean:.3f} ± {auc_std:.3f}")
+```
+
+### Results
+
+#### Cross-validated AUC
+
+A CV AUC near 0.5 means the pre-Boltz features carry no predictive signal —
+the model performs at chance on held-out backbones. An AUC substantially above
+0.5 would indicate that designs could be filtered before running Boltz.
+
+#### SHAP beeswarm
+
+Even when overall AUC is near chance, the beeswarm reveals which features
+the model weighted most heavily. When AUC is near 0.5 these should be
+interpreted with caution — the model may be fitting noise. Look for features
+where the SHAP value direction is consistent (all red dots on one side, all
+blue on the other) as a sign of a genuine signal rather than noise.
+
+```{python}
+_, sv_pre = fit_and_shap(lgbm_classifier(), X_pre, y)
+beeswarm(
+    sv_pre, X_pre,
+    title="Pre-Boltz hit prediction — crystal_full_test_contig\n"
+          "Red = Rosetta/backbone   Blue = MPNN sequence",
+    save_name="a1_pre_boltz_beeswarm",
+)
+```
+
+#### Dependence plots — top 3 features
+
+```{python}
+top3_pre = top_features(sv_pre, list(X_pre.columns), n=3)
+for i, feat in enumerate(top3_pre):
+    colour_by = top3_pre[1] if feat != top3_pre[1] else top3_pre[2]
+    dependence(
+        sv_pre, X_pre, feat, colour_by,
+        title=f"Pre-Boltz — {feat}",
+        save_name=f"a1_pre_boltz_dep_{i+1}_{feat}",
+    )
+```
+
+### Interpretation
+
+> *[Your interpretation here.]*
+>
+> *Questions to address:*
+>
+> - *Is the CV AUC above or below 0.5? Does this support or reject H0?*
+> - *Which feature tops the beeswarm? Is the SHAP direction consistent across*
+>   *all designs, or scattered? A scattered pattern at low AUC suggests the*
+>   *model is fitting noise rather than a real signal.*
+> - *`loop1_len` represents RFDiffusion's choice of how long to make the*
+>   *central de novo loop (10–20 residues). If it ranks highly with a*
+>   *consistent direction, shorter or longer loops are systematically*
+>   *more likely to succeed — an actionable finding for future runs.*
+> - *`loop_has_proline` is binary. In the dependence plot, do designs with*
+>   *proline (value = 1) consistently have negative SHAP (pushed toward*
+>   *non-hit)? If so, this is directly testable by excluding proline from*
+>   *the designed region via `proteinmpnn_omit_AA`.*
+> - *The MPNN score metrics reflect how natural the designed sequence is for*
+>   *the backbone. A consistent signal here would suggest that more "natural"*
+>   *sequences are more likely to hit — but given the low sequence recovery*
+>   *rate (~12%), how meaningful is this measure of naturalness?*
+
+---
+
+## Part B — Post-Boltz prediction
+
+### Hypotheses
+
+**H0:** No Boltz-2 structural quality metric is systematically associated with
+hit outcome. Designs that pass the Rosetta filter are equally likely to be hits
+regardless of their Boltz prediction confidence.
+
+*Rationale:* If Boltz places the effector at the correct interface in all cases,
+then confidence metrics would not discriminate between hits and non-hits — the
+outcome would depend only on the sequence specificity, not the prediction quality.
+
+**H1:** Specific Boltz-2 quality metrics characterise hits, identifying which
+aspects of the structural prediction determine success.
+
+*Rationale:* Based on the within-backbone sibling analysis, interface pLDDT and
+receptor RMSD both strongly discriminate which sibling hits (88% and 81%
+accuracy respectively). These metrics reflect whether Boltz predicts a
+geometrically coherent, well-defined interface — and that geometric coherence
+may be the primary gate between a correctly-placed effector and a confirmed hit.
+
+Note: these features are co-measured with the outcome in the same Boltz run.
+This analysis is mechanistic — it describes what a hit looks like in Boltz
+prediction space — not a prediction of hits before Boltz is run.
+
+### Model
+
+```{python}
+X_post = df[FEATS_POST_BOLTZ].apply(pd.to_numeric, errors="coerce").fillna(
+         df[FEATS_POST_BOLTZ].apply(pd.to_numeric, errors="coerce").median())
+
+model_post = lgbm_classifier()
+auc_mean_post, auc_std_post = backbone_cv(model_post, X_post, y, groups, "roc_auc")
+print(f"Post-Boltz CV AUC = {auc_mean_post:.3f} ± {auc_std_post:.3f}")
+```
+
+### Results
+
+#### Cross-validated AUC
+
+The AUC here is expected to be higher than Part A. The key questions are
+(1) how high, and (2) whether a model trained only on Boltz quality metrics
+generalises across backbones — i.e. whether the same Boltz signatures predict
+hits on backbones it has not seen.
+
+#### SHAP beeswarm
+
+```{python}
+_, sv_post = fit_and_shap(lgbm_classifier(), X_post, y)
+beeswarm(
+    sv_post, X_post,
+    title="Post-Boltz hit prediction — crystal_full_test_contig\n"
+          "All features from Boltz-2 prediction (co-measured with outcome)",
+    save_name="a1_post_boltz_beeswarm",
+)
+```
+
+#### Dependence plots — top 3 features
+
+```{python}
+top3_post = top_features(sv_post, list(X_post.columns), n=3)
+for i, feat in enumerate(top3_post):
+    colour_by = top3_post[1] if feat != top3_post[1] else top3_post[2]
+    dependence(
+        sv_post, X_post, feat, colour_by,
+        title=f"Post-Boltz — {feat}",
+        save_name=f"a1_post_boltz_dep_{i+1}_{feat}",
+    )
+```
+
+### Interpretation
+
+> *[Your interpretation here.]*
+>
+> *Questions to address:*
+>
+> - *Which Boltz metric ranks highest? The sibling analysis found interface*
+>   *pLDDT was the strongest discriminator (88%), with receptor RMSD second*
+>   *(81%). Does the population-level SHAP agree?*
+> - *For `rep_independent_receptor_rmsd_median`: in the dependence plot,*
+>   *is there a clear threshold above which SHAP becomes strongly negative*
+>   *(predicting non-hit)? A threshold would suggest a natural filter cutoff.*
+> - *`rep_n_contact_residues_median` measures the total number of receptor*
+>   *residues contacted. Is more contact always better, or is there a plateau*
+>   *or reversal at very high contact counts (over-packing)?*
+> - *`rep_independent_effector_rmsd_median` measures whether the binder itself*
+>   *folds differently in complex vs alone. A high SHAP contribution here*
+>   *would suggest the binder's own fold quality matters as much as the*
+>   *receptor's — which would be unexpected given that the binder sequence*
+>   *is being specifically designed for this backbone.*
+> - *The CV AUC tells you how well these Boltz metrics generalise across*
+>   *different backbones. If high (> 0.85), the same quality thresholds*
+>   *apply across all 64 backbone designs. If moderate (0.65–0.85), the*
+>   *relationship between Boltz quality and hits is backbone-dependent.*

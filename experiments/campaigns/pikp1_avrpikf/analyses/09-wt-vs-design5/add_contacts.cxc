@@ -1,0 +1,26 @@
+# Side-chain heavy-atom contacts within 4.5 A between the LOOP of design
+# region 1 and AVR-PikF, in the d26_s1 steered prediction.
+#
+# The loop is residues 41-45, from DSSP on this design: 33-40 and 46-51 are
+# the two beta strands, 41-45 the turn between them. Gly44 has no side chain
+# past Cbeta, and Thr41, Ser43 and Glu45 make no contact within 4.5 A, so
+# every contact from the loop comes from Asp42.
+#
+#   D42 OD1 - R8  NH1   3.72   carboxylate to guanidinium, a salt bridge
+#   D42 OD2 - R33 CB    3.19   Arg33, but to its Cbeta, not the charged group
+#   D42 OD2 - V32 CG1   4.47
+#
+# Only the first is a defined interaction type; the other two are close
+# approaches to uncharged carbons. This sets no camera, so it can be run on a
+# view already positioned by hand.
+
+show #2/A:42 #2/B:8,32,33 atoms
+style #2/A:42 #2/B:8,32,33 stick
+size #2/A:42 #2/B:8,32,33 stickRadius 0.13
+color #2/A:42 & sidechain byhetero
+color #2/B:8,32,33 & sidechain byhetero
+
+distance #2/A:42@OD1 #2/B:8@NH1
+distance #2/A:42@OD2 #2/B:33@CB
+distance #2/A:42@OD2 #2/B:32@CG1
+distance style color black dashes 8 radius 0.05 decimalPlaces 2

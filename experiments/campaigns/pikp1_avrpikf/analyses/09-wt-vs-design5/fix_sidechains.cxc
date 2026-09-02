@@ -1,0 +1,51 @@
+# The loop contact set for the d26_s1 close-up. Sets no camera, so it can be
+# run on a view already positioned by hand.
+#
+# Written to be re-runnable. Creating a distance that already exists is an
+# error in ChimeraX, and an error aborts the rest of a .cxc, which is why an
+# earlier version drew one dashed line and then silently stopped before the
+# labels. Everything is therefore torn down first and rebuilt.
+#
+# Shown, both with their distance:
+#   Asp42 OD1 - Arg8  NH1   3.72 A   carboxylate to guanidinium, a salt bridge
+# Arg33 is no longer drawn at all. Its closest approach to Asp42 is OD2 to CB
+# at 3.19 A, a carbon in the side-chain stem; the nearest charged nitrogen is
+# NE at 4.89 A, with the rest of the guanidinium 5.6 to 7.7 A away. Showing a
+# labelled arginine beside a labelled aspartate invites the reader to assume a
+# salt bridge that is not there, and dropping the dashed line without dropping
+# the residue would make that worse, not better.
+#
+# Val32 CG1 at 4.47 A is dropped: uncharged, and the longest of the three.
+
+~distance
+label delete
+hide #2 atoms
+
+# `color ... & sidechain` also repaints the residue's ribbon, so residues that
+# were highlighted in an earlier run keep their grey cartoon after their atoms
+# are hidden. Val32 is the case in point. Resetting the chain colours first
+# undoes any of that.
+color #2 cornflower blue
+color #2/B light green
+color #2/A:33-51 red
+color #2/A:79-84 purple
+color #2/A:22,26,31 goldenrod
+
+show #2/A:42 #2/B:8 atoms
+style #2/A:42 #2/B:8 stick
+size #2/A:42 #2/B:8 stickRadius 0.13
+# Grey carbons with element-coloured tips, matching the side-chain treatment in
+# the d39 figure so the two structure figures read as one set. Restricted to
+# atoms, so the ribbons keep their chain colour. The panel is now a close-up
+# framed on the contact, so there is no longer any risk of the side chains
+# being read as belonging to the wrong chain.
+color #2/A:42 & sidechain dark slate gray atoms
+color #2/B:8 & sidechain dark slate gray atoms
+color #2/A:42 & sidechain byhetero atoms
+color #2/B:8 & sidechain byhetero atoms
+
+distance #2/A:42@OD1 #2/B:8@NH1
+distance style color black dashes 8 radius 0.05 decimalPlaces 2
+
+label #2/A:42 text "Asp42" height 1.1 color black offset -3.4,-2.2,0
+label #2/B:8 text "Arg8" height 1.1 color black offset 2.2,0.3,0

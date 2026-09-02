@@ -1,0 +1,204 @@
+---
+title: "Does design region choice change what RFdiffusion can build?"
+subtitle: "Three contig strategies on the same input complex (crystal, 64 designs each)"
+date: "2026-08-29"
+format:
+    html:
+        code-fold: true
+        toc: true
+        toc-depth: 3
+        number-sections: true
+        theme: flatly
+        self-contained: true
+jupyter: receptor-analysis
+---
+
+## The question
+
+Three campaign runs share an input complex, a design count and every downstream
+setting. They differ only in the contig string, so any difference in what
+RFdiffusion builds is attributable to how the design regions were chosen.
+
+| run | regions | designed residues | how the regions were chosen |
+|:--|--:|:--|:--|
+| `crystal_full_test_contig` | 2 | 16–26 | hand-picked, two contiguous blocks |
+| `crystal_auto5A_contig` | 4 | 21–45 | auto-derived from effector contact at 5 Å |
+| `crystal_auto3A_contig` | 6 | 10–19 | auto-derived from effector contact at 3 Å |
+
+The `posed_*` runs are excluded, since they change the input structure as well as
+the contig. `crystal_full_r1_17to21_contig` is excluded because it varies only the
+allowed length of one region, which is the within-strategy question rather than
+the between-strategy one.
+
+Everything below reads `data/<run>.json`, the per-run `rfdiffusion_metrics.json`
+the pipeline already writes, so nothing is recomputed from structures.
+
+```{python}
+import sys
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+
+HERE = Path.cwd()
+if not (HERE / "novelty_common.py").exists():
+    HERE = Path("experiments/campaigns/pikp1_avrpikf/analyses/design_region_novelty")
+sys.path.insert(0, str(HERE.resolve()))
+
+import novelty_common as nc  # noqa: E402
+
+nc.apply_style()
+regions = nc.load_regions()
+designs = nc.load_designs()
+```
+
+---
+
+## Where the design regions sit
+
+Length and placement are different arguments and the summary tables only carry
+length, so the contig strings are drawn directly.
+
+```{python}
+#| label: fig-contig-map
+#| fig-cap: "The three contig strategies along wild-type Pikp-1 HMA numbering. Grey is retained scaffold, colour is rebuilt. Labels give the allowed length range for each design region."
+_ = nc.fig_contig_map()
+```
+
+* The two strategies are not simply coarse and fine versions of each other. `full`
+  rebuilds one large block in the middle of the domain and the C terminus, while
+  both auto strategies scatter regions across the whole length.
+* `auto 3 Å` has the most regions but the fewest designed residues, because four
+  of its six regions are one or two residues wide.
+
+---
+
+## Displacement tracks length, but not equally between strategies
+
+```{python}
+#| label: fig-com-vs-length
+#| fig-cap: "Centre-of-mass displacement of each rebuilt region against its length, pooled over designs and regions. One point per (design, region)."
+from IPython.display import Image
+Image(str(nc.PLOTS / "03_com_vs_length.png"))
+```
+
+* Displacement rises with region length across the pooled data, so any comparison
+  between strategies has to account for the fact that they allow different lengths.
+* The strategies do not merely occupy different parts of that trend. `full` forms
+  a tight, almost linear band, whereas both auto strategies spread widely at every
+  length, including at one and two residues where there is very little to rebuild.
+
+---
+
+## How much of that displacement is the scaffold moving?
+
+Displacement is measured after aligning on the retained scaffold, so it only means
+"the region was rebuilt somewhere new" if the scaffold itself held still.
+
+```{python}
+#| label: tbl-motif
+#| tbl-cap: "Retained-scaffold RMSD to the input, per strategy."
+(designs.groupby("run", sort=False)
+        .agg(designs=("design", "size"),
+             median_total_designed=("total_designed", "median"),
+             median_motif_rmsd=("motif_rmsd", "median"),
+             median_coverage=("design_region_coverage", "median"))
+        .round(3))
+```
+
+* The retained scaffold barely moves under `full`, at a median motif RMSD of
+  0.07 Å, but moves 2.6 Å and 4.0 Å under `auto 3 Å` and `auto 5 Å`.
+* Part of the auto strategies' apparent displacement is therefore the domain
+  drifting rather than the region being rebuilt somewhere novel, so the scatter in
+  the previous figure overstates how much extra novelty they buy.
+
+---
+
+## Placement within a strategy
+
+```{python}
+#| label: fig-com-by-region
+#| fig-cap: "Centre-of-mass displacement per design region, grouped by strategy. Regions are numbered N to C along the receptor."
+Image(str(nc.PLOTS / "01_com_displacement_by_region.png"))
+```
+
+```{python}
+#| label: tbl-regions
+#| tbl-cap: "Per-region length and displacement, by strategy."
+(regions.groupby(["run", "region"], sort=False)
+        .agg(n=("design", "size"), median_length=("length", "median"),
+             median_com=("com_displacement", "median"),
+             median_com_per_res=("com_per_residue", "median"))
+        .round(3).reset_index())
+```
+
+* Displacement varies more between regions within a strategy than it does between
+  strategies, and the C-terminal region moves furthest in all three, at 3.7, 7.2
+  and 6.1 Å.
+* That region is terminal and anchored on one side only, so placement rather than
+  length is what frees it, which is the same conclusion the per-residue column
+  reaches for the single-residue regions of `auto 3 Å`.
+
+---
+
+## Does region length change how varied the designs are?
+
+Region 1 has a 10-20 residue allowance, so RFdiffusion picked a different length
+in different designs. Comparing across those lengths is free of any between-run
+or between-region confound, unlike the three-strategy comparison in
+the three-strategy comparison above.
+
+Diversity is the mean nearest-neighbour distance between two designs' Ca
+coordinates for the same region, which is defined when the two have different
+residue counts. Each design is compared only with designs that came out the same
+length. Comparing against the whole pool instead gives a spurious U, because
+RFdiffusion sampled lengths unevenly around 15 and the extremes then score as
+distant for being a minority rather than for varying among themselves.
+
+Numbers here use the `.trb`-corrected residue mapping. The pipeline's own
+`per_region_lengths` are a proportional guess, wrong for most designs of any
+contig with several variable-length regions. See `trb_metrics.py`.
+
+```{python}
+from IPython.display import Image
+Image("plots/11_length_vs_diversity.png")
+```
+
+* Diversity rises with the length RFdiffusion built, from 0.65 Å at 10 residues
+  to 1.14 Å at 20, or +7.0% per added residue. A quadratic term is not supported
+  (p = 0.65), so there is no optimum length within the allowance.
+* The per-design fit gives p = 5e-07, but designs of one length share pairwise
+  distances, so the honest test is at the length-group level. That gives
+  rho = +0.71 over the 11 lengths, p = 0.015.
+
+* The C-terminal region is more varied than region 1 at any length, 2.31 Å on 6
+  residues, which is expected for a region anchored on one side only. The two do
+  not overlap in length, so this is a direction rather than a matched comparison.
+* The retained scaffold held to 0.07 Å across all 64 designs, so none of the
+  above is the fixed framework moving. All 64 designs build the same
+  strand-loop-strand topology, so extra residues lengthen the connecting loop
+  rather than adding elements.
+
+```{python}
+print(open("length_diversity_stats.txt").read())
+```
+
+## What this supports
+
+* Design region choice does change what RFdiffusion builds, but region length is
+  the weaker lever. Anchoring is the stronger one, and the clearest single
+  comparison is the C-terminal region against interior regions of the same length.
+* Larger contiguous regions buy displacement without disturbing the retained
+  scaffold. Fragmented regions buy displacement partly by letting the scaffold
+  move, which is not the kind of novelty the pipeline wants.
+
+Caveats.
+
+* One input complex and one effector, 64 designs per strategy. The contig strings
+  differ in placement and in length at once, so no single comparison isolates
+  either on its own.
+* Centre-of-mass displacement says where a region ended up, not what it looks
+  like. Two very different backbones with the same centroid are indistinguishable
+  here.
+* The auto strategies' motif RMSD means their displacement is measured in a frame
+  that itself moved, so their values are not on the same footing as `full`'s.
