@@ -70,7 +70,6 @@ import sys
 from pathlib import Path
 from typing import List, Tuple
 
-
 # ── Contig parsing ──────────────────────────────────────────────────
 
 def _parse_contigs(
@@ -99,7 +98,7 @@ def _parse_contigs(
     """
     import sys as _sys
     _sys.path.insert(0, str(Path(__file__).resolve().parent))
-    from contig_spec import ContigSpec, FixedSegment, DeNovoSegment  # noqa: E402
+    from contig_spec import ContigSpec, DeNovoSegment, FixedSegment  # noqa: E402
 
     # Tolerate commas by mapping them to spaces.  ContigSpec.from_string
     # is canonical-form-only.

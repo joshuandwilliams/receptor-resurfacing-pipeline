@@ -43,7 +43,6 @@ from typing import Iterable, List, Optional, Set, Tuple
 
 import numpy as np
 
-
 # ── Numpy-level primitives ──────────────────────────────────────────
 
 

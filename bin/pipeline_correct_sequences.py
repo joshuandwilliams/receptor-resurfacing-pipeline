@@ -19,9 +19,6 @@ import csv
 import json
 import os
 
-from contig_utils import THREE_TO_ONE
-
-
 # ---------------------------------------------------------------------------
 # Contig parsing
 # ---------------------------------------------------------------------------
@@ -40,7 +37,7 @@ def parse_contig_segments(contigs, receptor_chain="A"):
     import sys as _sys
     from pathlib import Path as _Path
     _sys.path.insert(0, str(_Path(__file__).resolve().parent))
-    from contig_spec import ContigSpec, FixedSegment, DeNovoSegment  # noqa: E402
+    from contig_spec import ContigSpec, DeNovoSegment, FixedSegment  # noqa: E402
 
     try:
         spec = ContigSpec.from_string(contigs)

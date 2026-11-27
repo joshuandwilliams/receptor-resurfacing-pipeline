@@ -14,7 +14,6 @@ sys.path.insert(0, str(_REPO_ROOT / "bin"))
 import boltz_confidence as bc  # noqa: E402
 import pipeline_thresholds as pt  # noqa: E402
 
-
 # A real Boltz confidence JSON pulled from the per-module fixture.
 _REAL_FIXTURE = (
     _REPO_ROOT

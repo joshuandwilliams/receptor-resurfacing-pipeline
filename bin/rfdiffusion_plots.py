@@ -27,10 +27,10 @@ import numpy as np
 try:
     import matplotlib
     matplotlib.use("Agg")
+    import matplotlib.patches as mpatches
     import matplotlib.pyplot as plt
     from matplotlib.colors import ListedColormap
-    from matplotlib.ticker import MaxNLocator, FormatStrFormatter
-    import matplotlib.patches as mpatches
+    from matplotlib.ticker import FormatStrFormatter, MaxNLocator
     HAS_MPL = True
 except ImportError:
     HAS_MPL = False
@@ -149,7 +149,7 @@ def _get_dendrogram_order(designs):
             rmsd_matrix[i, j] = rmsd
             rmsd_matrix[j, i] = rmsd
 
-    from scipy.cluster.hierarchy import linkage, dendrogram
+    from scipy.cluster.hierarchy import dendrogram, linkage
     from scipy.spatial.distance import squareform
 
     condensed = squareform(rmsd_matrix)
@@ -185,7 +185,7 @@ def _per_region_clustering_data(designs, region_idx):
     """Compute pairwise design-region Cα RMSD + linkage + dendrogram order
     for a single region.  Returns dict {valid, Z, rmsd_matrix, order, n}
     or None if the region has fewer than 2 designs with usable coords."""
-    from scipy.cluster.hierarchy import linkage, dendrogram
+    from scipy.cluster.hierarchy import dendrogram, linkage
     from scipy.spatial.distance import squareform
 
     def _get_region_coords(d, r_idx):

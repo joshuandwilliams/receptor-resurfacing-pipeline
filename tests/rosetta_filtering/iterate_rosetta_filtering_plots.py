@@ -44,12 +44,11 @@ import argparse
 import json
 from pathlib import Path
 
+import matplotlib
 import numpy as np
 
-import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-
 
 # ── Styling (matches production rosetta_filter_plots.py) ───────────────────
 COLOUR_ALL  = "#4C72B0"   # blue (histogram bars — passing region)

@@ -65,7 +65,6 @@ from collections import Counter
 from pathlib import Path
 from typing import Dict, List, Tuple
 
-
 # ── Output schema ────────────────────────────────────────────────────
 #
 # Median values throughout (those are the sortable / thresholdable

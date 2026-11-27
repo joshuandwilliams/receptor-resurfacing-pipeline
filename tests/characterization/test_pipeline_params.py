@@ -13,7 +13,6 @@ sys.path.insert(0, str(_REPO_ROOT / "bin"))
 
 import pipeline_params as pp  # noqa: E402
 
-
 # Minimal valid params set that satisfies the specs we test against.
 _BASE = {
     "project_name": "test",
