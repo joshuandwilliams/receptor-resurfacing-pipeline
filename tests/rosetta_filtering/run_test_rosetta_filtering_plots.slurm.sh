@@ -42,7 +42,7 @@ RESULTS_DIR="${TEST_DIR}/receptor_resurfacing_results"
 METRICS="${RESULTS_DIR}/rosetta_filtering/rosetta_filter_metrics.json"
 OUTDIR="${RESULTS_DIR}/plots_iter"
 
-TEST_SCRIPT="${TEST_DIR}/test_rosetta_filtering_plots.py"
+TEST_SCRIPT="${TEST_DIR}/iterate_rosetta_filtering_plots.py"
 
 # ── Container ─────────────────────────────────────────────────────────────
 # Same image as production ROSETTA_FILTER_PLOTS process — kept in sync

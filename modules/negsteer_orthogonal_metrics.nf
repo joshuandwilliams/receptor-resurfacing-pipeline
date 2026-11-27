@@ -91,7 +91,7 @@ process NEGSTEER_ORTHOGONAL_METRICS {
  * negsteer cohort summaries; this one plots the orthogonal-metrics
  * cascade and joins them back to the upstream cohort context.
  *
- * Mirrors tests/orthogonal_metrics/test_orthogonal_metrics_plots.py
+ * Mirrors tests/orthogonal_metrics/iterate_orthogonal_metrics_plots.py
  * exactly — bin/orthogonal_metrics_plots.py is a verbatim lift with
  * only the production docstring header changed.
  *

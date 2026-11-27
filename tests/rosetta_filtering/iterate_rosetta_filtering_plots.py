@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-test_rosetta_filtering_plots.py
--------------------------------
+iterate_rosetta_filtering_plots.py
+----------------------------------
 Standalone iteration harness for ``rosetta_filter_plots.py``.
 
 Reads the metrics JSON produced by a previous ``test_rosetta_filtering``
@@ -30,7 +30,7 @@ post-render annotation bbox measurement and x-limit extension).
 
 Usage
 -----
-    python test_rosetta_filtering_plots.py \\
+    python iterate_rosetta_filtering_plots.py \\
         --metrics tests/rosetta_filtering/receptor_resurfacing_results/rosetta_filtering/rosetta_filter_metrics.json \\
         --outdir  tests/rosetta_filtering/receptor_resurfacing_results/plots_iter
 

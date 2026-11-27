@@ -320,7 +320,7 @@ process NEGSTEER_CROSS_SEQUENCE {
  * NEGSTEER_PLOTS
  * ──────────────
  * Cohort-level diagnostic plots from cross_sequence_summary.csv.
- * Mirrors the test harness at tests/negative_steering/test_negsteer_plots.py
+ * Mirrors the test harness at tests/negative_steering/iterate_negsteer_plots.py
  * exactly — bin/negsteer_plots.py is a verbatim lift of that script
  * with only the test-path fallback removed (and matching docstring).
  *
@@ -401,7 +401,7 @@ process NEGSTEER_PLOTS {
  * shows the spread of seeds within each sequence so cohort medians
  * can be sanity-checked against per-seed dispersion.
  *
- * Mirrors tests/negative_steering/test_negsteer_within_sequence_plots.py
+ * Mirrors tests/negative_steering/iterate_negsteer_within_sequence_plots.py
  * exactly — bin/negsteer_within_sequence_plots.py is a verbatim
  * lift with only the production docstring header changed.
  *

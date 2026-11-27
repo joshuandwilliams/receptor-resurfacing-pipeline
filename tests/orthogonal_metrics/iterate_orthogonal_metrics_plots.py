@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-test_orthogonal_metrics_plots.py
---------------------------------
+iterate_orthogonal_metrics_plots.py
+-----------------------------------
 Iteration harness for orthogonal-metrics cohort plots.  Thin wrapper
 around ``bin/orthogonal_metrics_plots.py``.
 

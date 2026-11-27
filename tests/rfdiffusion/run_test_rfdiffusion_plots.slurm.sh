@@ -54,7 +54,7 @@ OUTDIR="${TEST_DIR}/receptor_resurfacing_results/plots_iter"
 PROD_SCRIPT="${PIPELINE_DIR}/bin/rfdiffusion_plots.py"
 
 # Test-side python script (this run's iteration target).
-TEST_SCRIPT="${TEST_DIR}/test_rfdiffusion_plots.py"
+TEST_SCRIPT="${TEST_DIR}/iterate_rfdiffusion_plots.py"
 
 # ── Container ─────────────────────────────────────────────────────────────
 # Reuse the rfdiff container — has matplotlib + scipy + numpy.  Uses

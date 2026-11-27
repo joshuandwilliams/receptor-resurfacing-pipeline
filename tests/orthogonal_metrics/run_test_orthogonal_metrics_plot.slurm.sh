@@ -77,7 +77,7 @@ CROSS_SUMMARY_CSV="${PIPELINE_DIR}/tests/negative_steering/receptor_resurfacing_
 
 OUTDIR="${RESULTS_DIR}/plots_iter"
 
-TEST_SCRIPT="${TEST_DIR}/test_orthogonal_metrics_plots.py"
+TEST_SCRIPT="${TEST_DIR}/iterate_orthogonal_metrics_plots.py"
 
 # ── Container ─────────────────────────────────────────────────────────────
 # Same image as production ORTHOGONAL_METRICS_PLOTS process.  Plotting

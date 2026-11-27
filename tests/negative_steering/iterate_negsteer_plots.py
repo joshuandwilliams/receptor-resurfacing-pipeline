@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-test_negsteer_plots.py
-----------------------
+iterate_negsteer_plots.py
+-------------------------
 Iteration harness for negsteer cohort plots.  Thin wrapper around
 ``bin/negsteer_plots.py``.
 

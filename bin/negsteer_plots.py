@@ -8,7 +8,7 @@ Reads cross_sequence_summary.csv produced by NEGSTEER_CROSS_SEQUENCE
 and emits the diagnostic plot suite to --outdir.  Invoked from
 modules/negative_steering.nf::NEGSTEER_PLOTS.
 
-Lifted verbatim from tests/negative_steering/test_negsteer_plots.py;
+Lifted verbatim from tests/negative_steering/iterate_negsteer_plots.py;
 the only differences are (a) the test-path fallback in
 _resolve_csv_path is removed (production always passes --csv
 explicitly) and (b) this header.  The two scripts must stay in sync;

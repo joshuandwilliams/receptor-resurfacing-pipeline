@@ -47,7 +47,7 @@ METADATA="${RESULTS_DIR}/sequences/scored_metadata.csv"
 CLUSTER_CSV="${RESULTS_DIR}/sequences/mpnn_cluster_counts.csv"
 OUTDIR="${RESULTS_DIR}/plots_iter"
 
-TEST_SCRIPT="${TEST_DIR}/test_mpnn_plots.py"
+TEST_SCRIPT="${TEST_DIR}/iterate_mpnn_plots.py"
 
 # ── Container ─────────────────────────────────────────────────────────────
 # Same image as production MPNN_PLOTS process — kept in sync via
