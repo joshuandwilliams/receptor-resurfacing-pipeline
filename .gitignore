@@ -165,3 +165,6 @@ receptor_resurfacing_results/
 # pptx per campaign, and the analyses read them from the run tree rather than
 # from git.
 experiments/campaigns/*/runs/*/agroinfiltrations/
+
+# One-off session report, not part of the repo.
+session_report_*.html
