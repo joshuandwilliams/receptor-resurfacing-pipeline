@@ -14,37 +14,31 @@ The full framing is in `notes/inventory/11_phase_2_plan.md` §1.
 
 ## Quick-start invocations
 
-Three tiers, mutually exclusive — every test carries exactly one:
+Two tiers, mutually exclusive. Every one of the 727 collected tests carries
+exactly one, which `pytest -m "not logic and not check_test_run"` checks by
+collecting nothing.
 
-| Tier | Where it runs | Speed | Typical use |
+| Tier | Where it runs | Count | Typical use |
 |---|---|---|---|
-| `local_unit` | Mac / anywhere with Python | <1 s each | Comparator/helper sanity check during framework development |
-| `local_integration` | Mac (no HPC needed) | seconds–minutes | Pure-Python characterization on saved inputs (Wave 2) |
-| `hpc` | HPC only | hours (full pipeline run + comparison) | After every batch of changes synced to HPC |
+| `logic` | Mac / anywhere with Python | 429 | Comparator and helper tests on synthetic or committed input. Run on every commit. |
+| `check_test_run` | Needs a finished run tree | 298 | Pins output files from a fresh pipeline run against committed reference outputs. |
 
 ```bash
-# Mac — fast comparator sanity check
-pytest -m local_unit
+# Mac — everything that can run without a cluster
+pytest -m logic
 
-# Mac — everything that can run locally (before HPC transfer)
-pytest -m "local_unit or local_integration"
+# After a fresh pipeline run
+RECEPTOR_OUTPUT_ROOT=/path/to/fresh/run pytest -m check_test_run
 
-# HPC — after a fresh pipeline run
-pytest -m hpc
-
-# HPC — full check
+# Both
 pytest
-
-# Filter further by wave
-pytest -m "local_unit and wave1"
-pytest -m "hpc and wave1 and not slow"
 ```
 
 For HPC-tier tests, point the suite at a fresh run directory:
 
 ```bash
 export RECEPTOR_OUTPUT_ROOT=/path/to/fresh/pipeline/run
-pytest -m hpc
+pytest -m check_test_run
 ```
 
 ## Layout
@@ -95,14 +89,14 @@ Per-file mappings live in `notes/inventory/11_phase_2_plan.md` §2.
 
 When a Phase 3+ change legitimately alters behavior (e.g. fixing the Stage 6 AF3 divergence), the reference set must be updated. The procedure is **fully manual** so each update is a deliberate decision, not an automated overwrite.
 
-1. On Mac, run `pytest -m "local_unit or local_integration"`. Confirm the pre-update state is green for everything that does not depend on the affected stage.
+1. On Mac, run `pytest -m logic`. Confirm the pre-update state is green for everything that does not depend on the affected stage.
 2. Sync the change to HPC and run the pipeline.
-3. On HPC, run `pytest -m hpc` (with `RECEPTOR_OUTPUT_ROOT` pointing at the fresh run). Note which tests fail; confirm the failures match the *expected* behavior change.
+3. On HPC, run `pytest -m check_test_run` (with `RECEPTOR_OUTPUT_ROOT` pointing at the fresh run). Note which tests fail; confirm the failures match the *expected* behavior change.
 4. For each expected failure, manually copy the new output file from the HPC run into `tests/full_test_run/example_output_files/`, replacing the old reference.
 5. Update `tests/full_test_run/example_output_files/README.md`:
    - Add an entry to a "Reference set change log" section noting the date, the Phase 3+ commit hash, the affected files, and a one-line summary of why the reference changed.
    - Update any file-description text that has changed (e.g. column added, field renamed).
-6. Re-run `pytest -m hpc`. The previously-failing tests should now pass. Anything still failing is an unexpected regression and needs investigation before commit.
+6. Re-run `pytest -m check_test_run`. The previously-failing tests should now pass. Anything still failing is an unexpected regression and needs investigation before commit.
 7. Commit the reference update and the README update together. Commit message format: `chore(reference): update for <commit hash> — <summary>`.
 
 ## Troubleshooting

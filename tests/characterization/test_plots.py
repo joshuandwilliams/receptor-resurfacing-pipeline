@@ -82,8 +82,7 @@ _PNGS_PRESENT = _enumerate_pngs()
 _PNGS = sorted(set(_PNGS_PRESENT) | set(_ORTHOGONAL_PLOTS_PLACEHOLDERS))
 
 
-@pytest.mark.hpc
-@pytest.mark.wave1
+@pytest.mark.check_test_run
 @pytest.mark.parametrize(
     ("stage", "filename"),
     _PNGS,

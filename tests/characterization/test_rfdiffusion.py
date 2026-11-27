@@ -34,24 +34,21 @@ def out(stage_output_root):
     return stage_output_root("rfdiffusion")
 
 
-@pytest.mark.hpc
-@pytest.mark.wave1
+@pytest.mark.check_test_run
 def test_rfdiffusion_metrics_from_rfdiffusion_filter_py(ref, out):
     """bin/rfdiffusion_filter.py — JSON-DEEP."""
     rel = "rfdiffusion/rfdiffusion_metrics.json"
     compare_json_deep(ref / rel, out / rel).assert_passed()
 
 
-@pytest.mark.hpc
-@pytest.mark.wave1
+@pytest.mark.check_test_run
 def test_filter_summary_from_rfdiffusion_filter_py(ref, out):
     """bin/rfdiffusion_filter.py — JSON-DEEP."""
     rel = "rfdiffusion/filter_summary.json"
     compare_json_deep(ref / rel, out / rel).assert_passed()
 
 
-@pytest.mark.hpc
-@pytest.mark.wave1
+@pytest.mark.check_test_run
 def test_passing_designs_from_rfdiffusion_filter_py(ref, out):
     """bin/rfdiffusion_filter.py — TEXT-EXACT."""
     rel = "rfdiffusion/passing_designs.txt"
@@ -85,7 +82,7 @@ def _passes_filter(n_contacts: int, frac_in: float, min_hotspot_frac: float) -> 
     return frac_in >= min_hotspot_frac if n_contacts > 0 else False
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 def test_rfdiffusion_filter_fail_branch_unit():
     """bin/rfdiffusion_filter.py — fail-branch predicate (no fixture)."""
     # Branch 1: n_contact_pairs == 0 — degenerate input, design has no

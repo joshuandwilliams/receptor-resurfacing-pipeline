@@ -48,16 +48,14 @@ def out(stage_output_root):
     return stage_output_root("negative_steering")
 
 
-@pytest.mark.hpc
-@pytest.mark.wave1
+@pytest.mark.check_test_run
 def test_cross_sequence_summary_from_aggregate(ref, out):
     """bin/cross_sequence_summary.py::aggregate — CSV-EXACT."""
     rel = "negative_steering/cross_sequence_summary.csv"
     compare_csv_exact(ref / rel, out / rel).assert_passed()
 
 
-@pytest.mark.hpc
-@pytest.mark.wave1
+@pytest.mark.check_test_run
 def test_cross_sequence_summary_with_interface_metrics_from_compute_interface_metrics_py(
     ref, out,
 ):
@@ -102,8 +100,7 @@ _CONTROLS_INPUTS = _files_in_subdir(_REF, "negative_steering/controls_inputs") i
 _INDICES = _files_in_subdir(_REF, "negative_steering/indices") if _REF else []
 
 
-@pytest.mark.hpc
-@pytest.mark.wave1
+@pytest.mark.check_test_run
 @pytest.mark.parametrize("filename", _CONTROLS_INPUTS)
 def test_controls_inputs_from_derive_input_indices_py(ref, out, filename):
     """bin/derive_input_indices.py — TEXT-EXACT (controls_inputs/)."""
@@ -111,8 +108,7 @@ def test_controls_inputs_from_derive_input_indices_py(ref, out, filename):
     compare_text_exact(ref / rel, out / rel).assert_passed()
 
 
-@pytest.mark.hpc
-@pytest.mark.wave1
+@pytest.mark.check_test_run
 @pytest.mark.parametrize("filename", _INDICES)
 def test_indices_from_derive_input_indices_py(ref, out, filename):
     """bin/derive_input_indices.py — TEXT-EXACT (indices/)."""

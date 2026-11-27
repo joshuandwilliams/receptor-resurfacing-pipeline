@@ -1,7 +1,7 @@
 """Unit tests for bin/validate_params.py.
 
 These exercise each validator kind and the top-level validate_params()
-entrypoint.  Marked local_unit so they run in the cheap Mac sweep.
+entrypoint.  Marked logic so they run in the cheap Mac sweep.
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ import validate_params as vp  # noqa: E402
 # ── Per-validator kind ──────────────────────────────────────────────
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 class TestIntRange:
     def test_in_range(self):
         assert vp._validate_int_range(5, {"min": 1, "max": 10}) is None
@@ -43,7 +43,7 @@ class TestIntRange:
         assert vp._validate_int_range(99, {"min": 1, "max": None}) is None
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 class TestFloatRange:
     def test_in_range(self):
         assert vp._validate_float_range(2.5, {"min": 0.0, "max": 5.0}) is None
@@ -60,7 +60,7 @@ class TestFloatRange:
         assert err and "< min 0.0" in err
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 class TestChoice:
     def test_in_set(self):
         assert vp._validate_choice("mild", {"values": ["strong", "mild"]}) is None
@@ -70,7 +70,7 @@ class TestChoice:
         assert err and "loud" in err
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 class TestBool:
     def test_true(self):
         assert vp._validate_bool(True, {}) is None
@@ -85,7 +85,7 @@ class TestBool:
         assert err and "expected bool" in err
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 class TestNonEmptyStr:
     def test_normal(self):
         assert vp._validate_non_empty_str("hello", {}) is None
@@ -99,7 +99,7 @@ class TestNonEmptyStr:
         assert err and "empty" in err
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 class TestOptionalPath:
     def test_none(self):
         assert vp._validate_optional_path(None, {}) is None
@@ -112,7 +112,7 @@ class TestOptionalPath:
         assert err and "empty" in err
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 class TestRegex:
     def test_matches(self):
         assert vp._validate_regex("A", {"pattern": r"[A-Za-z]"}) is None
@@ -122,7 +122,7 @@ class TestRegex:
         assert err and "does not match" in err
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 class TestNumSeedsOdd:
     """Validator for the negsteer_num_seeds-must-be-odd rule (audit Q121)."""
 
@@ -152,7 +152,7 @@ class TestNumSeedsOdd:
 # ── End-to-end ──────────────────────────────────────────────────────
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 def test_validate_params_happy_path():
     params = {
         "project_name":            "test_project",
@@ -166,7 +166,7 @@ def test_validate_params_happy_path():
     assert errors == [], f"expected no errors, got {errors}"
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 def test_validate_params_collects_all_errors():
     """All errors are collected — first failure doesn't short-circuit."""
     params = {
@@ -183,14 +183,14 @@ def test_validate_params_collects_all_errors():
     assert any("sc_threshold" in e for e in errors)
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 def test_validate_params_missing_keys_pass_through():
     """Missing keys are not errors — Nextflow defaults will fill in."""
     errors = vp.validate_params({})
     assert errors == []
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 def test_validate_params_unknown_keys_warn_only(capsys):
     """Keys without a spec produce a NOTE on stderr but no error."""
     errors = vp.validate_params({"some_experimental_flag": 42})
@@ -200,7 +200,7 @@ def test_validate_params_unknown_keys_warn_only(capsys):
     assert "no spec entry" in captured.err
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 def test_main_exit_codes(tmp_path):
     """End-to-end via main(): success returns 0, failure returns 1."""
     good = tmp_path / "good.json"
@@ -215,7 +215,7 @@ def test_main_exit_codes(tmp_path):
     assert vp.main(["--params-json", str(missing)]) == 2
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 def test_coverage_report_runs():
     """--report path doesn't crash and surfaces coverage gaps."""
     text = vp.coverage_report()
@@ -226,7 +226,7 @@ def test_coverage_report_runs():
 # ── Pose Solver restraint params ────────────────────────────────────
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 class TestPoseSolverPairsRegex:
     spec = next(s for s in vp.PARAM_SPECS if s.name == "pose_solver_pairs")
     pat = spec.kwargs["pattern"]
@@ -253,7 +253,7 @@ class TestPoseSolverPairsRegex:
         assert err and "does not match" in err
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 class TestPoseSolverExclusionsRegex:
     spec = next(s for s in vp.PARAM_SPECS if s.name == "pose_solver_exclusions")
     pat = spec.kwargs["pattern"]
@@ -274,7 +274,7 @@ class TestPoseSolverExclusionsRegex:
         assert err and "does not match" in err
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 class TestPoseSolverContigDesignRegionRegex:
     spec = next(s for s in vp.PARAM_SPECS
                 if s.name == "pose_solver_contig_design_region")
@@ -294,7 +294,7 @@ class TestPoseSolverContigDesignRegionRegex:
         assert err and "does not match" in err
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 class TestBranchAPoseSolverPairsRequired:
     def test_branch_b_is_ok(self):
         # Branch B (receptor_input absent) — no rule applies.
@@ -341,7 +341,7 @@ class TestBranchAPoseSolverPairsRequired:
         assert errors == []
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 class TestPoseSolverPairDistanceBoundsOrdered:
     def test_default_ordering_ok(self):
         errors = vp.validate_params({

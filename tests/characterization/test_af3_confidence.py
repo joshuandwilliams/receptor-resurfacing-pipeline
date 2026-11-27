@@ -42,7 +42,7 @@ def _make_aggregate_with(ra_effs, iptms, failures=None, cif_paths=None):
     return a
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 class TestAggregateMath:
     def test_best_ra_eff_is_min(self):
         a = _make_aggregate_with([5.0, 3.0, 7.0], [])
@@ -75,7 +75,7 @@ class TestAggregateMath:
         assert a.total_predictions == 3
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 class TestThresholdMethods:
     def test_n_correct_interface_counts_below_threshold(self):
         a = _make_aggregate_with([2.0, 4.0, 4.999, 5.0, 6.0], [])
@@ -112,7 +112,7 @@ class TestThresholdMethods:
         assert a.af3_disagrees(t) is False
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 class TestSummaryRow:
     def test_summary_row_schema_matches_existing_csv(self):
         a = _make_aggregate_with([3.5, 4.5], [0.6, 0.7])
@@ -142,7 +142,7 @@ class TestSummaryRow:
         assert "no_cif_files_found" in row["af3_nomsa_failures"]
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 class TestFailureHandling:
     def test_failures_round_trip(self):
         a = _make_aggregate_with(
@@ -161,7 +161,7 @@ class TestFailureHandling:
         assert "c" not in a.failures
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 class TestParsingFromEmptyDir:
     def test_missing_dir_emits_failure_tag(self, tmp_path):
         a = af3.AF3ConfidenceAggregate(

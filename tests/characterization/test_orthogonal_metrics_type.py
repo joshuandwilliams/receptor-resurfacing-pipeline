@@ -37,7 +37,7 @@ def _fake_af3(best_ra_eff=2.0):
     return a
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 class TestConstruction:
     def test_basic(self, tmp_path):
         m = om.OrthogonalMetrics(
@@ -65,7 +65,7 @@ class TestConstruction:
                 canonical_prediction=_fake_psp(tmp_path), af3="not af3")
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 class TestOrthogonalGate:
     """Sc + BSA + ΔΔG only — interface_plddt explicitly NOT in the gate."""
 
@@ -112,7 +112,7 @@ class TestOrthogonalGate:
         assert "sc" in failed and "bsa" in failed and "ddg" in failed
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 class TestAF3Informational:
     def test_disagreement_is_informational_only(self, tmp_path):
         m = om.OrthogonalMetrics(
@@ -125,7 +125,7 @@ class TestAF3Informational:
         assert m.passes_orthogonal_filters(t) is True
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 class TestSummaryRow:
     def test_has_orthogonal_and_af3_keys(self, tmp_path):
         m = om.OrthogonalMetrics(
@@ -153,7 +153,7 @@ class TestSummaryRow:
         assert row["hbonds"] == ""
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 class TestImmutability:
     def test_frozen(self, tmp_path):
         m = om.OrthogonalMetrics(

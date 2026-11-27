@@ -31,7 +31,7 @@ def _write_pdb(path: Path, lines):
 # ── Numpy primitives ────────────────────────────────────────────────
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 class TestCentroid:
     def test_basic(self):
         c = sm.centroid(np.array([[0, 0, 0], [2, 4, 6]], dtype=float))
@@ -50,7 +50,7 @@ class TestCentroid:
             sm.centroid(np.array([[1.0, 2.0, float("nan")]]))
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 class TestCentroidDistance:
     def test_simple(self):
         d = sm.centroid_distance(
@@ -63,7 +63,7 @@ class TestCentroidDistance:
 # ── PDB readers ─────────────────────────────────────────────────────
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 class TestReadChainCaCoords:
     def test_single_chain(self, tmp_path):
         pdb = tmp_path / "test.pdb"
@@ -108,7 +108,7 @@ class TestReadChainCaCoords:
         assert coords.shape == (1, 3)
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 class TestChainCentreOfMass:
     def test_basic(self, tmp_path):
         pdb = tmp_path / "test.pdb"
@@ -125,7 +125,7 @@ class TestChainCentreOfMass:
         assert sm.chain_centre_of_mass(pdb, "B") is None
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 class TestChainComDistance:
     def test_two_chains(self, tmp_path):
         pdb = tmp_path / "test.pdb"
@@ -146,7 +146,7 @@ class TestChainComDistance:
 # ── Clash counting ──────────────────────────────────────────────────
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 class TestClashCount:
     def test_no_clashes(self, tmp_path):
         pdb = tmp_path / "test.pdb"

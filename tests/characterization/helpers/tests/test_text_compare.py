@@ -12,7 +12,7 @@ def _write(path: Path, content: str) -> Path:
     return path
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 def test_compare_text_exact_identity_passes(tmp_path):
     """Identical text files return passed=True."""
     ref = _write(tmp_path / "r.txt", "alpha\nbeta\ngamma\n")
@@ -22,7 +22,7 @@ def test_compare_text_exact_identity_passes(tmp_path):
     result.assert_passed()
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 def test_compare_text_exact_single_byte_difference_fails(tmp_path):
     """A one-character substitution fails and reports the offending line."""
     ref = _write(tmp_path / "r.txt", "alpha\nbeta\ngamma\n")
@@ -32,7 +32,7 @@ def test_compare_text_exact_single_byte_difference_fails(tmp_path):
     assert any("line 2" in d for d in result.differences)
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 def test_compare_text_exact_missing_reference_file_fails(tmp_path):
     """Nonexistent reference path fails cleanly with a clear message."""
     ref = tmp_path / "nope.txt"
@@ -42,7 +42,7 @@ def test_compare_text_exact_missing_reference_file_fails(tmp_path):
     assert "reference" in result.message.lower()
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 def test_compare_text_exact_missing_actual_file_fails(tmp_path):
     """Nonexistent actual path fails cleanly with a clear message."""
     ref = _write(tmp_path / "r.txt", "alpha\n")
@@ -52,7 +52,7 @@ def test_compare_text_exact_missing_actual_file_fails(tmp_path):
     assert "actual" in result.message.lower()
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 def test_compare_text_exact_trailing_newline_difference_fails(tmp_path):
     """Files differing only in a trailing newline are NOT byte-equal — must fail."""
     ref = _write(tmp_path / "r.txt", "alpha\nbeta\n")

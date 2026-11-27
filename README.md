@@ -104,19 +104,19 @@ A reference small-scale params file lives at
 
 Three layers, each with a different cost and a different question it answers:
 
-- **`pytest -m local_unit`** (Mac, fast). Tests the comparator framework itself — the helpers in `tests/characterization/helpers/` that pin reference outputs against fresh runs. Run on every commit during development.
+- **`pytest -m logic`** (Mac, fast). Tests the comparator framework itself — the helpers in `tests/characterization/helpers/` that pin reference outputs against fresh runs. Run on every commit during development.
 - **Per-module Nextflow tests** (HPC, minutes per stage). Each `tests/<module>/test_<module>.nf` runs one pipeline stage end-to-end against a curated fixture in `tests/<module>/data/`. The fixtures are hand-picked from a discovery pipeline run to exercise every distinct path through that stage. Run with the per-module wrappers, e.g. `sbatch tests/negative_steering/run_test_negative_steering.slurm.sh`. This is the primary characterization safety net during refactoring.
-- **`pytest -m hpc`** (HPC, slow). Cohort-level characterization tests that pin output files from a fresh pipeline run against committed reference outputs. Currently parametrized over a legacy sequence trio; restructuring against the per-module reference sets is in progress.
+- **`pytest -m check_test_run`** (HPC, slow). Cohort-level characterization tests that pin output files from a fresh pipeline run against committed reference outputs. Currently parametrized over a legacy sequence trio; restructuring against the per-module reference sets is in progress.
 
 ```bash
 # Local
-pytest -m local_unit
+pytest -m logic
 
 # Per-module on HPC
 sbatch tests/<module>/run_test_<module>.slurm.sh
 
 # Cohort-level characterization on HPC
-RECEPTOR_OUTPUT_ROOT=<run-output-dir> pytest -m hpc
+RECEPTOR_OUTPUT_ROOT=<run-output-dir> pytest -m check_test_run
 ```
 
 See [`tests/characterization/README.md`](tests/characterization/README.md)
@@ -144,7 +144,7 @@ Develop on Mac with Claude Code, sync to HPC with
 `./scripts/sync_to_hpc.sh`, run the pipeline or tests there, iterate.
 The HPC has no git; the Mac repo is authoritative and the only place
 commits happen. Round-trips are slow — plan thoroughly before
-transferring, batch related changes, and lean on `pytest -m local_unit`
+transferring, batch related changes, and lean on `pytest -m logic`
 plus static analysis (`ruff`, `vulture`, `radon`) for fast feedback
 during development.
 
