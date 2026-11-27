@@ -14,7 +14,6 @@ aggregation and the outcome / n_pass / tier decisions.
 
 from __future__ import annotations
 
-import math
 import sys
 from collections import Counter
 from dataclasses import dataclass, field
@@ -30,7 +29,6 @@ from designed_sequence import DesignedSequence  # noqa: E402
 from position_set import PositionSet  # noqa: E402
 from protein_structure_prediction import ProteinStructurePrediction  # noqa: E402
 from stage_result import StageResult  # noqa: E402
-
 
 VALID_ROW_TYPES = frozenset(
     ("steered", "control_scrambled", "control_polyA")
@@ -240,7 +238,6 @@ class NegativeSteeringRun:
         require_pdb : If True (default) skip seeds whose PDB file is
             missing.  If False, allow PSP construction to raise.
         """
-        import csv
         import re
         from pathlib import Path
 

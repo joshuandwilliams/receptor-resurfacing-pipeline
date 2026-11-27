@@ -15,9 +15,9 @@ import pytest
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_REPO_ROOT / "bin"))
 
+import af3_confidence as af3  # noqa: E402
 import orthogonal_metrics as om  # noqa: E402
 import pipeline_thresholds as pt  # noqa: E402
-import af3_confidence as af3  # noqa: E402
 import protein_structure_prediction as psp  # noqa: E402
 
 

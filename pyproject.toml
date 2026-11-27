@@ -9,18 +9,57 @@ description = "Receptor-resurfacing de novo binder design pipeline (Nextflow + P
 requires-python = ">=3.10"
 
 [project.optional-dependencies]
+# The whole dependency list for the logic tier.  A laptop's conda environment
+# supplies these for free and a CI runner does not, so anything missing here
+# fails in CI rather than passing locally by accident.
+#
+# pandas is capped below 3 deliberately.  pandas 3 gives a text column read by
+# read_csv dtype `str` rather than `object`, which silently disabled the path
+# normalisation in tests/characterization/helpers/csv_compare.py.  That guard
+# is fixed and works under both, so the cap is about pinning what CI measures
+# rather than about a remaining incompatibility.  Raise it when the figure and
+# table comparators have been checked against 3.x.
 test = [
     "pytest>=7.0",
-    "pandas>=2.0",
+    "pytest-cov>=4.0",
+    "pandas>=2.0,<4",
     "numpy>=1.24",
     "Pillow>=10.0",
     "scikit-image>=0.21",
 ]
-experiments = [
+# The pinned linter, so CI and a local run apply the same rule set.  An
+# unpinned ruff picks up new default rules on release and fails CI on code
+# that passed locally.
+dev = [
+    "ruff==0.15.21",
 ]
 
 [tool.setuptools]
 packages = []
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+# experiments/ holds the twelve campaign analyses and their helper scripts.
+# They are leaving this repository for receptor-resurfacing-analyses, so
+# linting them here is work that moves with them.  Add them to that
+# repository's own lint run instead.
+#
+# The two notebooks under scripts/ are a Colab-era RFDiffusion driver and a
+# teaching notebook.  Nothing imports either, and a notebook's cell order
+# makes I001 and F811 meaningless, so neither is linted.
+exclude = [
+    "experiments",
+    "scripts/RFDiffusion_JoshW_v4_incremental_save_2.ipynb",
+    "scripts/pipeline_intro_for_students.ipynb",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = ["E501"]
+# bin/ is linted like the rest of the repo.  Its sibling imports follow a
+# deliberate sys.path setup, marked with noqa: E402 where it occurs, because a
+# Nextflow stage invokes each script by absolute path with no PYTHONPATH.
 
 [tool.pytest.ini_options]
 # The whole tree, not just characterization/.  The other directories hold the

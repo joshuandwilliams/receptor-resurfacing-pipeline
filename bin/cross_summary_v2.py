@@ -33,7 +33,6 @@ if str(_SCRIPT_DIR) not in sys.path:
 
 from design_cohort import DesignCohort  # noqa: E402
 
-
 _SEQ_NAME_RE = re.compile(r"^[A-Za-z0-9_.+\-]+$")
 
 

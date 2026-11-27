@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import sys
 from collections import Counter
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -206,10 +206,10 @@ class DesignCohort:
             Per-sequence overrides for direct file paths (mirrors the
             existing --passing-summary CLI flag).
         """
-        from cross_sequence_summary import aggregate  # local import
-
         # Sequence-name validation regex (matches the existing CLI).
         import re as _re
+
+        from cross_sequence_summary import aggregate  # local import
         _SEQ_NAME_RE = _re.compile(r"^[A-Za-z0-9_.+\-]+$")
 
         sequences: List[Tuple[str, Path]] = []

@@ -2605,8 +2605,8 @@ def cmd_plan_reversions(args: argparse.Namespace) -> int:
     script_dir = SCRIPT_DIR
     if str(script_dir) not in sys.path:
         sys.path.insert(0, str(script_dir))
-    from boltz2_negative_steering import get_chain_sequence  # type: ignore
     import reversion  # type: ignore
+    from boltz2_negative_steering import get_chain_sequence  # type: ignore
 
     ground_truth = Path(plan["ground_truth"])
     truth_eff_chain = plan["truth_effector_chain"]
@@ -4343,7 +4343,7 @@ def cmd_aggregate(args: argparse.Namespace) -> int:
         # ── Compute reverted_mutations_chimerax / _aa / _total for ──
         # pose_holds rows: cumulative mutation set minus the positions
         # that were reverted.  All other rows leave these blank.
-        # The reversion data lives in cycle_N/(pathway_<label>/)? 
+        # The reversion data lives in cycle_N/(pathway_<label>/)?
         # reversion_results.json keyed by pathway label.
         _populate_reverted_mutations(rows, experiment_root)
 

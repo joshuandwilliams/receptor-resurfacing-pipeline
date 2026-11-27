@@ -54,7 +54,6 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
-
 from contig_utils import THREE_TO_ONE
 
 # Module-level constants.  Also redefined as local variables inside
@@ -326,7 +325,7 @@ def extract_sequences_gemmi(path):
 
 def extract_sequences_biopython(path):
     """Fallback: extract sequences using BioPython."""
-    from Bio.PDB import PDBParser, MMCIFParser
+    from Bio.PDB import MMCIFParser, PDBParser
 
     if path.endswith(".cif") or path.endswith(".mmcif"):
         parser = MMCIFParser(QUIET=True)
@@ -384,14 +383,14 @@ def get_chain_sequence(pdb_path: Path, chain_id: str) -> str:
     """Extract sequence for a specific chain from a PDB file."""
     chains = extract_sequences(str(pdb_path))
     chain_map = {c["id"]: c["sequence"] for c in chains}
-    
+
     if chain_id not in chain_map:
         available = list(chain_map.keys())
         raise ValueError(
             f"Chain {chain_id} not found in {pdb_path}. "
             f"Available chains: {available}"
         )
-    
+
     return chain_map[chain_id]
 
 

@@ -29,17 +29,17 @@ import re
 import sys
 from pathlib import Path
 
-import numpy as np
 import matplotlib
+import numpy as np
+
 matplotlib.use('Agg')
-import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
+import matplotlib.pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap
 from matplotlib.patches import Rectangle
-from scipy.optimize import minimize, differential_evolution
+from scipy.optimize import differential_evolution, minimize
 from scipy.spatial import ConvexHull
 from scipy.spatial.transform import Rotation
-
 
 # ── Objective weights ─────────────────────────────────────────────────────────
 W_VALIDITY = 1e6   # pair residue buried deep inside opposite hull → invalid pose

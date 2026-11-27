@@ -10,8 +10,8 @@ import pytest
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_REPO_ROOT / "bin"))
 
-import position_set as ps  # noqa: E402
 import contig_spec as cs  # noqa: E402
+import position_set as ps  # noqa: E402
 
 
 @pytest.fixture

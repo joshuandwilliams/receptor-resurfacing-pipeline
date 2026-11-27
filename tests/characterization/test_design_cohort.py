@@ -13,8 +13,8 @@ sys.path.insert(0, str(_REPO_ROOT / "bin"))
 
 import design_cohort as dc  # noqa: E402
 import negative_steering_run as nsr  # noqa: E402
-import stage_result as sr  # noqa: E402
 import pipeline_thresholds as pt  # noqa: E402
+import stage_result as sr  # noqa: E402
 from position_set import PositionSet  # noqa: E402
 
 

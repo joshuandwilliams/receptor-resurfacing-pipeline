@@ -35,7 +35,6 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
-
 # ═════════════════════════════════════════════════════════════════════════
 # Private helpers — lifted from bin/parse_af3_output.py
 # ═════════════════════════════════════════════════════════════════════════

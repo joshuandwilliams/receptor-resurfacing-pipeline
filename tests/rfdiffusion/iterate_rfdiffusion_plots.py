@@ -53,17 +53,15 @@ import json
 import os
 from pathlib import Path
 
+import matplotlib
 import numpy as np
 
-import matplotlib
 matplotlib.use("Agg")
-import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
+import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
-
-from scipy.cluster.hierarchy import linkage, dendrogram
+from scipy.cluster.hierarchy import dendrogram, linkage
 from scipy.spatial.distance import squareform
-
 
 # ─── Colours (must match production rfdiffusion_plots.py) ───────────────────
 COLOUR_PASS     = "#1F77B4"
