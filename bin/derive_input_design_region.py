@@ -195,7 +195,7 @@ def _compute_true_interface_0b(
     """
     # Use the same import pattern as boltz2_negative_steering.py line 2249
     sys.path.insert(0, str(Path(__file__).resolve().parent))
-    from compute_metrics import find_contact_residues_heavy  # noqa: E402
+    from structure_metrics import find_contact_residues_heavy  # noqa: E402
 
     contacts = find_contact_residues_heavy(
         str(input_pdb),
@@ -216,7 +216,7 @@ def _extract_receptor_sequence(
 ) -> str:
     """Extract the receptor chain sequence using the existing helper."""
     sys.path.insert(0, str(Path(__file__).resolve().parent))
-    from boltz2_negative_steering import get_chain_sequence  # noqa: E402
+    from structure_metrics import get_chain_sequence  # noqa: E402
     return get_chain_sequence(input_pdb, receptor_chain)
 
 

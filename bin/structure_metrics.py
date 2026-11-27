@@ -211,3 +211,92 @@ def clash_count(
         else:
             outside += n_clashes
     return (in_design, outside)
+
+
+# ── Sequence and interface contacts ──────────────────────────────────
+# Both functions below were this repository's only reason to import from
+# bin/boltz2_negative_steering.py and bin/compute_metrics.py, which belong to
+# the negative-steering engine and are installed separately.  They are
+# reimplemented here on this module's own PDB reader rather than copied, so
+# nothing in this repository depends on engine internals.
+#
+# tests/characterization/test_structure_metrics_ported.py checks both against
+# the engine's originals on every reference PDB in the test fixtures.
+
+def get_chain_sequence(pdb_path: Path, chain_id: str) -> str:
+    """One-letter sequence of `chain_id`, in the order the file lists it.
+
+    One residue per (resnum, icode), taken from the first ATOM record of each,
+    so an altloc does not duplicate a position.  A residue whose three-letter
+    name is not standard becomes 'X', which keeps the sequence the same length
+    as the residue list and so keeps every positional index downstream valid.
+
+    Raises ValueError when the chain is absent, naming the chains that are
+    present, because the alternative is a silent empty string that reads as an
+    empty chain.
+    """
+    from contig_utils import THREE_TO_ONE
+
+    seen: set = set()
+    seq: List[str] = []
+    found = False
+    present: List[str] = []
+    for line in _iter_atom_lines(Path(pdb_path)):
+        ch = line[21]
+        if ch not in present:
+            present.append(ch)
+        if ch != chain_id:
+            continue
+        found = True
+        key = (line[22:26].strip(), line[26])      # resnum plus insertion code
+        if key in seen:
+            continue
+        seen.add(key)
+        seq.append(THREE_TO_ONE.get(line[17:20].strip().upper(), "X"))
+    if not found:
+        raise ValueError(
+            f"Chain {chain_id} not found in {pdb_path}. "
+            f"Available chains: {present}")
+    return "".join(seq)
+
+
+def find_contact_residues_heavy(
+    pdb_path: Path,
+    receptor_chain: str,
+    effector_chain: str,
+    cutoff: float = 5.0,
+) -> List[int]:
+    """0-based positional indices of receptor residues contacting the effector.
+
+    A contact is any heavy atom of the residue within `cutoff` angstroms of any
+    heavy atom of the effector chain.  Hydrogens are excluded by
+    read_chain_heavy_atoms, which is why the cutoff can be as tight as 5 A.
+
+    The index is positional within the receptor chain, counted over
+    (resnum, icode) in file order, so it lines up with get_chain_sequence above
+    and with the design-region and true-interface files, which are also
+    positional.  Returning residue numbers instead would break on any structure
+    that does not start at 1.
+    """
+    import numpy as _np
+
+    rec = read_chain_heavy_atoms(Path(pdb_path), receptor_chain)
+    eff = read_chain_heavy_atoms(Path(pdb_path), effector_chain)
+    if not rec or not eff:
+        return []
+
+    order: List[int] = []
+    for resnum, _atom, _x, _y, _z in rec:
+        if resnum not in order:
+            order.append(resnum)
+    index_of = {rn: i for i, rn in enumerate(order)}
+
+    eff_xyz = _np.asarray([(x, y, z) for _r, _a, x, y, z in eff], dtype=float)
+    hits: set = set()
+    for resnum, _atom, x, y, z in rec:
+        if resnum in hits:
+            continue
+        d = _np.linalg.norm(eff_xyz - _np.asarray((x, y, z), dtype=float), axis=1)
+        if float(d.min()) <= cutoff:
+            hits.add(resnum)
+    return sorted(index_of[rn] for rn in hits)

@@ -84,7 +84,7 @@ from typing import List
 # to boltz2_negative_steering.get_chain_sequence; removed in the
 # Phase 4 free-function consolidation.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from boltz2_negative_steering import (
+from structure_metrics import (
     get_chain_sequence as _extract_chain_sequence,  # noqa: E402,F401
 )
 
