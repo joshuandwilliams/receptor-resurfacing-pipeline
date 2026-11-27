@@ -364,14 +364,16 @@ def _compute_intact_core(
     d = np.sign(np.linalg.det(Vt.T @ U.T))
     R = Vt.T @ np.diag([1.0, 1.0, d]) @ U.T
 
-    # Apply transform to the whole model (receptor + effector).
-    model_translate = N.mean(axis=0) - M.mean(axis=0) @ R.T
-    # Gather all CAs from both chains in the model for RMSD.
+    # A parse probe, not a value. The four calls are repeated by the two dict
+    # comprehensions below, which are not inside a try, so without this a
+    # malformed chain would raise out of the function instead of returning the
+    # whole_chain_parse_failed record the caller expects. The results are
+    # deliberately not bound: the comprehensions build what is actually used.
     try:
-        all_model = list(chain_ca_records(model, receptor_chain)) + \
-                    list(chain_ca_records(model, effector_chain))
-        all_native = list(chain_ca_records(native, receptor_chain)) + \
-                     list(chain_ca_records(native, effector_chain))
+        list(chain_ca_records(model, receptor_chain))
+        list(chain_ca_records(model, effector_chain))
+        list(chain_ca_records(native, receptor_chain))
+        list(chain_ca_records(native, effector_chain))
     except Exception as e:  # noqa: BLE001
         return None, None, f"whole_chain_parse_failed:{type(e).__name__}"
 

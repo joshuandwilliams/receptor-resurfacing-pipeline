@@ -26,7 +26,7 @@ MPNN_DIR = "/opt/ProteinMPNN"
 if os.path.isdir(MPNN_DIR):
     sys.path.insert(0, MPNN_DIR)
 
-import numpy as np
+import numpy as np  # noqa: E402
 
 try:
     import torch
@@ -272,9 +272,12 @@ def main():
                                   f"{design_name}.fa")
 
         missing = []
-        if not os.path.exists(pdb_path): missing.append("PDB")
-        if not os.path.exists(jsonl_path): missing.append("JSONL")
-        if not os.path.exists(fasta_path): missing.append("FASTA")
+        if not os.path.exists(pdb_path):
+            missing.append("PDB")
+        if not os.path.exists(jsonl_path):
+            missing.append("JSONL")
+        if not os.path.exists(fasta_path):
+            missing.append("FASTA")
         if missing:
             print(f"  {design_name}: missing {', '.join(missing)}")
             continue

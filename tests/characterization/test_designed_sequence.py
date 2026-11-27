@@ -17,7 +17,8 @@ import protein_structure_prediction as psp  # noqa: E402
 
 
 def _make_backbone(tmp_path):
-    p = tmp_path / "f.pdb"; p.write_text("")
+    p = tmp_path / "f.pdb"
+    p.write_text("")
     contig = cs.ContigSpec.from_resolved_string("A1-10/5/A15-20 B")
     s = psp.ProteinStructurePrediction(
         path=p, receptor_chain="A", effector_chain="B")

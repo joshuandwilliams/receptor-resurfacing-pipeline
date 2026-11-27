@@ -98,9 +98,12 @@ def read_ca(pdb: Path, chain: str) -> dict[int, np.ndarray]:
     cas: dict[int, np.ndarray] = {}
     with open(pdb) as f:
         for line in f:
-            if line[:4] != 'ATOM': continue
-            if line[21] != chain: continue
-            if line[12:16].strip() != 'CA': continue
+            if line[:4] != 'ATOM':
+                continue
+            if line[21] != chain:
+                continue
+            if line[12:16].strip() != 'CA':
+                continue
             try:
                 cas[int(line[22:26])] = np.array([float(line[30:38]),
                                                    float(line[38:46]),
@@ -114,11 +117,14 @@ def read_heavy(pdb: Path, chain: str) -> dict[int, np.ndarray]:
     data: dict[int, list] = {}
     with open(pdb) as f:
         for line in f:
-            if line[:4] != 'ATOM': continue
-            if line[21] != chain: continue
+            if line[:4] != 'ATOM':
+                continue
+            if line[21] != chain:
+                continue
             atom = line[12:16].strip()
             elem = line[76:78].strip()
-            if elem == 'H' or (not elem and atom.startswith('H')): continue
+            if elem == 'H' or (not elem and atom.startswith('H')):
+                continue
             try:
                 rn = int(line[22:26])
                 data.setdefault(rn, []).append([float(line[30:38]),
@@ -134,12 +140,16 @@ def read_sidechain_heavy(pdb: Path, chain: str) -> dict[int, np.ndarray]:
     data: dict[int, list] = {}
     with open(pdb) as f:
         for line in f:
-            if line[:4] != 'ATOM': continue
-            if line[21] != chain: continue
+            if line[:4] != 'ATOM':
+                continue
+            if line[21] != chain:
+                continue
             atom = line[12:16].strip()
             elem = line[76:78].strip()
-            if elem == 'H' or (not elem and atom.startswith('H')): continue
-            if atom in _BACKBONE_ATOMS: continue
+            if elem == 'H' or (not elem and atom.startswith('H')):
+                continue
+            if atom in _BACKBONE_ATOMS:
+                continue
             try:
                 rn = int(line[22:26])
                 data.setdefault(rn, []).append([float(line[30:38]),
@@ -203,7 +213,8 @@ def parse_residue_ranges(spec: str) -> list[int]:
     res: list[int] = []
     for tok in spec.split(','):
         tok = tok.strip()
-        if not tok: continue
+        if not tok:
+            continue
         if '-' in tok:
             lo, hi = tok.split('-', 1)
             res.extend(range(int(lo), int(hi) + 1))
@@ -346,7 +357,8 @@ def solve(binder_ca: dict, target_ca: dict,
           pair_sc_clash_cutoff: float = 0.0,
           ) -> tuple[np.ndarray, np.ndarray, float, list[dict], list[tuple], tuple]:
 
-    b_rn = sorted(binder_ca); t_rn = sorted(target_ca)
+    b_rn = sorted(binder_ca)
+    t_rn = sorted(target_ca)
     b_arr = np.array([binder_ca[r] for r in b_rn])
     t_arr = np.array([target_ca[r] for r in t_rn])
     b_idx = {r: i for i, r in enumerate(b_rn)}
@@ -487,14 +499,17 @@ def solve(binder_ca: dict, target_ca: dict,
             elif i == 1:
                 x0 = np.r_[rotvec_k, t_k - n * 30.0]
             elif i < 20:
-                rand_dir = np.random.randn(3); rand_dir /= np.linalg.norm(rand_dir) + 1e-12
+                rand_dir = np.random.randn(3)
+                rand_dir /= np.linalg.norm(rand_dir) + 1e-12
                 x0 = np.r_[rotvec_k, t_k + rand_dir * 30.0]
             else:
                 angle = np.random.uniform(0, 2 * np.pi)
-                axis = np.random.randn(3); axis /= np.linalg.norm(axis) + 1e-12
+                axis = np.random.randn(3)
+                axis /= np.linalg.norm(axis) + 1e-12
                 rotvec = axis * angle
                 R_init = Rotation.from_rotvec(rotvec).as_matrix()
-                rand_dir = np.random.randn(3); rand_dir /= np.linalg.norm(rand_dir) + 1e-12
+                rand_dir = np.random.randn(3)
+                rand_dir /= np.linalg.norm(rand_dir) + 1e-12
                 t_init = (pair_b_centroid + rand_dir * 30.0
                           - R_init @ pair_t_centroid)
                 x0 = np.r_[rotvec, t_init]
@@ -584,7 +599,8 @@ def make_contig(all_binder_rn: list[int], design_region: set[int],
             if current:
                 parts.append(f'{len(current)}-{len(current)}' if in_denovo
                               else f'{binder_chain}{current[0]}-{current[-1]}')
-            current = [rn]; in_denovo = is_denovo
+            current = [rn]
+            in_denovo = is_denovo
         else:
             current.append(rn)
     if current:
@@ -628,7 +644,8 @@ def make_heatmap(contacts: dict, pairs: list[tuple[int, int, float]],
     if not b_rns:
         fig, ax = plt.subplots()
         ax.text(0.5, 0.5, 'No contacts', ha='center', va='center')
-        plt.savefig(out_path, dpi=150); plt.close()
+        plt.savefig(out_path, dpi=150)
+        plt.close()
         return
 
     bi = {r: i for i, r in enumerate(b_rns)}
@@ -640,7 +657,6 @@ def make_heatmap(contacts: dict, pairs: list[tuple[int, int, float]],
 
     pair_b = {rb for rb, _, _ in pairs}
     pair_t = {rt for _, rt, _ in pairs}
-    design_set = set(contig_dr) | clash_binder
 
     fw = max(11, len(b_rns) * 0.075 + 4)
     fh = max(7, len(t_rns) * 0.13 + 3.5)
@@ -657,8 +673,10 @@ def make_heatmap(contacts: dict, pairs: list[tuple[int, int, float]],
                   vmin=0, vmax=2, interpolation='nearest',
                   extent=[-0.5, len(b_rns) - 0.5, 0, 1])
     ax_bar.set_xlim(-0.5, len(b_rns) - 0.5)
-    ax_bar.set_yticks([]); ax_bar.tick_params(bottom=False, labelbottom=False)
-    for sp in ['top', 'left', 'right']: ax_bar.spines[sp].set_visible(False)
+    ax_bar.set_yticks([])
+    ax_bar.tick_params(bottom=False, labelbottom=False)
+    for sp in ['top', 'left', 'right']:
+        ax_bar.spines[sp].set_visible(False)
     ax_bar.set_ylabel('Binder\nregions', fontsize=8, rotation=0,
                        ha='right', va='center', labelpad=30)
     for r in pair_b:
@@ -680,8 +698,10 @@ def make_heatmap(contacts: dict, pairs: list[tuple[int, int, float]],
                     vmin=0, vmax=2, interpolation='nearest',
                     extent=[-0.5, len(t_rns) - 0.5, 0, 1])
     ax_t_bar.set_xlim(-0.5, len(t_rns) - 0.5)
-    ax_t_bar.set_yticks([]); ax_t_bar.tick_params(bottom=False, labelbottom=False)
-    for sp in ['top', 'left', 'right']: ax_t_bar.spines[sp].set_visible(False)
+    ax_t_bar.set_yticks([])
+    ax_t_bar.tick_params(bottom=False, labelbottom=False)
+    for sp in ['top', 'left', 'right']:
+        ax_t_bar.spines[sp].set_visible(False)
     ax_t_bar.set_ylabel('Target\nregions', fontsize=8, rotation=0,
                          ha='right', va='center', labelpad=30)
     for r in pair_t:
@@ -695,7 +715,8 @@ def make_heatmap(contacts: dict, pairs: list[tuple[int, int, float]],
         bbox_to_anchor=(1.01, 1.0), borderaxespad=0)
 
     # Heatmap
-    _cmap = _CMAP.copy(); _cmap.set_bad('#F8F8F8')
+    _cmap = _CMAP.copy()
+    _cmap.set_bad('#F8F8F8')
     im = ax_heat.imshow(grid, aspect='auto', cmap=_cmap,
                         vmin=0, vmax=contact_cutoff, origin='lower',
                         interpolation='nearest',
@@ -712,7 +733,8 @@ def make_heatmap(contacts: dict, pairs: list[tuple[int, int, float]],
     def _ticks(items, mx=20):
         step = max(1, len(items) // mx)
         pos = list(range(0, len(items), step))
-        if pos[-1] != len(items) - 1: pos.append(len(items) - 1)
+        if pos[-1] != len(items) - 1:
+            pos.append(len(items) - 1)
         return pos
 
     tp = _ticks(b_rns)

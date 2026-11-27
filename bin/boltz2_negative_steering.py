@@ -49,6 +49,7 @@ import random
 import shutil
 import subprocess
 import sys
+from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -69,8 +70,6 @@ EFFECTOR_INTACT_CUTOFF = 5.0   # Å Cα RMSD vs ground truth
 # boltz2_verify_binding.compute_binding_rmsds — i.e. sequence-aligned
 # Kabsch on receptor Cα pairs, then apply that transform rigidly to
 # the effector and compute the receptor-aligned effector RMSD.
-from collections import defaultdict
-
 # BioPython is required for sequence-aligned residue pairing (matches
 # what the rest of the pipeline does).  Boltz1 / Boltz2 containers
 # include it; if Josh runs this script outside the container the
@@ -1995,8 +1994,8 @@ def cmd_plan(args: argparse.Namespace) -> int:
         if not path.exists():
             print(f"ERROR: --{label.lower()}-fasta path does not exist: {path}")
             raise SystemExit(1)
-        lines = [l.strip() for l in path.read_text().splitlines() if l.strip()]
-        seq = "".join(l for l in lines if not l.startswith(">"))
+        lines = [line.strip() for line in path.read_text().splitlines() if line.strip()]
+        seq = "".join(line for line in lines if not line.startswith(">"))
         if not seq:
             print(f"ERROR: --{label.lower()}-fasta is empty: {path}")
             raise SystemExit(1)
@@ -2365,7 +2364,6 @@ def cmd_plan(args: argparse.Namespace) -> int:
         print(f"ERROR: Wrong-interface detection failed: {e}")
         return 1
     predicted_wrong_idx = sorted(i for i, _ in wrong_contacts)
-    wrong_dist = {i: d for i, d in wrong_contacts}
     print(f"  {len(predicted_wrong_idx)} receptor residues at the wrong interface")
 
     # ── Surface-pointing test on every wrong-interface residue ──────

@@ -112,7 +112,7 @@ from typing import Dict, List, Optional, Tuple
 _SCRIPT_DIR = Path(__file__).resolve().parent
 if str(_SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPT_DIR))
-from extract_passing import extract_row as _extract_passing_row
+from extract_passing import extract_row as _extract_passing_row  # noqa: E402
 
 # ── Helpers ──────────────────────────────────────────────────────────
 

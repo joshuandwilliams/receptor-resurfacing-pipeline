@@ -475,7 +475,8 @@ def plot_dispersion_overview(rep_seeds, tiers, out_path):
             ax.scatter(ra, tj, marker=marker, s=80, c=colour,
                        edgecolor="black", linewidth=0.5, alpha=0.85,
                        zorder=3)
-            seen_tiers.add(tier); seen_stages.add(stage)
+            seen_tiers.add(tier)
+            seen_stages.add(stage)
 
     ax.set_xlabel("Receptor Aligned Effector RMSD (Å, final)", fontsize=11)
     ax.set_ylabel("Interface Jaccard (final)", fontsize=11)
@@ -530,8 +531,10 @@ def plot_dispersion_grid(rep_seeds, all_seeds, tiers, composites, out_path):
     all_ra, all_tj = [], []
     for seeds in all_seeds.values():
         for s in seeds:
-            if s["ra_final"] is not None: all_ra.append(s["ra_final"])
-            if s["tj_final"] is not None: all_tj.append(s["tj_final"])
+            if s["ra_final"] is not None:
+                all_ra.append(s["ra_final"])
+            if s["tj_final"] is not None:
+                all_tj.append(s["tj_final"])
     if not all_ra:
         # No seed carries an ra_eff, so there is nothing to scale the axes to.
         # Write the placeholder rather than no file at all: Nextflow publishes
@@ -549,7 +552,8 @@ def plot_dispersion_grid(rep_seeds, all_seeds, tiers, composites, out_path):
 
     for i, ax in enumerate(axes_flat):
         if i >= n:
-            ax.set_axis_off(); continue
+            ax.set_axis_off()
+            continue
         name = names[i]
         seeds = all_seeds.get(name, [])
         tier = tiers.get(name, "none")
@@ -671,7 +675,8 @@ def plot_stage_trajectories(all_seeds, tiers, cold_baseline, out_path):
         for s in seeds:
             for k in ("steered_ra_raw", "reverted_ra_raw"):
                 v = s.get(k)
-                if v is not None: all_ra.append(v)
+                if v is not None:
+                    all_ra.append(v)
     if not all_ra:
         # No seed carries an ra_eff, so there is nothing to scale the axes to.
         # Write the placeholder rather than no file at all: Nextflow publishes
@@ -683,7 +688,8 @@ def plot_stage_trajectories(all_seeds, tiers, cold_baseline, out_path):
 
     for i, ax in enumerate(axes_flat):
         if i >= n:
-            ax.set_axis_off(); continue
+            ax.set_axis_off()
+            continue
         design = designs[i]
         seq_names = sorted(by_design[design])
 
@@ -771,14 +777,16 @@ def plot_weighted_vs_true_jaccard(rep_seeds, tiers, out_path):
             ax.scatter(tj + jx, wj + jy, s=70, c=colour,
                        edgecolor="black", linewidth=0.5, alpha=0.85,
                        zorder=3)
-            seen_tiers.add(tier); n_total += 1
+            seen_tiers.add(tier)
+            n_total += 1
     if n_total == 0:
         ax.text(0.5, 0.5, "No weighted_jaccard data available",
                 ha="center", va="center", transform=ax.transAxes,
                 fontsize=12, color="grey")
     ax.plot([0, 1], [0, 1], color="grey", linestyle="--",
             linewidth=0.8, alpha=0.7, zorder=1)
-    ax.set_xlim(-0.05, 1.05); ax.set_ylim(-0.05, 1.05)
+    ax.set_xlim(-0.05, 1.05)
+    ax.set_ylim(-0.05, 1.05)
     ax.set_xlabel("True Jaccard (final prediction)", fontsize=11)
     ax.set_ylabel("Weighted Jaccard (final prediction)", fontsize=11)
     ax.set_title(f"Weighted vs True Jaccard\n"
@@ -854,19 +862,22 @@ def plot_composite_vs_confidence(rep_seeds, composites, tiers, out_path):
     seen_tiers = set()
     for i, ax in enumerate(axes_flat):
         if i >= n:
-            ax.set_axis_off(); continue
+            ax.set_axis_off()
+            continue
         key, label, thresh, _cmp, xlim = metrics_present[i]
         xs, ys, cols = [], [], []
         for name, rec in seq_data.items():
             if key not in rec:
                 continue
-            xs.append(rec[key]); ys.append(rec["composite"])
+            xs.append(rec[key])
+            ys.append(rec["composite"])
             cols.append(COLOUR_TIER.get(rec["tier"], "#B0B0B0"))
             seen_tiers.add(rec["tier"])
         if not xs:
             ax.text(0.5, 0.5, "no data", ha="center", va="center",
                     transform=ax.transAxes, fontsize=9, color="grey")
-            ax.set_title(label, fontsize=10); continue
+            ax.set_title(label, fontsize=10)
+            continue
         ax.scatter(xs, ys, s=60, c=cols, edgecolor="black",
                    linewidth=0.4, alpha=0.85, zorder=3)
         if thresh is not None:

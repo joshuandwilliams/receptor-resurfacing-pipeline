@@ -20,11 +20,14 @@ import numpy as np
 def read_heavy(pdb: Path, chain: str) -> dict[int, np.ndarray]:
     data: dict[int, list] = {}
     for ln in pdb.read_text().splitlines():
-        if not ln.startswith("ATOM"): continue
-        if ln[21] != chain: continue
+        if not ln.startswith("ATOM"):
+            continue
+        if ln[21] != chain:
+            continue
         atom = ln[12:16].strip()
         elem = ln[76:78].strip()
-        if elem == "H" or (not elem and atom.startswith("H")): continue
+        if elem == "H" or (not elem and atom.startswith("H")):
+            continue
         rn = int(ln[22:26])
         data.setdefault(rn, []).append([float(ln[30:38]), float(ln[38:46]), float(ln[46:54])])
     return {r: np.array(v) for r, v in data.items()}
@@ -34,11 +37,14 @@ def all_residue_numbers(pdb: Path, chain: str) -> list[int]:
     seen = set()
     out = []
     for ln in pdb.read_text().splitlines():
-        if not ln.startswith("ATOM"): continue
-        if ln[21] != chain: continue
+        if not ln.startswith("ATOM"):
+            continue
+        if ln[21] != chain:
+            continue
         rn = int(ln[22:26])
         if rn not in seen:
-            seen.add(rn); out.append(rn)
+            seen.add(rn)
+            out.append(rn)
     return sorted(out)
 
 

@@ -108,7 +108,8 @@ class TestAccessors:
 @pytest.mark.logic
 class TestFromPdbAndContig:
     def test_constructs_via_convenience(self, tmp_path):
-        p = tmp_path / "f.pdb"; p.write_text("")
+        p = tmp_path / "f.pdb"
+        p.write_text("")
         b = db.DesignedBackbone.from_pdb_and_contig(
             pdb_path=p, design_id="design_07",
             contig_string="A1-10/5/A15-20 B", sc_score=0.65)

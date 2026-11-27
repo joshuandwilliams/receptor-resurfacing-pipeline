@@ -78,22 +78,26 @@ def main():
         fasta_path = os.path.join(args.af2_fastas_dir, f"{name}.fasta")
 
         if not os.path.exists(fasta_path):
-            failed.append((name, "FASTA file missing")); continue
+            failed.append((name, "FASTA file missing"))
+            continue
 
         corrected_receptor = None
         with open(fasta_path) as f:
             header = None
             for line in f:
                 line = line.strip()
-                if line.startswith(">"): header = line
+                if line.startswith(">"):
+                    header = line
                 elif header and "receptor" in header.lower():
-                    corrected_receptor = line; break
+                    corrected_receptor = line
+                    break
         if not corrected_receptor:
             corrected_receptor = row.get("corrected_receptor", "")
 
         has_poly, poly_aa = has_poly_x(corrected_receptor, args.max_poly_x)
         if has_poly:
-            failed.append((name, f"Poly-{poly_aa} run > {args.max_poly_x}")); continue
+            failed.append((name, f"Poly-{poly_aa} run > {args.max_poly_x}"))
+            continue
 
         unusual, unusual_aa = unusual_aa_composition(corrected_receptor, args.max_single_aa_frac)
         if unusual:
@@ -108,9 +112,11 @@ def main():
             matches = sum(1 for d, n in zip(designed_flat, native_flat) if d == n)
             pct_id = (matches / len(native_flat)) * 100 if native_flat else 100
             if pct_id < args.min_pct_identity:
-                failed.append((name, f"% identity {pct_id:.1f}% < {args.min_pct_identity}%")); continue
+                failed.append((name, f"% identity {pct_id:.1f}% < {args.min_pct_identity}%"))
+                continue
             if pct_id >= args.max_pct_identity:
-                failed.append((name, f"% identity {pct_id:.1f}% >= {args.max_pct_identity}%")); continue
+                failed.append((name, f"% identity {pct_id:.1f}% >= {args.max_pct_identity}%"))
+                continue
 
         passed.append(row)
         shutil.copy(fasta_path, os.path.join(qc_fastas_dir, f"{name}.fasta"))
@@ -164,7 +170,8 @@ def main():
     if passed:
         with open(qc_meta_path, "w", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=passed[0].keys())
-            writer.writeheader(); writer.writerows(passed)
+            writer.writeheader()
+            writer.writerows(passed)
     else:
         with open(qc_meta_path, "w") as f:
             f.write("design,seq,mpnn_score,native_residues,designed_residues,num_changes,corrected_receptor\n")
