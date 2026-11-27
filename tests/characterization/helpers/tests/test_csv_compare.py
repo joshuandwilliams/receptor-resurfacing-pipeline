@@ -17,7 +17,7 @@ def _write(path: Path, content: str) -> Path:
     return path
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 def test_compare_csv_exact_identity_passes(tmp_path):
     """Identical CSVs return passed=True."""
     ref = _write(tmp_path / "r.csv", "a,b,c\n1,2.0,x\n3,4.5,y\n")
@@ -27,7 +27,7 @@ def test_compare_csv_exact_identity_passes(tmp_path):
     result.assert_passed()
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 def test_compare_csv_exact_drift_within_tolerance_passes(tmp_path):
     """Numeric drift within abs_tol passes."""
     ref = _write(tmp_path / "r.csv", "a,b\n1,1.0\n2,2.0\n")
@@ -35,7 +35,7 @@ def test_compare_csv_exact_drift_within_tolerance_passes(tmp_path):
     assert compare_csv_exact(ref, act).passed
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 def test_compare_csv_exact_drift_outside_tolerance_fails(tmp_path):
     """Drift exceeding tolerance fails and reports row/column."""
     ref = _write(tmp_path / "r.csv", "a,b\n1,1.0\n2,2.0\n")
@@ -45,7 +45,7 @@ def test_compare_csv_exact_drift_outside_tolerance_fails(tmp_path):
     assert any("row 0" in d and "'b'" in d for d in result.differences)
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 def test_compare_csv_exact_missing_column_header_fails(tmp_path):
     """A missing column is reported as a header mismatch, not a cell mismatch."""
     ref = _write(tmp_path / "r.csv", "a,b,c\n1,2,3\n")
@@ -55,7 +55,7 @@ def test_compare_csv_exact_missing_column_header_fails(tmp_path):
     assert "header" in result.message.lower()
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 def test_compare_csv_exact_reordered_header_fails(tmp_path):
     """Same column names in different order is a header mismatch (CSV-EXACT cares about order)."""
     ref = _write(tmp_path / "r.csv", "a,b\n1,2\n")
@@ -65,7 +65,7 @@ def test_compare_csv_exact_reordered_header_fails(tmp_path):
     assert "header" in result.message.lower()
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 def test_compare_csv_exact_row_count_mismatch_fails(tmp_path):
     """Different row counts fail with a row-count message before any cell check runs."""
     ref = _write(tmp_path / "r.csv", "a\n1\n2\n")
@@ -75,7 +75,7 @@ def test_compare_csv_exact_row_count_mismatch_fails(tmp_path):
     assert "row count" in result.message.lower()
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 def test_compare_csv_exact_row_order_significant(tmp_path):
     """Same rows in different order is a mismatch under CSV-EXACT."""
     ref = _write(tmp_path / "r.csv", "a,b\n1,x\n2,y\n")
@@ -83,7 +83,7 @@ def test_compare_csv_exact_row_order_significant(tmp_path):
     assert not compare_csv_exact(ref, act).passed
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 def test_compare_csv_exact_nan_equals_nan(tmp_path):
     """NaN in both reference and actual at the same cell is treated as equal."""
     ref = _write(tmp_path / "r.csv", "a,b\n1,\n2,\n")
@@ -91,7 +91,7 @@ def test_compare_csv_exact_nan_equals_nan(tmp_path):
     assert compare_csv_exact(ref, act).passed
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 def test_compare_csv_exact_nan_versus_value_fails(tmp_path):
     """NaN in reference vs a finite value in actual is a mismatch."""
     ref = _write(tmp_path / "r.csv", "a,b\n1,\n")
@@ -99,7 +99,7 @@ def test_compare_csv_exact_nan_versus_value_fails(tmp_path):
     assert not compare_csv_exact(ref, act).passed
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 def test_compare_csv_exact_missing_reference_file_fails(tmp_path):
     """Nonexistent reference path fails cleanly with a clear message."""
     ref = tmp_path / "nope.csv"
@@ -109,7 +109,7 @@ def test_compare_csv_exact_missing_reference_file_fails(tmp_path):
     assert "reference" in result.message.lower()
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 def test_compare_csv_exact_missing_actual_file_fails(tmp_path):
     """Nonexistent actual path fails cleanly with a clear message."""
     ref = _write(tmp_path / "r.csv", "a\n1\n")
@@ -119,7 +119,7 @@ def test_compare_csv_exact_missing_actual_file_fails(tmp_path):
     assert "actual" in result.message.lower()
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 def test_compare_csv_exact_empty_body_passes(tmp_path):
     """Header-only CSVs with matching headers and zero rows are equal."""
     ref = _write(tmp_path / "r.csv", "a,b,c\n")
@@ -127,7 +127,7 @@ def test_compare_csv_exact_empty_body_passes(tmp_path):
     assert compare_csv_exact(ref, act).passed
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 def test_compare_csv_exact_assert_passed_raises_on_failure(tmp_path):
     """assert_passed() on a failed result raises AssertionError."""
     ref = _write(tmp_path / "r.csv", "a\n1\n")
@@ -137,7 +137,7 @@ def test_compare_csv_exact_assert_passed_raises_on_failure(tmp_path):
         result.assert_passed()
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 def test_compare_csv_struct_tolerates_row_reordering(tmp_path):
     """CSV-STRUCT sorts both frames by sort_by before comparing — pure row reordering passes."""
     ref = _write(tmp_path / "r.csv", "id,v\n1,10\n2,20\n3,30\n")
@@ -145,7 +145,7 @@ def test_compare_csv_struct_tolerates_row_reordering(tmp_path):
     assert compare_csv_struct(ref, act, sort_by=["id"]).passed
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 def test_compare_csv_struct_still_detects_value_drift(tmp_path):
     """CSV-STRUCT still fails on cell-value mismatches after sorting by sort_by."""
     ref = _write(tmp_path / "r.csv", "id,v\n1,10\n2,20\n")
@@ -154,7 +154,7 @@ def test_compare_csv_struct_still_detects_value_drift(tmp_path):
     assert not result.passed
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 def test_compare_csv_struct_invalid_sort_key_fails(tmp_path):
     """sort_by referencing a column not in the CSV fails with a clear message."""
     ref = _write(tmp_path / "r.csv", "a,b\n1,2\n")
@@ -172,7 +172,7 @@ _REF_WORKDIR = "/hpc-home/alice/proj/work/ab/0123456789abcdef0123456789abcd"
 _ACT_WORKDIR = "/hpc-home/bob/proj/work/cd/fedcba9876543210fedcba9876543"
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 def test_compare_csv_exact_modulo_paths_identity_passes(tmp_path):
     """Two CSVs with no path content compare equal under modulo-paths."""
     ref = _write(tmp_path / "r.csv", "a,b\n1,2.0\n3,4.5\n")
@@ -182,7 +182,7 @@ def test_compare_csv_exact_modulo_paths_identity_passes(tmp_path):
     result.assert_passed()
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 def test_compare_csv_exact_modulo_paths_normalises_workdir_hash(tmp_path):
     """Different workdir hashes in path cells normalise to the same value."""
     ref = _write(
@@ -197,7 +197,7 @@ def test_compare_csv_exact_modulo_paths_normalises_workdir_hash(tmp_path):
     assert result.passed, result.differences
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 def test_compare_csv_exact_modulo_paths_detects_value_drift(tmp_path):
     """Path cells normalised, but a numeric drift outside tolerance still fails."""
     ref = _write(
@@ -213,7 +213,7 @@ def test_compare_csv_exact_modulo_paths_detects_value_drift(tmp_path):
     assert any("score" in d for d in result.differences)
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 def test_compare_csv_exact_modulo_paths_normalises_hpc_home_prefix(tmp_path):
     """User-home prefixes (/hpc-home/<user>) collapse under the normalizer."""
     ref = _write(
@@ -228,7 +228,7 @@ def test_compare_csv_exact_modulo_paths_normalises_hpc_home_prefix(tmp_path):
     assert result.passed, result.differences
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 def test_compare_csv_exact_modulo_paths_missing_reference_fails(tmp_path):
     """Nonexistent reference path fails cleanly with a clear message."""
     ref = tmp_path / "nope.csv"
@@ -238,7 +238,7 @@ def test_compare_csv_exact_modulo_paths_missing_reference_fails(tmp_path):
     assert "reference" in result.message.lower()
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 def test_compare_csv_exact_modulo_paths_missing_actual_fails(tmp_path):
     """Nonexistent actual path fails cleanly with a clear message."""
     ref = _write(tmp_path / "r.csv", "a\n1\n")

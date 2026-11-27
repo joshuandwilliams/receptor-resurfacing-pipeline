@@ -91,8 +91,7 @@ def _maybe_skip(ref_path, sequence: str, label: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.hpc
-@pytest.mark.wave1
+@pytest.mark.check_test_run
 @pytest.mark.parametrize("sequence", SEQUENCE_COHORT)
 def test_aggregated_results_from_boltz2_iterate_steering_py(ref, out, sequence):
     """bin/boltz2_iterate_steering.py — CSV-EXACT (per-sequence aggregated_results.csv)."""
@@ -102,8 +101,7 @@ def test_aggregated_results_from_boltz2_iterate_steering_py(ref, out, sequence):
     compare_csv_exact(target, act_dir / "aggregated_results.csv").assert_passed()
 
 
-@pytest.mark.hpc
-@pytest.mark.wave1
+@pytest.mark.check_test_run
 @pytest.mark.parametrize("sequence", SEQUENCE_COHORT)
 def test_all_results_multicycle_from_boltz2_iterate_steering_py(ref, out, sequence):
     """bin/boltz2_iterate_steering.py — CSV-EXACT (all_results_multicycle.csv)."""
@@ -113,8 +111,7 @@ def test_all_results_multicycle_from_boltz2_iterate_steering_py(ref, out, sequen
     compare_csv_exact(target, act_dir / "all_results_multicycle.csv").assert_passed()
 
 
-@pytest.mark.hpc
-@pytest.mark.wave1
+@pytest.mark.check_test_run
 @pytest.mark.parametrize("sequence", SEQUENCE_COHORT)
 def test_all_results_multicycle_with_metrics_from_boltz2_iterate_steering_py(
     ref, out, sequence,
@@ -126,8 +123,7 @@ def test_all_results_multicycle_with_metrics_from_boltz2_iterate_steering_py(
     compare_csv_exact(target, act_dir / "all_results_multicycle_with_metrics.csv").assert_passed()
 
 
-@pytest.mark.hpc
-@pytest.mark.wave1
+@pytest.mark.check_test_run
 @pytest.mark.parametrize("sequence", SEQUENCE_COHORT)
 def test_cycle_statistics_from_boltz2_iterate_steering_py(ref, out, sequence):
     """bin/boltz2_iterate_steering.py — CSV-EXACT (cycle_statistics.csv).
@@ -141,8 +137,7 @@ def test_cycle_statistics_from_boltz2_iterate_steering_py(ref, out, sequence):
     compare_csv_exact(target, act_dir / "cycle_statistics.csv").assert_passed()
 
 
-@pytest.mark.hpc
-@pytest.mark.wave1
+@pytest.mark.check_test_run
 @pytest.mark.parametrize("sequence", SEQUENCE_COHORT)
 def test_passing_summary_from_extract_passing_py(ref, out, sequence):
     """bin/extract_passing.py — CSV-EXACT.
@@ -157,8 +152,7 @@ def test_passing_summary_from_extract_passing_py(ref, out, sequence):
     compare_csv_exact(target, act_dir / "passing_summary.csv").assert_passed()
 
 
-@pytest.mark.hpc
-@pytest.mark.wave1
+@pytest.mark.check_test_run
 @pytest.mark.parametrize("sequence", SEQUENCE_COHORT)
 def test_pathways_from_boltz2_iterate_steering_py(ref, out, path_normalizer, sequence):
     """bin/boltz2_iterate_steering.py — JSON-MODULO-PATHS (workdir paths in cells)."""
@@ -168,8 +162,7 @@ def test_pathways_from_boltz2_iterate_steering_py(ref, out, path_normalizer, seq
     compare_json_modulo_paths(target, act_dir / "pathways.json", path_normalizer).assert_passed()
 
 
-@pytest.mark.hpc
-@pytest.mark.wave1
+@pytest.mark.check_test_run
 @pytest.mark.parametrize("sequence", SEQUENCE_COHORT)
 def test_raw_per_seed_results_from_reversion_harvest(ref, out, sequence):
     """bin/reversion.py (harvest) — CSV-EXACT (raw_per_seed_results.csv)."""
@@ -184,8 +177,7 @@ def test_raw_per_seed_results_from_reversion_harvest(ref, out, sequence):
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.hpc
-@pytest.mark.wave1
+@pytest.mark.check_test_run
 @pytest.mark.parametrize("sequence", SEQUENCE_COHORT)
 def test_inputs_effector_fasta_from_negative_steering_run_one_sh(ref, out, sequence):
     """bin/negative_steering_run_one.sh staging — TEXT-EXACT (inputs/effector.fasta)."""
@@ -195,8 +187,7 @@ def test_inputs_effector_fasta_from_negative_steering_run_one_sh(ref, out, seque
     compare_text_exact(target, act_dir / "inputs" / "effector.fasta").assert_passed()
 
 
-@pytest.mark.hpc
-@pytest.mark.wave1
+@pytest.mark.check_test_run
 @pytest.mark.parametrize("sequence", SEQUENCE_COHORT)
 def test_inputs_receptor_fasta_from_negative_steering_run_one_sh(ref, out, sequence):
     """bin/negative_steering_run_one.sh staging — TEXT-EXACT (inputs/receptor.fasta).
@@ -225,8 +216,7 @@ CONTROL_INPUT_FASTAS = [
 ]
 
 
-@pytest.mark.hpc
-@pytest.mark.wave1
+@pytest.mark.check_test_run
 @pytest.mark.parametrize("filename", CONTROL_INPUT_FASTAS)
 def test_control_inputs_fasta_from_negative_steering_run_one_sh(ref, out, filename):
     """bin/negative_steering_run_one.sh staging — TEXT-EXACT (control-specific FASTA).
@@ -249,8 +239,7 @@ def test_control_inputs_fasta_from_negative_steering_run_one_sh(ref, out, filena
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.hpc
-@pytest.mark.wave1
+@pytest.mark.check_test_run
 @pytest.mark.parametrize("sequence", SEQUENCE_COHORT)
 def test_cycle_0_contaminated_from_reversion_py(ref, out, path_normalizer, sequence):
     """bin/reversion.py — JSON-MODULO-PATHS (cycle_0/contaminated.json)."""
@@ -260,8 +249,7 @@ def test_cycle_0_contaminated_from_reversion_py(ref, out, path_normalizer, seque
     compare_json_modulo_paths(target, act_dir / "cycle_0" / "contaminated.json", path_normalizer).assert_passed()
 
 
-@pytest.mark.hpc
-@pytest.mark.wave1
+@pytest.mark.check_test_run
 @pytest.mark.parametrize("sequence", SEQUENCE_COHORT)
 def test_cycle_0_effector_template_from_extract_effector_template_cif(
     ref, out, sequence,
@@ -273,8 +261,7 @@ def test_cycle_0_effector_template_from_extract_effector_template_cif(
     compare_text_exact(target, act_dir / "cycle_0" / "effector_template.cif").assert_passed()
 
 
-@pytest.mark.hpc
-@pytest.mark.wave1
+@pytest.mark.check_test_run
 @pytest.mark.parametrize("sequence", SEQUENCE_COHORT)
 def test_cycle_0_kickoff_distances_from_boltz2_negative_steering_py(
     ref, out, path_normalizer, sequence,
@@ -292,8 +279,7 @@ def test_cycle_0_kickoff_distances_from_boltz2_negative_steering_py(
     compare_json_modulo_paths(target, act_dir / "cycle_0" / "kickoff_distances.json", path_normalizer).assert_passed()
 
 
-@pytest.mark.hpc
-@pytest.mark.wave1
+@pytest.mark.check_test_run
 @pytest.mark.parametrize("sequence", SEQUENCE_COHORT)
 def test_cycle_0_passing_from_boltz2_negative_steering_py(
     ref, out, path_normalizer, sequence,
@@ -312,8 +298,7 @@ def test_cycle_0_passing_from_boltz2_negative_steering_py(
     compare_json_modulo_paths(target, act_dir / "cycle_0" / "passing.json", path_normalizer).assert_passed()
 
 
-@pytest.mark.hpc
-@pytest.mark.wave1
+@pytest.mark.check_test_run
 @pytest.mark.parametrize("sequence", SEQUENCE_COHORT)
 def test_cycle_0_plan_from_boltz2_negative_steering_py(
     ref, out, path_normalizer, sequence,
@@ -325,8 +310,7 @@ def test_cycle_0_plan_from_boltz2_negative_steering_py(
     compare_json_modulo_paths(target, act_dir / "cycle_0" / "plan.json", path_normalizer).assert_passed()
 
 
-@pytest.mark.hpc
-@pytest.mark.wave1
+@pytest.mark.check_test_run
 @pytest.mark.parametrize("sequence", SEQUENCE_COHORT)
 def test_cycle_0_prefilter_from_boltz2_negative_steering_py(
     ref, out, path_normalizer, sequence,
@@ -342,8 +326,7 @@ def test_cycle_0_prefilter_from_boltz2_negative_steering_py(
     compare_json_modulo_paths(target, act_dir / "cycle_0" / "prefilter.json", path_normalizer).assert_passed()
 
 
-@pytest.mark.hpc
-@pytest.mark.wave1
+@pytest.mark.check_test_run
 @pytest.mark.parametrize("sequence", SEQUENCE_COHORT)
 def test_cycle_0_reversion_plan_from_reversion_py(
     ref, out, path_normalizer, sequence,
@@ -355,8 +338,7 @@ def test_cycle_0_reversion_plan_from_reversion_py(
     compare_json_modulo_paths(target, act_dir / "cycle_0" / "reversion_plan.json", path_normalizer).assert_passed()
 
 
-@pytest.mark.hpc
-@pytest.mark.wave1
+@pytest.mark.check_test_run
 @pytest.mark.parametrize("sequence", SEQUENCE_COHORT)
 def test_cycle_0_reversion_results_per_seed_from_reversion_py(
     ref, out, path_normalizer, sequence,
@@ -370,8 +352,7 @@ def test_cycle_0_reversion_results_per_seed_from_reversion_py(
     ).assert_passed()
 
 
-@pytest.mark.hpc
-@pytest.mark.wave1
+@pytest.mark.check_test_run
 @pytest.mark.parametrize("sequence", SEQUENCE_COHORT)
 def test_cycle_0_reversion_results_from_reversion_py(
     ref, out, path_normalizer, sequence,
@@ -385,8 +366,7 @@ def test_cycle_0_reversion_results_from_reversion_py(
     ).assert_passed()
 
 
-@pytest.mark.hpc
-@pytest.mark.wave1
+@pytest.mark.check_test_run
 @pytest.mark.parametrize("sequence", SEQUENCE_COHORT)
 def test_cycle_0_steered_results_from_boltz2_negative_steering_py(
     ref, out, sequence,
@@ -404,8 +384,7 @@ def test_cycle_0_steered_results_from_boltz2_negative_steering_py(
     compare_csv_exact(target, act_dir / "cycle_0" / "steered_results.csv").assert_passed()
 
 
-@pytest.mark.hpc
-@pytest.mark.wave1
+@pytest.mark.check_test_run
 @pytest.mark.parametrize("sequence", SEQUENCE_COHORT)
 def test_cycle_0_steered_results_aggregate_from_boltz2_negative_steering_py(
     ref, out, sequence,
@@ -421,8 +400,7 @@ def test_cycle_0_steered_results_aggregate_from_boltz2_negative_steering_py(
     compare_csv_exact(target, act_dir / "cycle_0" / "steered_results_aggregate.csv").assert_passed()
 
 
-@pytest.mark.hpc
-@pytest.mark.wave1
+@pytest.mark.check_test_run
 @pytest.mark.parametrize("sequence", SEQUENCE_COHORT)
 def test_cycle_0_summary_from_boltz2_iterate_steering_py(ref, out, sequence):
     """bin/boltz2_iterate_steering.py — TEXT-EXACT (cycle_0/summary.txt).
@@ -436,8 +414,7 @@ def test_cycle_0_summary_from_boltz2_iterate_steering_py(ref, out, sequence):
     compare_text_exact(target, act_dir / "cycle_0" / "summary.txt").assert_passed()
 
 
-@pytest.mark.hpc
-@pytest.mark.wave1
+@pytest.mark.check_test_run
 @pytest.mark.parametrize("sequence", SEQUENCE_COHORT)
 def test_cycle_0_true_interface_residues_from_derive_input_indices_py(
     ref, out, sequence,
@@ -453,8 +430,7 @@ def test_cycle_0_true_interface_residues_from_derive_input_indices_py(
     compare_text_exact(target, act_dir / "cycle_0" / "true_interface_residues.txt").assert_passed()
 
 
-@pytest.mark.hpc
-@pytest.mark.wave1
+@pytest.mark.check_test_run
 @pytest.mark.parametrize("sequence", SEQUENCE_COHORT)
 def test_cycle_0_wrong_interface_residues_from_derive_input_indices_py(
     ref, out, sequence,

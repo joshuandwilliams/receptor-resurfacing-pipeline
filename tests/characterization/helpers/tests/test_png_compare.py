@@ -31,7 +31,7 @@ def _save(img: Image.Image, path: Path) -> Path:
     return path
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 def test_compare_png_perceptual_identity_passes(tmp_path):
     """Two byte-identical PNGs pass with high SSIM."""
     img = _plot_like_image()
@@ -40,7 +40,7 @@ def test_compare_png_perceptual_identity_passes(tmp_path):
     assert compare_png_perceptual(ref, act).passed
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 def test_compare_png_perceptual_minor_noise_passes_with_relaxed_size_tolerance(tmp_path):
     """Slight pixel perturbation on a plot-like image passes SSIM with relaxed size tolerance.
 
@@ -63,7 +63,7 @@ def test_compare_png_perceptual_minor_noise_passes_with_relaxed_size_tolerance(t
     assert result.passed
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 def test_compare_png_perceptual_completely_different_images_fail(tmp_path):
     """A solid-black image vs a plot-like image fails SSIM (size tolerance disabled)."""
     ref = _save(_plot_like_image(seed=0), tmp_path / "r.png")
@@ -72,7 +72,7 @@ def test_compare_png_perceptual_completely_different_images_fail(tmp_path):
     assert not result.passed
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 def test_compare_png_perceptual_size_outside_tolerance_fails(tmp_path):
     """File size difference exceeding size_tolerance_pct fails before SSIM is computed."""
     small = _plot_like_image(size=(50, 50), seed=0)
@@ -84,7 +84,7 @@ def test_compare_png_perceptual_size_outside_tolerance_fails(tmp_path):
     assert "size" in result.message.lower()
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 def test_compare_png_perceptual_ssim_threshold_override(tmp_path):
     """A high ssim_threshold causes a perceptibly-different image to fail."""
     base = _plot_like_image(seed=0)
@@ -96,7 +96,7 @@ def test_compare_png_perceptual_ssim_threshold_override(tmp_path):
     assert not result.passed
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 def test_compare_png_perceptual_missing_reference_fails(tmp_path):
     """Nonexistent reference file fails cleanly."""
     act = _save(_plot_like_image(), tmp_path / "a.png")
@@ -105,7 +105,7 @@ def test_compare_png_perceptual_missing_reference_fails(tmp_path):
     assert "reference" in result.message.lower()
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 def test_compare_png_perceptual_empty_actual_fails(tmp_path):
     """Empty (zero-byte) actual file fails."""
     ref = _save(_plot_like_image(), tmp_path / "r.png")
@@ -115,7 +115,7 @@ def test_compare_png_perceptual_empty_actual_fails(tmp_path):
     assert not result.passed
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 def test_compare_png_exists_passes_when_present(tmp_path):
     """compare_png_exists returns passed=True when both files exist and are non-empty."""
     ref = _save(_plot_like_image(), tmp_path / "r.png")
@@ -123,7 +123,7 @@ def test_compare_png_exists_passes_when_present(tmp_path):
     assert compare_png_exists(ref, act).passed
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 def test_compare_png_exists_fails_when_empty(tmp_path):
     """compare_png_exists fails when actual is zero bytes."""
     ref = _save(_plot_like_image(), tmp_path / "r.png")
@@ -132,7 +132,7 @@ def test_compare_png_exists_fails_when_empty(tmp_path):
     assert not compare_png_exists(ref, act).passed
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 def test_compare_png_exists_fails_when_missing(tmp_path):
     """compare_png_exists fails when actual file does not exist."""
     ref = _save(_plot_like_image(), tmp_path / "r.png")

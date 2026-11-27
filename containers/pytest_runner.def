@@ -78,7 +78,7 @@ Include: yum
 #
 # Runtime example (run the local-tier characterisation suite):
 #   singularity exec pytest_runner.img \
-#       pytest tests/characterization -m "local_unit or local_integration"
+#       pytest -m logic
 # =============================================================================
 
 %files

@@ -91,7 +91,7 @@ def synthetic_workdir(tmp_path: Path) -> Path:
     return wd
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 def test_from_workdir_missing_returns_none(tmp_path: Path):
     """Workdir without cycle_0 should return None."""
     from negative_steering_run import NegativeSteeringRun
@@ -103,7 +103,7 @@ def test_from_workdir_missing_returns_none(tmp_path: Path):
     assert run is None
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 def test_from_workdir_no_pdbs_returns_none(tmp_path: Path):
     """cycle_0 dir present but no Boltz outputs → no cold-start data → None."""
     from negative_steering_run import NegativeSteeringRun
@@ -115,7 +115,7 @@ def test_from_workdir_no_pdbs_returns_none(tmp_path: Path):
     assert run is None
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 def test_from_workdir_hydrates_cold_start(synthetic_workdir: Path):
     from negative_steering_run import NegativeSteeringRun
     run = NegativeSteeringRun.from_workdir(
@@ -133,7 +133,7 @@ def test_from_workdir_hydrates_cold_start(synthetic_workdir: Path):
     assert run.cold_start.seed_indices == (0, 1, 2)
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 def test_from_workdir_hydrates_steered(synthetic_workdir: Path):
     from negative_steering_run import NegativeSteeringRun
     run = NegativeSteeringRun.from_workdir(
@@ -152,7 +152,7 @@ def test_from_workdir_hydrates_steered(synthetic_workdir: Path):
     assert set(d01.mutated_positions) == {7}
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 def test_from_workdir_hydrates_reversion(synthetic_workdir: Path):
     from negative_steering_run import NegativeSteeringRun
     run = NegativeSteeringRun.from_workdir(
@@ -168,7 +168,7 @@ def test_from_workdir_hydrates_reversion(synthetic_workdir: Path):
     assert rev_stage.seed_indices == (0, 1)
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 def test_from_runs_directory_collects_workdirs(tmp_path: Path):
     """DesignCohort.from_runs_directory walks subdirs and skips ones
     that aren't recognisable as workdirs."""

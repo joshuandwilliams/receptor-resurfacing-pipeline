@@ -24,7 +24,7 @@ _BASE = {
 }
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 class TestFromDictHappyPath:
     def test_constructs_with_valid_dict(self):
         params = pp.PipelineParams.from_dict(_BASE)
@@ -53,7 +53,7 @@ class TestFromDictHappyPath:
         assert params["num_designs"] == 10
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 class TestFromDictValidation:
     def test_single_invalid_raises(self):
         bad = {**_BASE, "negsteer_num_seeds": 4}  # not odd
@@ -83,7 +83,7 @@ class TestFromDictValidation:
         assert "2 error(s)" in str(exc_info.value)
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 class TestFromNextflowJson:
     def test_reads_valid_json(self, tmp_path):
         path = tmp_path / "params.json"
@@ -116,7 +116,7 @@ class TestFromNextflowJson:
             pp.PipelineParams.from_nextflow_json(path)
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 class TestImmutability:
     def test_frozen_dataclass(self):
         """Cannot reassign the values field after construction."""
@@ -125,7 +125,7 @@ class TestImmutability:
             params.values = {}  # type: ignore
 
 
-@pytest.mark.local_unit
+@pytest.mark.logic
 class TestRevalidate:
     def test_validate_returns_empty_on_good_params(self):
         params = pp.PipelineParams.from_dict(_BASE)

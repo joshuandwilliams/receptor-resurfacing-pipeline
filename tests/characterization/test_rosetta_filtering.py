@@ -28,24 +28,21 @@ def out(stage_output_root):
     return stage_output_root("rosetta_filtering")
 
 
-@pytest.mark.hpc
-@pytest.mark.wave1
+@pytest.mark.check_test_run
 def test_rosetta_filter_metrics_from_rosetta_filter_py(ref, out):
     """bin/rosetta_filter.py — JSON-DEEP."""
     rel = "rosetta_filtering/rosetta_filter_metrics.json"
     compare_json_deep(ref / rel, out / rel).assert_passed()
 
 
-@pytest.mark.hpc
-@pytest.mark.wave1
+@pytest.mark.check_test_run
 def test_rosetta_filter_summary_from_rosetta_filter_py(ref, out):
     """bin/rosetta_filter.py — JSON-DEEP."""
     rel = "rosetta_filtering/rosetta_filter_summary.json"
     compare_json_deep(ref / rel, out / rel).assert_passed()
 
 
-@pytest.mark.hpc
-@pytest.mark.wave1
+@pytest.mark.check_test_run
 def test_rosetta_passing_designs_from_rosetta_filter_py(ref, out):
     """bin/rosetta_filter.py — TEXT-EXACT."""
     rel = "rosetta_filtering/rosetta_passing_designs.txt"

@@ -26,16 +26,14 @@ pytestmark = pytest.mark.skip(
 )
 
 
-@pytest.mark.hpc
-@pytest.mark.wave1
+@pytest.mark.check_test_run
 def test_processed_contigs_from_rfdiffusion_contigs_py(reference_root, output_root):
     """bin/rfdiffusion_contigs.py — TEXT-EXACT."""
     rel = "preprocessing/processed_contigs.txt"
     compare_text_exact(reference_root / rel, output_root / rel).assert_passed()
 
 
-@pytest.mark.hpc
-@pytest.mark.wave1
+@pytest.mark.check_test_run
 def test_sequences_json_from_extract_sequences(reference_root, output_root):
     """EXTRACT_SEQUENCES inline Python in modules/preprocessing.nf — JSON-DEEP."""
     rel = "preprocessing/sequences.json"

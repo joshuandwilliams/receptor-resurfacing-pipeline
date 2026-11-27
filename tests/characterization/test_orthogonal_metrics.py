@@ -56,8 +56,7 @@ def out(stage_output_root):
     return stage_output_root("orthogonal_metrics")
 
 
-@pytest.mark.hpc
-@pytest.mark.wave1
+@pytest.mark.check_test_run
 def test_survivor_manifest_from_extract_survivor_manifest_py(ref, out, path_normalizer):
     """bin/extract_survivor_manifest.py — CSV-EXACT-MODULO-PATHS.
 
@@ -70,8 +69,7 @@ def test_survivor_manifest_from_extract_survivor_manifest_py(ref, out, path_norm
     ).assert_passed()
 
 
-@pytest.mark.hpc
-@pytest.mark.wave1
+@pytest.mark.check_test_run
 def test_cross_sequence_summary_with_interface_metrics_from_compute_interface_metrics_py(
     ref, out,
 ):
@@ -91,8 +89,7 @@ def test_cross_sequence_summary_with_interface_metrics_from_compute_interface_me
     compare_csv_exact(target, out / rel).assert_passed()
 
 
-@pytest.mark.hpc
-@pytest.mark.wave1
+@pytest.mark.check_test_run
 def test_survivors_with_orthogonal_metrics_from_merge_orthogonal_metrics_py(
     ref, out, path_normalizer,
 ):
