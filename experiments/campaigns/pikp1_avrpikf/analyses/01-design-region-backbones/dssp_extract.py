@@ -15,8 +15,15 @@ Usage:
 import csv
 import glob
 import os
+import sys
 
 from chimerax.core.commands import run
+
+# The shared refuse-to-shrink guard, one directory up.  ChimeraX runs this
+# with --script and does not forward flags cleanly, so the override is the
+# environment variable ALLOW_PARTIAL=1 rather than --allow-partial.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from _committed_output import guard
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 RUN = os.path.join(
@@ -50,6 +57,8 @@ for path in paths:
             ss = "coil"
         rows.append({"design": design, "resnum": r.number, "ss": ss})
     run(session, "close")  # noqa: F821
+
+guard(OUT, len(rows), allow_partial=os.environ.get("ALLOW_PARTIAL") == "1")
 
 with open(OUT, "w", newline="") as fh:
     w = csv.DictWriter(fh, fieldnames=["design", "resnum", "ss"])

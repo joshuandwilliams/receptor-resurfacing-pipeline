@@ -36,6 +36,7 @@ Usage:
 import argparse
 import glob
 import os
+import sys
 import warnings
 
 warnings.filterwarnings("ignore")
@@ -43,6 +44,10 @@ warnings.filterwarnings("ignore")
 import numpy as np
 import pandas as pd
 from Bio.PDB import PDBParser
+
+# The shared refuse-to-shrink guard, one directory up.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from _committed_output import guard
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 RUN = os.path.join(
@@ -78,6 +83,9 @@ def depths(path):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--output", default=os.path.join(HERE, "loop_depth.csv"))
+    ap.add_argument("--allow-partial", action="store_true",
+                    help="write even if the table came out shorter than the "
+                         "committed one")
     args = ap.parse_args()
 
     dssp = pd.read_csv(DSSP)
@@ -115,6 +123,7 @@ def main():
                              "ss": ss.get((design, resnum), "unknown")})
 
     out = pd.DataFrame(rows)
+    guard(args.output, len(out), allow_partial=args.allow_partial)
     out.to_csv(args.output, index=False)
     designs = out[out.design != "wild-type"]
     print(f"wrote {args.output}")
