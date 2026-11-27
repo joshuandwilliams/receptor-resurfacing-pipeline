@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-test_mpnn_plots.py
-------------------
+iterate_mpnn_plots.py
+---------------------
 Standalone iteration harness for ``mpnn_plots.py``.
 
 Reads the QC metadata CSV produced by a previous ``test_proteinmpnn``
@@ -39,7 +39,7 @@ mpnn_physicochem.png  (NEW)
 
 Usage
 -----
-    python test_mpnn_plots.py \\
+    python iterate_mpnn_plots.py \\
         --metadata    tests/proteinmpnn/receptor_resurfacing_results/sequences/scored_metadata.csv \\
         --cluster-csv tests/proteinmpnn/receptor_resurfacing_results/sequences/mpnn_cluster_counts.csv \\
         --outdir      tests/proteinmpnn/receptor_resurfacing_results/plots_iter

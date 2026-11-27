@@ -67,7 +67,7 @@ CROSS_CSV="${RESULTS_DIR}/negative_steering/cross_sequence_summary.csv"
 
 OUTDIR="${RESULTS_DIR}/plots_iter"
 
-TEST_SCRIPT="${TEST_DIR}/test_negsteer_within_sequence_plots.py"
+TEST_SCRIPT="${TEST_DIR}/iterate_negsteer_within_sequence_plots.py"
 
 # ── Container ─────────────────────────────────────────────────────────────
 # Same image as the cohort-level plots — matplotlib + numpy only.

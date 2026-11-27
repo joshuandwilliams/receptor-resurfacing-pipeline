@@ -7,7 +7,7 @@ steering (Task 43).  Invoked from
 modules/negative_steering.nf::NEGSTEER_WITHIN_SEQUENCE_PLOTS.
 
 Lifted verbatim from
-tests/negative_steering/test_negsteer_within_sequence_plots.py;
+tests/negative_steering/iterate_negsteer_within_sequence_plots.py;
 the only difference is this header.  The two scripts must stay in
 sync; when iterating on plots, edit the test script first, validate
 against real cluster data, then mirror the changes here.
@@ -68,7 +68,7 @@ negsteer_composite_vs_confidence.png
 
 Usage
 -----
-    python test_negsteer_within_sequence_plots.py \\
+    python iterate_negsteer_within_sequence_plots.py \\
         --runs-dir tests/negative_steering/receptor_resurfacing_results/negative_steering/runs \\
         --cross-summary-csv tests/negative_steering/receptor_resurfacing_results/negative_steering/cross_sequence_summary.csv \\
         --outdir tests/negative_steering/receptor_resurfacing_results/plots_iter

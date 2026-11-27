@@ -82,7 +82,7 @@ INPUT_DESIGN_REGION="${RESULTS_DIR}/negative_steering/controls_inputs/input_desi
 
 OUTDIR="${RESULTS_DIR}/plots_iter"
 
-TEST_SCRIPT="${TEST_DIR}/test_negsteer_plots.py"
+TEST_SCRIPT="${TEST_DIR}/iterate_negsteer_plots.py"
 
 # ── Threshold defaults pinned to extract_passing.py values ───────────────
 # Override at the SBATCH command line if you want to visualise a different

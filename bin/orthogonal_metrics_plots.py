@@ -12,7 +12,7 @@ summary both join on mpnn_sequence to source upstream composite
 scores and cohort-wide context.  Invoked from
 modules/negsteer_orthogonal_metrics_plots.nf::ORTHOG_PLOTS.
 
-Lifted verbatim from tests/orthogonal_metrics/test_orthogonal_metrics_plots.py;
+Lifted verbatim from tests/orthogonal_metrics/iterate_orthogonal_metrics_plots.py;
 the only differences are (a) the test-path fallback in
 _resolve_csv_path is removed (production always passes both CSVs
 explicitly), (b) both CSV flags are required, and (c) this header.

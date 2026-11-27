@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-test_negsteer_within_sequence_plots.py
---------------------------------------
+iterate_negsteer_within_sequence_plots.py
+-----------------------------------------
 Iteration harness for within-sequence (per-seed) negsteer plots.  Thin
 wrapper around ``bin/negsteer_within_sequence_plots.py``.
 

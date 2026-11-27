@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-test_rfdiffusion_plots.py
--------------------------
+iterate_rfdiffusion_plots.py
+----------------------------
 Standalone iteration harness for ``rfdiffusion_plots.py``.
 
 Reads the metrics JSON produced by a previous ``test_rfdiffusion`` run
@@ -37,7 +37,7 @@ exploration phase.  Strategy:
 
 Usage
 -----
-    python3 test_rfdiffusion_plots.py \\
+    python3 iterate_rfdiffusion_plots.py \\
         --metrics tests/rfdiffusion/receptor_resurfacing_results/rfdiffusion/rfdiffusion_metrics.json \\
         --outdir  tests/rfdiffusion/receptor_resurfacing_results/plots_iter
 
