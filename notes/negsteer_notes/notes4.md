@@ -4,28 +4,30 @@
 
 Entering this session, the negative-steering pipeline had been validated on
 four native benchmark complexes (notes 3). The open question for production
-deployment was whether the same workflow could be run on **RFDiffusion-designed
-binders** with **ProteinMPNN-designed sequences**, where the "ground truth"
-is a Cα-only design backbone rather than a solved native complex.
+deployment was whether the same workflow could run on **RFDiffusion-designed
+binders** with **ProteinMPNN-designed sequences**. In that setting the
+"ground truth" is a Cα-only design backbone rather than a solved native
+complex.
 
 Three structural mismatches against the existing pipeline made this
 non-trivial:
 
-1. RFDiffusion outputs are Cα-only — no side chains. The negative-steering
-   pipeline's `find_contact_residues_heavy` requires heavy atoms to compute
-   the protected interface set on the ground truth.
+1. RFDiffusion outputs are Cα-only, with no side chains. The
+   negative-steering pipeline's `find_contact_residues_heavy` requires heavy
+   atoms to compute the protected interface set on the ground truth.
 2. The de novo region of an RFDiffusion design has glycine placeholders in
    the PDB but a real designed sequence in the corresponding ProteinMPNN
    FASTA. The two have to be reconciled before Boltz can fold anything.
 3. The receptor sequence Boltz folds (the ProteinMPNN design) is not the
    same as the sequence the ground-truth PDB encodes (glycines in the
    placeholder region). The existing `--receptor-fasta` override mechanism
-   was added in the notes 2 session for sequence-walk diagnostics; it
+   was added in the notes 2 session for sequence-walk diagnostics. It
    needed to be re-purposed here.
 
-The session worked through these mismatches one by one, hit and fixed two
-pipeline bugs along the way, ran an end-to-end validation, and surfaced an
-unexpected finding about HADDOCK's role upstream of negative steering.
+The session worked through these mismatches one by one and hit and fixed two
+pipeline bugs along the way. It then ran an end-to-end validation, which
+surfaced an unexpected finding about HADDOCK's role upstream of negative
+steering.
 
 ## What we built
 
@@ -49,40 +51,39 @@ the receptor length and rejects out-of-range or non-integer input loudly.
 Patched 11 unit tests covering CLI parsing, file parsing, deduplication,
 and error cases all pass.
 
-The override-fasta mechanism from notes 2 handles the sequence side: the
+The override-fasta mechanism from notes 2 handles the sequence side. The
 patched workflow uses `--receptor-fasta` to make Boltz fold the ProteinMPNN
-sequence while the ground-truth PDB (with its glycine de novo region) is
-used only for the Cα Kabsch alignment in `binding_rmsds`. The two are kept
+sequence. The ground-truth PDB, with its glycine de novo region, is used
+only for the Cα Kabsch alignment in `binding_rmsds`. The two are kept
 length-consistent by `_load_seq_override`.
 
 ### 2. `split_sequence` bug fix in the receptor-resurfacing pipeline
 
-While building the input files for the test run, we discovered that
+While building the input files for the test run, we found a bug in
 `pipeline_correct_sequences.py` in the upstream RFDiffusion → ProteinMPNN
-pipeline was producing systematically wrong `corrected_receptor` sequences
-in `sequence_metadata.csv` and `af2_fastas/`. The investigation tracked it
-down to `split_sequence`, which had a hard-coded assumption that the chain
-order in MPNN's output was `effector / receptor`. The actual order in this
-pipeline (where the filter writes split PDBs as receptor=A, effector=B) is
-the opposite: `receptor / effector`.
+pipeline. It was producing systematically wrong `corrected_receptor`
+sequences in `sequence_metadata.csv` and `af2_fastas/`. The investigation
+tracked it down to `split_sequence`, which had a hard-coded assumption that
+the chain order in MPNN's output was `effector / receptor`. The actual order
+in this pipeline (where the filter writes split PDBs as receptor=A,
+effector=B) is the opposite: `receptor / effector`.
 
-The result was that every "corrected receptor" sequence written to the CSV
-was actually the *effector* residues, chopped to fit the receptor contig
-structure. For Pikp1+AvrPikF this meant every CSV row had
-`denovo_length=16` and a designed region of `QDAGTCYSSWKMDKKV` (residues
-33–48 of AvrPikF) regardless of which RFDiffusion design it was for. The
-failure was completely silent — every downstream consumer (the AF2 FASTAs,
-the QC step, the design-region scoring) was operating on garbage receptor
-sequences.
+Every "corrected receptor" sequence written to the CSV was therefore the
+*effector* residues, chopped to fit the receptor contig structure. For
+Pikp1+AvrPikF this meant every CSV row had `denovo_length=16` and a designed
+region of `QDAGTCYSSWKMDKKV` (residues 33–48 of AvrPikF), regardless of
+which RFDiffusion design it was for. The failure was completely silent.
+Every downstream consumer (the AF2 FASTAs, the QC step, the design-region
+scoring) was operating on garbage receptor sequences.
 
 The fix: rewrite `split_sequence` to pick whichever half of the
 slash-separated MPNN output is closest in length to the known
 `effector_len`, and assign that as the effector. Robust against either
 chain ordering. The redundant "swap if lengths look wrong" block in
-`correct_sequences` (which used a `> 5` threshold and missed cases where
-the length difference was 3) was removed since the new `split_sequence`
-handles swapping internally. Patched file produced as a drop-in
-replacement; behavioural tests pass on receptor-first slash, effector-first
+`correct_sequences` was removed, since the new `split_sequence` handles
+swapping internally. That block used a `> 5` threshold and missed cases
+where the length difference was 3. The patched file is a drop-in
+replacement. Behavioural tests pass on receptor-first slash, effector-first
 slash, colon separator, and equal-length ambiguous inputs.
 
 The bug had been silently affecting every previous receptor-resurfacing run.
@@ -97,15 +98,15 @@ contacts at 8 Å between the receptor and effector and writes them to the
 metrics JSON as `receptor_contact_residues`. The list uses the filter's own
 synthetic resnum scheme, which differs from the contiguous 1..N numbering
 in the split PDB. Both schemes describe the same residues in the same
-file order — the difference is purely cosmetic labelling.
+file order. The difference is purely cosmetic labelling.
 
 The mapping from contact resnums to 0-based seq_idx values is one
 dictionary lookup against `receptor_position_order` from the same JSON
 entry. No PDB parsing needed. The derivation is self-contained in the JSON.
 
 For Pikp1 design_1 in the dr1 run, this produced
-`true_interface_idx = [34, 35, 36, 37, 38, 39, 40, 41, 81, 82, 83]` —
-11 contacts: 8 in the de novo loop and 3 in the C-terminal end of the
+`true_interface_idx = [34, 35, 36, 37, 38, 39, 40, 41, 81, 82, 83]`. That is
+11 contacts, 8 in the de novo loop and 3 in the C-terminal end of the
 fixed region.
 
 ### 4. The 8 Å Cα cutoff caveat
@@ -114,19 +115,19 @@ The RFDiffusion filter uses 8 Å Cα–Cα for contact detection (because no
 side chains exist). The negative-steering pipeline normally uses 4.5 Å
 heavy-atom. These are different criteria and the resulting interface
 residue sets are not directly comparable to the notes 3 native benchmark.
-The 8 Å Cα set is approximately a superset of the 4.5 Å heavy-atom set,
-which means using it as the protected set is *more* conservative — Claude
-notes 3's 0.7 true_jaccard threshold may run high on RFDiffusion data, but
-in the v2 run this turned out to be moot for other reasons (see below).
+The 8 Å Cα set is approximately a superset of the 4.5 Å heavy-atom set, so
+using it as the protected set is *more* conservative. Notes 3's 0.7
+true_jaccard threshold may therefore run high on RFDiffusion data. In the v2
+run this turned out to be moot for other reasons (see below).
 
 ## Experiments and results
 
 ### Smoke test — Pikp1 design_1, n_designs=4, n_cycles=1
 
 Successful end-to-end run. The patched `cmd_plan` accepted the pre-computed
-indices, stored them in `plan.json`, the override FASTA loaded correctly
-(84 residues matching the PDB chain A length), and the array job ran 4
-Boltz predictions to completion.
+indices and stored them in `plan.json`. The override FASTA loaded correctly,
+84 residues matching the PDB chain A length. The array job ran 4 Boltz
+predictions to completion.
 
 Cold start: ra_eff 32.54 Å, intact 0.
 Best steered (design_02): ra_eff 17.13 Å, rec_rmsd 3.89, eff_rmsd 1.42, intact 0.
@@ -134,24 +135,24 @@ All 4 designs failed `receptor_intact == 1` (rec_rmsd 2.82–6.12 Å).
 All 4 reduced ra_eff vs cold start (Δ between 1.98 and 15.42 Å).
 
 ChimeraX inspection of design_02 showed the receptor core β-sheet and
-α-helix were preserved; deviations were concentrated at the disordered
-termini and immediately around the 6 mutated positions. Not a global fold
-failure — the 3.0 Å intact threshold is overly strict for RFDiffusion
-designs whose termini are inherently floppy.
+α-helix were preserved. Deviations were concentrated at the disordered
+termini and immediately around the 6 mutated positions. This is not a
+global fold failure. The 3.0 Å intact threshold is overly strict for
+RFDiffusion designs whose termini are inherently floppy.
 
-The cold-start `independent_effector_rmsd` of 8.80 Å was traced (via
-ChimeraX) to a disordered C-terminal tail in the effector that adopted
-different conformations between Boltz's prediction and the RFDiffusion
-ground truth. The β-sheet core overlaid cleanly. Same threshold-strictness
-issue as the receptor termini, on the effector side.
+ChimeraX traced the cold-start `independent_effector_rmsd` of 8.80 Å to a
+disordered C-terminal tail in the effector. That tail adopted different
+conformations in Boltz's prediction and the RFDiffusion ground truth. The
+β-sheet core overlaid cleanly. Same threshold-strictness issue as the
+receptor termini, on the effector side.
 
 ### v2 — Pikp1 design_1, n_designs=50, n_cycles=2, max_passing=3
 
 Configuration: `--mode mild --max-mutations 4 --candidate-pool-size 6
---n-designs 50 --n-cycles 2 --max-passing 3`. Reduced max_mutations from 6
-to 4 to allow positional variation across designs (with 6 candidates and 6
-mutations all designs hit identical positions; with 4 they cover 15
-possible position subsets).
+--n-designs 50 --n-cycles 2 --max-passing 3`. We reduced max_mutations from
+6 to 4 to allow positional variation across designs. With 6 candidates and 6
+mutations, all designs hit identical positions. With 4 mutations they cover
+15 possible position subsets.
 
 Cycle 0: 50 designs, ra_eff range 14.6–41.0 Å, median 25.2.
 Cycle 1: 150 designs across 3 pathways (parents c0d00, c0d20, c0d33),
@@ -163,17 +164,16 @@ rec_rmsd 2.96, eff_rmsd 0.72, intact 1, true_jaccard 0.39.
 **Hard floor at ~13.5 Å.** Across 200 mutated predictions and 2 cycles, no
 design got within 10 Å of the HADDOCK ground truth. Cycle 1 improved the
 floor by exactly 1 Å over cycle 0 (14.6 → 13.5). The candidate pool was
-fully exhausted in cycle 0, and cycle 1's selection of diverse parents
-(c0d00, c0d20, c0d33 — *not* the best ra_eff designs) by maximin distance
-explored alternative starting points but converged on the same general
-ra_eff band.
+fully exhausted in cycle 0. Cycle 1 then selected diverse parents by maximin
+distance (c0d00, c0d20, c0d33), *not* the best ra_eff designs. That explored
+alternative starting points but converged on the same general ra_eff band.
 
 ### The HADDOCK discrepancy
 
-The headline finding emerged when the user noticed that the
-negative-steered predictions, despite having ra_eff ~14 Å against the
-HADDOCK pose used as ground truth, appeared visually closer to the **native
-6G10 effector pose** than to HADDOCK's. ChimeraX measurements:
+The headline finding came from an observation by the user. The
+negative-steered predictions had ra_eff ~14 Å against the HADDOCK pose used
+as ground truth, yet appeared visually closer to the **native 6G10 effector
+pose** than to HADDOCK's. ChimeraX measurements:
 
 | comparison | distance |
 |---|---|
@@ -183,32 +183,32 @@ HADDOCK pose used as ground truth, appeared visually closer to the **native
 | Native 6G10 ↔ Boltz cold start | **26.4 Å** |
 
 The four numbers form a triangle. Boltz's cold start is 26 Å from native
-and 33 Å from HADDOCK — far from both, in a third location. The steering
+and 33 Å from HADDOCK, far from both, in a third location. The steering
 pulled it toward HADDOCK and got partway (13.5 Å), and that trajectory
 incidentally passed through territory closer to native (10.2 Å) than to
 the actual HADDOCK target.
 
 #### Interpretation
 
-The 26.4 Å cold start vs native rules out the hypothesis "Boltz natively
-finds the native pose." Boltz fails the cold start on this complex the
-same way it fails the cold start on every notes-3 native benchmark
-complex — at distances of 24–32 Å. There's nothing special about Boltz's
-preferences here.
+The 26.4 Å cold start vs native rules out the hypothesis that Boltz
+natively finds the native pose. Boltz fails the cold start on this complex
+the same way it fails on every notes-3 native benchmark complex, at
+distances of 24–32 Å. There is nothing special about Boltz's preferences
+here.
 
-The user pointed out the more fundamental issue: in this design class
+The user pointed out a more fundamental issue. In this design class
 (receptor resurfacing of HMA-effector binding), the RFDiffusion design
 region is built **around the existing native interface**. The de novo loop
 reshapes residues that were already at the binding site. AvrPikF and the
-original Pik effector are nearly identical, so the interface isn't being
-moved — it's being decorated. Negative steering can't meaningfully test
+original Pik effector are nearly identical, so the interface is not being
+moved. It is being decorated. Negative steering cannot meaningfully test
 "can mutations push Boltz away from the original site toward a designed
 site" because the original site and the designed site are the same place.
 
 The 10.2 Å distance from native to the steered prediction is geometrically
-incidental: HADDOCK's pose, the native pose, and the steered cluster are
-all on the same general face of the receptor, so any trajectory between
-them passes through nearby territory.
+incidental. HADDOCK's pose, the native pose, and the steered cluster all sit
+on the same general face of the receptor. Any trajectory between them passes
+through nearby territory.
 
 #### The actual root cause: HADDOCK
 
@@ -256,9 +256,9 @@ for any of the regimes the pipeline has now been tested on.
 Where the de novo region rebuilds an existing interface rather than
 creating a new one, the conserved residues that dominate Boltz's binding
 prediction are unchanged. The mutated positions are decorations on a fixed
-binding mode. Negative steering can't push the effector to a "new"
-binding site because there isn't one — there's just the existing site,
-maybe with a small rigid-body offset.
+binding mode. Negative steering cannot push the effector to a "new" binding
+site because there isn't one. There is just the existing site, maybe with a
+small rigid-body offset.
 
 This is a property of the design class, not a failure of the workflow.
 The interesting test for the validator is a design where the de novo
@@ -281,10 +281,10 @@ the negative-steering pipeline itself.
 
 Notes 3 already flagged that ra_eff 3.0 Å might need loosening for
 RFDiffusion data. The same is true of `RECEPTOR_INTACT_CUTOFF`. RFDiffusion
-designs have inherently floppy termini (no anchoring residues outside the
-modeled chain) and the 3.0 Å threshold rejects designs whose β-sheet cores
-are perfectly preserved but whose termini have wandered. A core-only or
-secondary-structure-only RMSD would be more meaningful.
+designs have inherently floppy termini, because no anchoring residues exist
+outside the modeled chain. The 3.0 Å threshold therefore rejects designs
+whose β-sheet cores are perfectly preserved but whose termini have wandered.
+A core-only or secondary-structure-only RMSD would be more meaningful.
 
 ## File deliverables from this session
 
@@ -310,11 +310,11 @@ secondary-structure-only RMSD would be more meaningful.
 - **ipSAE confirmed broken on RFDiffusion data** — production filter must
   remain structural-only
 - **Receptor-resurfacing designs are not the right test case** for the
-  validator's "redirect to new binding site" capability — this is a
+  validator's "redirect to new binding site" capability. This is a
   design-class limitation, not a workflow bug
 - **HADDOCK in the upstream pipeline is the immediate blocker** for
   meaningful negative-steering results on the current Pikp1+AvrPikF
-  design — needs investigation tomorrow
+  design, and needs investigation tomorrow
 - **Two RMSD threshold issues** (effector tail, receptor termini) deferred
   for future work as Option C
 
@@ -389,9 +389,9 @@ secondary-structure-only RMSD would be more meaningful.
     near-duplicate rescues into representatives. Open since notes 3.
 
 13. **Benchmark chain-pair audit script** (carried from notes 2) — count
-    heavy-atom contacts between every chain pair across the benchmark and
-    flag entries where the user-specified pair has fewer contacts than the
-    best pair. A few hours of work, never done.
+    heavy-atom contacts between every chain pair across the benchmark. Flag
+    entries where the user-specified pair has fewer contacts than the best
+    pair. A few hours of work, never done.
 
 ### Filed but not fixed
 

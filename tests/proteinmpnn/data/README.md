@@ -1,11 +1,11 @@
 # tests/proteinmpnn/data/
 
 Canonical inputs for `test_proteinmpnn.nf`. Two Rosetta-passing split
-PDBs hand-picked because their downstream MPNN sequences span the
-negsteer outcome partition (one feeds the top-ranked
-`cold_start_all_clean` survivor, one feeds a tier-none / poorly-placed
-sequence — the per-module test stops at MPNN_SELECT_TOP, so the
-downstream split surfaces only via the per-MPNN-sequence metadata).
+PDBs, hand-picked because their downstream MPNN sequences span the
+negsteer outcome partition. One feeds the top-ranked
+`cold_start_all_clean` survivor, the other a tier-none / poorly-placed
+sequence. The per-module test stops at MPNN_SELECT_TOP, so that
+downstream split surfaces only via the per-MPNN-sequence metadata.
 
 ## Layout
 
@@ -23,9 +23,9 @@ The same receptor+effector complex PDB that fed RFDiffusion. Used by
 `RESOLVE_CONTIGS` and `EXTRACT_SEQUENCES` to derive the receptor
 sequence, effector sequence, and `receptor_start_pdb` offset.
 
-Identical to `tests/rfdiffusion/data/af3_pikp1_native_avrpikf_complex.pdb`;
-the file is duplicated rather than symlinked to keep test fixtures
-self-contained per `notes/inventory/14_phase_2_revision_per_module_tests.md` §2.4.
+Identical to `tests/rfdiffusion/data/af3_pikp1_native_avrpikf_complex.pdb`.
+The file is duplicated rather than symlinked to keep test fixtures
+self-contained, per `notes/inventory/14_phase_2_revision_per_module_tests.md` §2.4.
 
 ### `rosetta_passing/design_<N>.pdb`
 
@@ -47,13 +47,13 @@ Per-file shape:
   PROTEINMPNN → SEQUENCE_CORRECTION → SEQUENCE_QC →
   MPNN_DESIGN_REGION_SCORE → MPNN_CLUSTER → MPNN_PLOTS →
   MPNN_SELECT_TOP. The "selected for top-N" vs "QC-dropped" partition
-  is exercised by running the workflow on these two parent designs
-  and observing which of the resulting `num_seqs * 2 = 8` sequences
-  pass `mpnn_top_n=8` selection.
+  is exercised by running the workflow on these two parent designs.
+  Observe which of the resulting `num_seqs * 2 = 8` sequences pass
+  `mpnn_top_n=8` selection.
 
 See `notes/inventory/15_discovery_run_path_coverage.md` §ProteinMPNN
-for candidate-selection rationale and verification commands. Note the
-path-correction in that section: MPNN's `top_metadata.csv` is
+for candidate-selection rationale and verification commands. That
+section carries a path correction. MPNN's `top_metadata.csv` is
 published to `${params.outdir}/sequences/`, not `${params.outdir}/mpnn/`.
 
 ## Source

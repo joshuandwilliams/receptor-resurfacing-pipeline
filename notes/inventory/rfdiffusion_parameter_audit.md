@@ -32,15 +32,15 @@ converts it to RFDiffusion-native format.
 container default is almost certainly `Base_ckpt.pt`, which is optimised for
 monomer scaffolding. For receptor-effector interface design (a fixed partner
 chain is present in the contig), the **Complex_beta checkpoint** is more
-appropriate — it was fine-tuned on protein-protein complexes and produces
+appropriate. It was fine-tuned on protein-protein complexes and produces
 better interface geometries.
 
 ```
 inference.ckpt_override_path=/opt/RFdiffusion/models/Complex_base_ckpt.pt
 ```
 
-Note: the container (`LRR_Pipeline.def`) downloads `Base_ckpt.pt` and
-`Complex_base_ckpt.pt` only — `Complex_beta_ckpt.pt` is not present.
+The container (`LRR_Pipeline.def`) downloads `Base_ckpt.pt` and
+`Complex_base_ckpt.pt` only. `Complex_beta_ckpt.pt` is not present.
 
 ### 2. `params.add_potential = true` is dead code
 
@@ -78,7 +78,7 @@ below for usage guidance.
 
 ### 5. `min_hotspot_frac: 0.0` — no enrichment at the RFDiffusion filter stage
 
-**Status: noted; not a priority.**
+**Status: noted, not a priority.**
 
 All designs pass the hotspot-fraction filter regardless of interface quality.
 The downstream Boltz2 validation provides the meaningful quality gate. If
@@ -87,11 +87,11 @@ ProteinMPNN input pool at negligible cost.
 
 ### 6. `contigmap.provide_seq` — unused capability
 
-**Status: worth knowing about; apply case-by-case.**
+**Status: worth knowing about, apply case-by-case.**
 
-If a position in the design region is known to require a specific amino acid
-(a conserved contact residue, a motif anchor), the sequence can be fixed there
-while still designing the backbone:
+A position in the design region may be known to require a specific amino
+acid, such as a conserved contact residue or a motif anchor. The sequence can
+be fixed there while still designing the backbone:
 
 ```
 contigmap.provide_seq=[A33-35]
@@ -104,10 +104,10 @@ No current campaign needs this, but it is a useful escape hatch.
 ## Guiding potentials — full description
 
 RFDiffusion's guiding potentials are soft energy terms added to the score at
-each denoising step. They do not change the model weights — they steer the
-trajectory by nudging the gradient toward configurations with lower potential
-energy, analogous to a weak force applied throughout diffusion. The key
-parameters are:
+each denoising step. They do not change the model weights. Instead they steer
+the trajectory by nudging the gradient toward configurations with lower
+potential energy, analogous to a weak force applied throughout diffusion. The
+key parameters are:
 
 ```
 potentials.guiding_potentials=["type:<name>,weight:<w>[,<extra_args>]"]
@@ -140,10 +140,10 @@ fixed scaffold to keep them compact.
 potentials.guiding_potentials=["type:monomer_ROG,weight:1,min_dist:5"]
 ```
 
-`min_dist` sets a lower bound on the allowed Rg (in Å); values below this are
-not penalised (prevents over-collapsing short loops).
+`min_dist` sets a lower bound on the allowed Rg (in Å). Values below this are
+not penalised, which prevents over-collapsing short loops.
 
-**`olig_contacts`** — for oligomers; not relevant here.
+**`olig_contacts`** — for oligomers, not relevant here.
 
 ### Combining potentials
 
@@ -155,12 +155,12 @@ potentials.guiding_potentials=["type:interface_ncontacts,weight:1","type:monomer
 
 ### Practical notes
 
-- Potentials add compute per step (extra gradient pass) — expect ~10–20 %
+- Potentials add compute per step (extra gradient pass), so expect ~10–20 %
   slower wall time.
 - Too-high weights can destabilise diffusion and produce clashing or
   geometrically odd structures. Start with weight 1 and increase cautiously.
-- `guide_decay="quadratic"` is almost always better than `"constant"` —
-  constant-weight potentials tend to over-constrain the late fine-structure
+- `guide_decay="quadratic"` is almost always better than `"constant"`.
+  Constant-weight potentials tend to over-constrain the late fine-structure
   steps.
 - The most useful combination for this pipeline is likely
   `interface_ncontacts` (to drive interface contacts) plus optionally
@@ -200,7 +200,7 @@ present in the rebuilt container (`HADDOCK_RFDiffusion_ProteinMPNN_MMseqs2.img`)
 `Complex_base_ckpt.pt` remains available as a fallback.
 
 Campaign `params.yml` files under `experiments/` are intentionally NOT updated
-here — they will pick up the `main.nf` default until explicitly overridden.
+here. They will pick up the `main.nf` default until explicitly overridden.
 
 ### Guiding potentials wired through the pipeline
 
@@ -221,7 +221,7 @@ The following files were changed to expose `interface_ncontacts` and
   All six threaded into the `RFDIFFUSION(...)` process call.
 
 - **`modules/rfdiffusion.nf`**: Added six `val` inputs. In the script block,
-  builds `potential_arg` from the inputs — each potential is included only
+  it builds `potential_arg` from the inputs. Each potential is included only
   if its weight > 0, so individual potentials can be disabled by setting
   their weight to 0:
   ```groovy
@@ -238,7 +238,7 @@ The following files were changed to expose `interface_ncontacts` and
   ```
 
 - **`params_example.yml`**: All six params added with full inline documentation.
-  Default `add_potential: true` in this file — new campaigns copying the
+  Default `add_potential: true` in this file, so new campaigns copying the
   example will have potentials enabled.
 
 - **`tests/full_test_run/params_full_test.yml`**: All six params added,
@@ -260,11 +260,11 @@ Added to `params_example.yml` and `tests/full_test_run/params_full_test.yml`.
 - `Complex_beta_ckpt.pt` download added to the def file and successfully
   downloaded during rebuild (URL:
   `http://files.ipd.uw.edu/pub/RFdiffusion/f572d396fae9206628714fb2ce00f72e/Complex_beta_ckpt.pt`).
-- ColabDesign install changed from `git+https://...@v1.1.1` (fails with
-  HTTP 500 via git partial-clone) to tarball:
+- ColabDesign install changed from `git+https://...@v1.1.1` to a tarball,
+  because the git form fails with HTTP 500 via git partial-clone. The
+  `v1.1.1` reference is a branch on the ColabDesign repo, not a tag, so the
+  `refs/tags/` URL returns 404. The tarball URL is
   `https://github.com/sokrypton/ColabDesign/archive/refs/heads/v1.1.1.tar.gz`.
-  Note: `v1.1.1` is a branch on the ColabDesign repo, not a tag — the
-  `refs/tags/` URL returns 404.
 
 ---
 
@@ -293,10 +293,10 @@ Heavy-atom contacts at 4.5 Å:
 | design_2 | 0 |
 
 **Interpretation:** design_2 has substantially more Cα-level contacts with
-the hotspot region, suggesting RFDiffusion has genuinely extended the
-receptor toward the effector rather than simply elongating the beta strands
+the hotspot region. This suggests RFDiffusion has genuinely extended the
+receptor toward the effector, rather than simply elongating the beta strands
 away from it. The absence of heavy-atom contacts at 4.5 Å is expected at
-this stage — the backbone is in the right neighbourhood but side chains have
+this stage. The backbone is in the right neighbourhood, but side chains have
 not yet been designed (that is ProteinMPNN's job). The large increase in
 backbone contacts is the meaningful signal here.
 
@@ -320,19 +320,18 @@ the AVR-Pia gap problem.
 
 Still the most experimentally validated and practically deployable tool for
 protein-protein interface design and receptor loop redesign. Has not been
-superseded for this task. The canonical repo is `RosettaCommons/RFdiffusion`
-(the authoritative source); `sokrypton/RFdiffusion` is a Colab-friendly
+superseded for this task. The canonical repo is `RosettaCommons/RFdiffusion`,
+the authoritative source. `sokrypton/RFdiffusion` is a Colab-friendly
 mirror with identical model weights, not an independent development line.
 For HPC/Nextflow use, the RosettaCommons repo is the right reference.
 
-Our container clones from `sokrypton/RFdiffusion` — the weights are the same
-but it is worth knowing the RosettaCommons repo is where issues and upstream
-fixes land.
+Our container clones from `sokrypton/RFdiffusion`. The weights are the same,
+but the RosettaCommons repo is where issues and upstream fixes land.
 
 ### RFDiffusion2 (not relevant to this pipeline)
 
 Released April 2025 (*Nature Methods* 2025). Specialised for **enzyme active
-site scaffolding** — it accepts unindexed atomic motifs (functional groups
+site scaffolding**. It accepts unindexed atomic motifs (functional groups
 without pre-specified residue indices) and infers both rotamers and the
 sequence position of the motif. Uses flow matching rather than DDPM.
 Repo: `RosettaCommons/RFdiffusion2`. Not aimed at protein-protein interface
@@ -340,7 +339,7 @@ redesign.
 
 ### RFDiffusion3 (watch for late 2026)
 
-Released December 2025 (bioRxiv Sep 2025; code in `RosettaCommons/foundry`).
+Released December 2025 (bioRxiv Sep 2025, code in `RosettaCommons/foundry`).
 Fundamental shift: **individual atoms (backbone + side chain) are the
 diffusion units**, not residue frames. Benchmarks show matched or superior
 performance to v1 on protein-protein binding tasks, and ~10× faster batch
@@ -373,11 +372,12 @@ The lightweight fix is to document that `hotspot:` should always be set
 manually in mode 2 campaign params when the interface is known. No code
 change required.
 
-The proper fix — auto-deriving hotspots from the input complex before
-RFDiffusion runs — requires a new pipeline process (contact extraction from
-the pre-docked PDB, analogous to the existing `EXTRACT_HOTSPOTS` that runs
-post-HADDOCK in mode 1). That is a meaningful addition: new bin script, new
-Nextflow process, branching logic in `main.nf`.
+The proper fix is to auto-derive hotspots from the input complex before
+RFDiffusion runs. That requires a new pipeline process, namely contact
+extraction from the pre-docked PDB, analogous to the existing
+`EXTRACT_HOTSPOTS` that runs post-HADDOCK in mode 1. It is a meaningful
+addition: new bin script, new Nextflow process, branching logic in
+`main.nf`.
 
 ### 3. `contigmap.provide_seq` — **no code change needed**
 
@@ -389,4 +389,4 @@ it directly in the `run_inference.py` call:
 contigmap.provide_seq=[A33-35]
 ```
 
-Apply per-campaign as needed; no pipeline changes required.
+Apply per-campaign as needed. No pipeline changes are required.

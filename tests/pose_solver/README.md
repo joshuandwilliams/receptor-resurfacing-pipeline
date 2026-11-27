@@ -3,8 +3,8 @@
 Finds the rigid-body placement of the effector relative to the receptor
 that satisfies user-specified CA–CA contact constraints, **without any
 clash penalty**.  The resulting clashes at the solved pose are the
-biologically meaningful design region — the receptor residues that need
-to be redesigned by RFDiffusion to accommodate the effector.
+biologically meaningful design region, the receptor residues that
+RFDiffusion must redesign to accommodate the effector.
 
 ## Quick start
 

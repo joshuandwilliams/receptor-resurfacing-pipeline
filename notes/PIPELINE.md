@@ -13,7 +13,7 @@ supersedes the high-level summaries in `README.md`,
 `notes/inventory/04_functional_categorization.md`, and the scattered
 narrative comments in `main.nf`.
 
-When this document and code disagree, code wins — open an issue and
+When this document and code disagree, code wins.  Open an issue and
 update this document.  All file:line citations are against branch
 `phase4-impl` at the verification date above.
 
@@ -83,7 +83,7 @@ exclusive ways:
 - **Branch B (pre-docked)** — supply one **complex** PDB
   (`params.pdb_file`) already containing receptor and effector in their
   intended pose.  This is the canonical entry point in current
-  production runs; HADDOCK is acknowledged dead-but-preserved code
+  production runs.  HADDOCK is acknowledged dead-but-preserved code
   pending the Session 7 restructure (see
   `notes/haddock_protocol_experiments.md`).
 
@@ -128,9 +128,9 @@ Known gaps (post-Session 6, deferred): infrastructure params like
 
 HADDOCK's role here is **geometric placement, not energetics**.
 Cluster ranking is by `(pair_contact_fraction, BSA)` not by HADDOCK
-score — see `notes/haddock_protocol_experiments.md` for the rationale.
+score.  See `notes/haddock_protocol_experiments.md` for the rationale.
 The Session 7 restructure removed the old auto-derived hotspot
-extraction (`EXTRACT_HOTSPOTS` process); `params.hotspot` is now
+extraction (the `EXTRACT_HOTSPOTS` process).  `params.hotspot` is now
 user-optional.
 
 ### 3.3 RFDiffusion backbone generation
@@ -145,10 +145,10 @@ RFDiffusion outputs Cα-only PDBs.  Geometry metrics
 (`motif_rmsd`, `endpoint_distance`, COM displacement) are
 **diagnostic only — not gating**.
 
-Contig format is the canonical RFDiffusion string:
-`/`-separated within a chain, space-separated between chains, no
-commas; fixed segments are chain-prefixed (`A1-10`), de novo segments
-are bare lengths or length ranges (`5-7`).  Details in §7.4.
+Contig format is the canonical RFDiffusion string.  Segments are
+`/`-separated within a chain and space-separated between chains, with
+no commas.  Fixed segments are chain-prefixed (`A1-10`), and de novo
+segments are bare lengths or length ranges (`5-7`).  Details in §7.4.
 
 ### 3.4 Rosetta pre-MPNN filtering
 
@@ -183,13 +183,13 @@ many steering attempts on fewer backbones.
 ### 3.6 Negative steering
 
 See §4 in full.  Summary: every selected MPNN sequence (plus two
-controls) runs through one GPU SLURM job
-(`NEGSTEER_RUN_ONE`) that performs cold-start prediction → steered
-design generation → steered prediction → contamination check →
-optional reversion → per-seed verdict assignment → per-sequence
-aggregation, then `extract_passing.py` emits `passing_summary.csv`.
-A single CPU `NEGSTEER_CROSS_SEQUENCE` task joins all per-sequence
-summaries into `cross_sequence_summary.csv`.
+controls) runs through one GPU SLURM job (`NEGSTEER_RUN_ONE`).  That
+job performs cold-start prediction → steered design generation →
+steered prediction → contamination check → optional reversion →
+per-seed verdict assignment → per-sequence aggregation.  Then
+`extract_passing.py` emits `passing_summary.csv`, and a single CPU
+`NEGSTEER_CROSS_SEQUENCE` task joins all per-sequence summaries into
+`cross_sequence_summary.csv`.
 
 ### 3.7 Cross-sequence aggregation
 
@@ -206,10 +206,10 @@ summaries into `cross_sequence_summary.csv`.
 
 ### 3.8 Orthogonal validators
 
-See §5.  Per-survivor (filtered by `params.orthogonal_tier_filter` —
-`'all'` runs the cascade on every steered row including tier-none;
-`'abc'` restricts to A/B/C), three parallel streams run plus a
-merge.
+See §5.  Three parallel streams run per survivor, plus a merge.
+`params.orthogonal_tier_filter` selects the survivors.  `'all'` runs
+the cascade on every steered row including tier-none, and `'abc'`
+restricts to A/B/C.
 
 ---
 
@@ -233,8 +233,8 @@ Boltz can fail in three structurally distinct ways:
    — Boltz placed the effector on the intended interface, but only
    because steering mutations happen to contact the effector.  When
    we mutate those mutated positions back to wild type, the pose
-   collapses.  *Reversion* is the second test: revert the
-   contaminating mutations and predict again; if the pose still
+   collapses.  *Reversion* is the second test.  Revert the
+   contaminating mutations and predict again.  If the pose still
    holds, the sequence is a true positive.
 
 ### 4.2 The unit of work
@@ -243,7 +243,7 @@ One **`NEGSTEER_RUN_ONE` job** = one MPNN sequence (or one control).
 Inside that single GPU SLURM job, the orchestrator
 (`bin/negative_steering_run_one.sh`, ~449 LOC) runs seven stages in
 order.  Cross-MPNN-sequence parallelism comes from Nextflow scheduling
-many `NEGSTEER_RUN_ONE` jobs concurrently — there is **no
+many `NEGSTEER_RUN_ONE` jobs concurrently.  There is **no
 shared-state cooperation between sequences inside negsteer**.
 
 Within one job the seven stages are:
@@ -261,15 +261,16 @@ Within one job the seven stages are:
 5. **Predict-reversion-one × M (GPU)** — one Boltz call per staged
    reversion (`negative_steering_run_one.sh:346-377`).
 6. **Harvest + finalize (CPU)** — `harvest-reversions` computes
-   reverted metrics + assigns per-design reversion verdict;
+   reverted metrics and assigns the per-design reversion verdict.
    `kickoff-finalize --max-cycles 0` writes `cycle_0/passing.json`
    (`negative_steering_run_one.sh:380-396`).
 7. **Aggregate (CPU)** — `aggregate` (per-seed CSV) →
    `compute-final-metrics --populate-all` (steered confidence on
-   every non-dropped row) → `aggregate-per-sequence` (collapses
-   per-seed into per-unique-sequence rows, derives `outcome` +
-   `n_pass`) → `extract_passing.py` (writes `passing_summary.csv`)
-   (`negative_steering_run_one.sh:408-443`).
+   every non-dropped row) → `aggregate-per-sequence` →
+   `extract_passing.py` (`negative_steering_run_one.sh:408-443`).
+   `aggregate-per-sequence` collapses per-seed into
+   per-unique-sequence rows and derives `outcome` + `n_pass`, and
+   `extract_passing.py` writes `passing_summary.csv`.
 
 ### 4.3 Cycle numbering
 
@@ -286,12 +287,12 @@ The phrasing "cycle 0" everywhere refers to:
 - the steered design pool generated from the cold-start observation,
 - the reversion staged off those steered designs.
 
-When you see `cycle_0/plan.json`, `cycle_0/passing.json` in workdirs:
-all of this content belongs to the one production cycle.
+When you see `cycle_0/plan.json` or `cycle_0/passing.json` in
+workdirs, all of that content belongs to the one production cycle.
 
 `n_cycles=1` in production.  The historical `cmd_kickoff*` family
 (~600 LOC in `boltz2_iterate_steering.py:2055+`) is live multi-cycle
-roadmap, not dead — but the only path Nextflow exercises is
+roadmap, not dead.  The only path Nextflow exercises is
 `kickoff-distances` → `kickoff-prefilter` → `kickoff-finalize
 --max-cycles 0`.
 
@@ -300,7 +301,7 @@ roadmap, not dead — but the only path Nextflow exercises is
 The **cold-start prediction** is Boltz-2's prediction of the
 **unmodified MPNN sequence** (no steering mutations applied) against
 the effector.  `num_seeds` cold-start predictions are run per MPNN
-sequence (production `num_seeds=3`, must be odd; validator
+sequence (production `num_seeds=3`, which must be odd, enforced by
 `bin/validate_params.py:_check_num_seeds_odd`).
 
 Cold-start is performed by `cmd_plan` in
@@ -322,9 +323,9 @@ cold-start.
 
 If even **one** cold-start fails, **all** seeds — including the ones
 that already passed cold-start — proceed through steering.  The
-rationale (Session 1 Q32, design_audit.md:804-822): median confidence
-metrics require the full seed set; partial seed sets corrupt median
-aggregation.
+rationale is recorded in Session 1 Q32, design_audit.md:804-822.
+Median confidence metrics require the full seed set, and partial seed
+sets corrupt median aggregation.
 
 ### 4.5 Steering
 
@@ -348,10 +349,10 @@ protected_set  = design_region ∪ true_interface
   new residues).  Stored 1-based.
 
 `true_interface` and `design_region` are both **excluded** from the
-mutable pool — `true_interface` because mutating it would defeat the
-purpose; `design_region` because it carries the MPNN sequence we
-want to evaluate.  The `protected_set` is the architectural
-guarantee, not a runtime check.
+mutable pool.  Mutating `true_interface` would defeat the purpose,
+and `design_region` carries the MPNN sequence we want to evaluate.
+The `protected_set` is the architectural guarantee, not a runtime
+check.
 
 The plan generates `params.negsteer_n_designs` (production 3)
 distinct steered receptor sequences.  Each steered sequence has up
@@ -372,9 +373,9 @@ overlaps against the true and wrong interfaces.
 
 After all steered predictions complete and pass the structural
 filter (intact + `ra_eff < cutoff`), each steered design is checked
-for **contamination**: are any of the steered mutation positions in
-direct contact (5 Å heavy-atom) with the effector in the steered
-prediction?
+for **contamination**.  The question is whether any steered mutation
+position is in direct contact (5 Å heavy-atom) with the effector in
+the steered prediction.
 
 The **CL-3 gating rule** — current canonical behavior, encoded in
 two places:
@@ -433,26 +434,27 @@ Worked examples for `num_seeds = 3` per design:
 | 2 | 1 | Yes (`1 >= ceil(2/2)=1`) | tier depends on reverted result |
 | 0 | 0 | No | tier none (all seeds wrong-placement, `no_data`) |
 
-Note: the "n_correctly_placed=3, n_contaminated=1" case is the
-subtle one — the rule says reversion does NOT run, but the
-contaminated seed still does not count as `pose_holds`/`clean_steered`
-in `n_pass`.  It buckets as `contaminated_skipped` (CL-3 §92
-tentative name) or, in the live code, as a non-pass-equivalent
-verdict that reduces `n_pass` below `n_seeds`.
+The "n_correctly_placed=3, n_contaminated=1" case is the subtle one.
+The rule says reversion does NOT run, but the contaminated seed
+still does not count as `pose_holds`/`clean_steered` in `n_pass`.
+It buckets as `contaminated_skipped` (CL-3 §92 tentative name) or,
+in the live code, as a non-pass-equivalent verdict that reduces
+`n_pass` below `n_seeds`.
 
 ### 4.7 Reversion
 
 For each design whose CL-3 gate fired, a **reverted sequence** is
-built by `bin/reversion.py:build_reverted_sequence` (line 147): the
-steered sequence with the contaminating mutations substituted back
-to wild type.  Mutations that did NOT contaminate are *kept* — only
-the contacts-with-effector positions are reverted.
+built by `bin/reversion.py:build_reverted_sequence` (line 147).  The
+reverted sequence is the steered sequence with the contaminating
+mutations substituted back to wild type.  Mutations that did NOT
+contaminate are *kept*, and only the contacts-with-effector
+positions are reverted.
 
 `bin/reversion.py:write_reversion_plan` (line 304) **dedups by
-reverted-sequence hash**: two steered designs whose contaminations
-happen to yield the same reverted sequence are predicted **once**,
-with an `applies_to` list mapping the reverted prediction back to
-every steered design it serves.  This is encoded in `StageResult.
+reverted-sequence hash**.  Two steered designs whose contaminations
+happen to yield the same reverted sequence are predicted **once**.
+An `applies_to` list maps the reverted prediction back to every
+steered design it serves.  This is encoded in `StageResult.
 applies_to_designs` for the reversion stage type (Phase 4 §2.8).
 
 The reverted Boltz YAMLs are written under
@@ -461,9 +463,10 @@ The reverted Boltz YAMLs are written under
 (`bin/boltz2_iterate_steering.py:2649`).
 
 `bin/reversion.py:harvest_reversion_results` (line 832) walks the
-predicted reverted directories, computes metrics, and routes each
-**design–seed pair** that triggered reversion to a reversion verdict
-via `bin/reversion.py:classify_reversion_verdict` (line 1204):
+predicted reverted directories and computes metrics.  It then routes
+each **design–seed pair** that triggered reversion to a reversion
+verdict via `bin/reversion.py:classify_reversion_verdict` (line
+1204):
 
 - `pose_collapses` — reverted is not intact OR reverted_ra_eff >= cutoff (`:1245`).
 - `new_contamination` — reverted is structurally OK AND the mutated
@@ -474,7 +477,7 @@ via `bin/reversion.py:classify_reversion_verdict` (line 1204):
 - `no_data` — input metrics missing (`:1304`).
 
 The reverted prediction is the **final** prediction for that
-(design, seed) pair — its PDB and its confidence metrics override
+(design, seed) pair.  Its PDB and its confidence metrics override
 the steered ones in downstream aggregation.
 
 ### 4.8 Per-seed verdicts (full table)
@@ -493,15 +496,16 @@ vocabulary per stage.  Below is the *production-relevant* version
 | `no_data` | steered structural fail OR missing inputs | intact false OR ra_eff ≥ cutoff OR inputs unparseable | NO |
 
 In the live aggregator, the per-seed verdict is reconstructed by
-`_per_seed_verdict_breakdown` (`bin/boltz2_iterate_steering.py:3728`):
-it reads each row's `reversion_verdict` column (when reversion ran)
-or applies a heuristic for the cold-start-all-clean / clean-steered
-path at `:3813-3835`.
+`_per_seed_verdict_breakdown`
+(`bin/boltz2_iterate_steering.py:3728`).  It reads each row's
+`reversion_verdict` column when reversion ran.  Otherwise it applies
+a heuristic for the cold-start-all-clean / clean-steered path at
+`:3813-3835`.
 
-**Important** — the "wrong placement, no contamination" case lands as
+**Important.**  The "wrong placement, no contamination" case lands as
 `no_data` (not `clean_steered`).  Earlier audit-era language used
 "clean_steered" loosely to mean "no contamination regardless of
-placement"; the live code's definition is stricter and is the
+placement".  The live code's definition is stricter and is the
 canonical one.
 
 ### 4.9 Aggregate outcomes (full table)
@@ -521,9 +525,9 @@ emits one of these labels into the `outcome` column on
 **Critical:** `no_reversion` is **NOT** synonymous with cold-start
 all-clean.  It is path-agnostic and fires in TWO disjoint cases:
 
-(a) **Cold-start all-clean.** All seeds passed cold-start;
-    `skip_steering=true`; steering never ran; every per-seed verdict
-    is `clean_steered`; `n_pass == n_seeds` → tier A.
+(a) **Cold-start all-clean.** All seeds passed cold-start, so
+    `skip_steering=true` and steering never ran.  Every per-seed
+    verdict is `clean_steered`, and `n_pass == n_seeds` → tier A.
 
 (b) **Steering ran but no reversion needed.** Cold-start failed for
     at least one seed, so steering ran on every seed, but for every
@@ -551,11 +555,12 @@ agg["n_pass"] = (verdict_counts["pose_holds"]
 
 `n_pass` is *always* this sum, regardless of which path got each
 seed there.  A seed contributes 1 iff its final per-seed verdict is
-either `pose_holds` (reversion ran and the reverted pose held) or
-`clean_steered` (reversion correctly did not run because the
-steered prediction had zero contamination).  Anything else — including
-`no_data`, `pose_collapses`, `new_contamination`,
-`contaminated_skipped` — contributes 0.
+either `pose_holds` or `clean_steered`.  `pose_holds` means reversion
+ran and the reverted pose held, and `clean_steered` means reversion
+correctly did not run because the steered prediction had zero
+contamination.  Anything else — including `no_data`,
+`pose_collapses`, `new_contamination`, `contaminated_skipped` —
+contributes 0.
 
 Denominator is `n_seeds` (also written into the aggregated row).
 `n_pass` can be strictly less than `n_seeds` even when
@@ -588,9 +593,9 @@ The function explicitly rejects the outdated
 `validate_params._check_num_seeds_odd`) for unambiguous median
 aggregation of confidence metrics.
 
-Cross-rank ordering (`_assign_cross_ranks`,
-`bin/cross_sequence_summary.py:553`): primary sort by tier (A
-before B before C), tier-none rows excluded from
+Cross-rank ordering is in `_assign_cross_ranks`
+(`bin/cross_sequence_summary.py:553`).  The primary sort is by tier
+(A before B before C).  Tier-none rows are excluded from
 `cross_rank_by_composite` and `cross_rank_by_ra_eff` but still
 included in the CSV.
 
@@ -633,9 +638,9 @@ composite rank.  Its `canonical_pdb` is rewritten by
 
 When `passing_summary.csv` is empty (every prediction failed the
 ra_eff gate), the **tier-none fallback** `_pick_rep_from_aggregated`
-(`bin/cross_sequence_summary.py:354-443`) reads
+(`bin/cross_sequence_summary.py:354-443`) takes over.  It reads
 `aggregated_results.csv` directly and picks the best composite for
-cohort-plot visibility; the row's `_picked_tier` is `"none"`.
+cohort-plot visibility, and the row's `_picked_tier` is `"none"`.
 
 **Bottom line:** the representative prediction for a (design,
 sequence) cohort row can come from cold-start, steered, or reverted
@@ -648,10 +653,10 @@ and the `rep_*` prefix marks summary-of-representative-seed.
 If all `num_seeds` cold-start predictions pass, the plan sets
 `skip_steering=true` and the entire steering+reversion apparatus is
 bypassed for that MPNN sequence.  Every seed's per-seed verdict
-becomes `clean_steered`; `n_pass == n_seeds`; outcome
-`no_reversion`; tier A.
+becomes `clean_steered`, `n_pass == n_seeds`, outcome
+`no_reversion`, tier A.
 
-This is the best computational outcome: no off-interface mutations
+This is the best computational outcome.  No off-interface mutations
 exist to inflate any confidence metric, and Boltz chose the
 designed interface as its primary (not fallback) prediction.
 
@@ -669,19 +674,20 @@ Two controls run alongside every cohort:
   replaced by polyalanine.
 
 Both are run through the *same* negsteer pipeline.  They should
-*never* reach tier A or B; if they do, that flags miscalibration of
+*never* reach tier A or B.  If they do, that flags miscalibration of
 thresholds.  `workflow.onComplete` in `main.nf:1133-1229` reads the
-final cross-summary, flags any `control_*` row with
+final cross-summary and warns on any `control_*` row that breaches
+either guard.  The guards are
 `rep_ipsae_min_median > params.controls_warning_ipsae_max` (default
-0.5) or
+0.5) and
 `rep_ra_eff_vs_truth_median < params.controls_warning_ra_eff_min`
-(default 5.0) as a warning.
+(default 5.0).
 
 ### 4.15 Important non-obvious subtleties
 
 - **One seed = one Boltz prediction**, not a thread.  Seeds are RNG
   controls that produce independent predictions.  Stages do not
-  carry "this seed's trajectory"; each stage runs all `num_seeds`
+  carry "this seed's trajectory".  Each stage runs all `num_seeds`
   predictions afresh on its current sequence.
 - **The reverted prediction is the final prediction.**  When
   reversion ran for a (design, seed) pair, the reverted PDB and its
@@ -693,9 +699,9 @@ final cross-summary, flags any `control_*` row with
   `best_ra_eff` is reported in the cross-summary and may turn the
   AF3 cell red, but it does NOT change tier.  Tier is purely
   Boltz-driven.
-- **Three-axis interpretation** of the cohort plot: tier (Boltz
-  placement) is the row colour; orthogonal filter result is the
-  cell red/green; Boltz confidence flags are a third dimension.
+- **Three-axis interpretation** of the cohort plot.  Tier (Boltz
+  placement) is the row colour, the orthogonal filter result is the
+  cell red/green, and Boltz confidence flags are a third dimension.
   They are intentionally independent.
 - **MPNN sequence ID** is the join key everywhere downstream.  The
   cross-summary, the orthogonal cascade, the manifest — all join on
@@ -721,11 +727,11 @@ and emits one row per cohort entry with paths to:
 `params.orthogonal_tier_filter` (default `'all'`) controls which
 rows the manifest includes:
 - `'all'`: every steered design including tier-none failed designs.
-  Useful diagnostic; more expensive (per-design AF3).
+  Useful diagnostic, but more expensive (per-design AF3).
 - `'abc'`: restrict to `cross_tier ∈ {A, B, C}`.  Lower GPU cost.
 
 Control rows (`row_type != 'steered'`) are currently **not**
-filtered by tier — they always flow through.
+filtered by tier, and they always flow through.
 
 ### 5.2 AF3 no-MSA
 
@@ -737,11 +743,11 @@ survivor).  `bin/parse_af3_output.py` post-processes one output into
 a per-survivor CSV row.
 
 AF3 aggregation in the cross-summary is by **best** (minimum)
-`ra_eff` across the 15 predictions — labelled `(best)` to make the
-inconsistency with the median-aggregated Boltz columns visible.
-This is intentional leniency because AF3 currently fails on every
-production sequence; aggregation will be revisited when the AF3
-hit-rate is non-zero.
+`ra_eff` across the 15 predictions.  The column is labelled
+`(best)` to make the inconsistency with the median-aggregated Boltz
+columns visible.  This is intentional leniency because AF3 currently
+fails on every production sequence.  Aggregation will be revisited
+when the AF3 hit-rate is non-zero.
 
 ### 5.3 Biophysical metrics
 
@@ -774,10 +780,10 @@ appends per-row metrics to the cross-summary:
   high),
 - ipSAE_15 (interface-restricted at 15 Å),
 - intact_core (≤ `interface_intact_threshold` = 5 Å),
-- weighted_jaccard (Gaussian-decayed interface overlap; `mu=4.0 Å`,
+- weighted_jaccard (Gaussian-decayed interface overlap, `mu=4.0 Å`,
   `2σ²=2.25`).
 
-These are diagnostic; only weighted_jaccard is currently considered
+These are diagnostic.  Only weighted_jaccard is currently considered
 for promotion into the composite.
 
 ### 5.6 Filter cascade
@@ -792,7 +798,7 @@ AND BSA >= params.orthogonal_filter_bsa_min (default 600.0 Å²)
 AND ΔΔG <= orthogonal_ddg_max               (calibrated -30 REU)
 ```
 
-**AF3 is NOT in this gate** (Session 4 Q97; commit `47cb9f2`).  AF3
+**AF3 is NOT in this gate** (Session 4 Q97, commit `47cb9f2`).  AF3
 disagreement is reported separately as a flag, not a gate.
 
 `interface_plddt` was historically in this cascade and was
@@ -801,8 +807,8 @@ orthogonal one.  It still appears under "Boltz confidence" in the
 cohort summary.
 
 Production pass rate (cohort run notes12): ~17% of cohort rows
-(146/845) pass the non-AF3 filters.  BSA: 85% pass — threshold is
-a floor, not a discriminator.
+(146/845) pass the non-AF3 filters.  BSA alone passes 85% of rows,
+so that threshold is a floor, not a discriminator.
 
 ---
 
@@ -827,24 +833,25 @@ Column groups (three-axis framework, Session 5 Q121):
    `orthog_ddg`, `weighted_jaccard_median`,
    `passes_orthogonal_filters`.
 
-Plus provenance: `mpnn_sequence`, `corrected_receptor` (full MPNN
-sequence), `designed_residues` (design-region slice),
-`native_residues` (parallel native slice for comparison),
-`design_id`, `seq_id`, `rep_canonical_pdb` (full path),
-`rep_seed_index`, `rep_aggregated_verdict` / `outcome`,
-`row_type` (`steered | control_scrambled | control_polyA`).
+The remaining columns carry provenance.  They are `mpnn_sequence`,
+`corrected_receptor` (full MPNN sequence), `designed_residues`
+(design-region slice) and `native_residues` (parallel native slice
+for comparison).  Then come `design_id`, `seq_id`,
+`rep_canonical_pdb` (full path), `rep_seed_index`,
+`rep_aggregated_verdict` / `outcome` and `row_type`
+(`steered | control_scrambled | control_polyA`).
 
 Composite score: `cross_composite_score = true_jaccard_median − 0.05
 × ra_eff_vs_truth_median` (`_composite_score`,
 `bin/cross_sequence_summary.py:245`).  Coefficients are arbitrary
-placeholders; the threshold audit will revisit them.
+placeholders.  The threshold audit will revisit them.
 
 `passing_summary.csv` — the per-MPNN-sequence wet-lab triage list.
 Filtered to `PASSING_VERDICTS = {"", "no_reversion", "pose_holds"}`.
-Note the empty string and `no_reversion` are kept because the test
-fixture's pre-multi-seed rows had blank verdicts; this is path-
-agnostic by design.  Tier-A rows from skip_steering are included
-because they are `no_reversion`.
+The empty string and `no_reversion` are kept because the test
+fixture's pre-multi-seed rows had blank verdicts.  This is
+path-agnostic by design.  Tier-A rows from skip_steering are
+included because they are `no_reversion`.
 
 ---
 
@@ -852,7 +859,7 @@ because they are `no_reversion`.
 
 ### 7.1 Chain naming
 
-- **Input PDB** chains can be anything; `params.receptor_chain` /
+- **Input PDB** chains can be anything.  `params.receptor_chain` /
   `params.effector_chain` tell the preprocessing where to look.
 - **Post-RFDiffusion / through negsteer / orthogonal**: chain
   A = receptor, chain B = effector.  Hardcoded in
@@ -872,7 +879,7 @@ frame label:
 Set operations require matched frame + matched chain.  Cross-frame
 conversion via `ContigSpec.designed_to_native` /
 `native_to_designed` / `prediction_to_designed`.  Drops unmappable
-positions by default; `strict=True` raises.
+positions by default, while `strict=True` raises.
 
 ### 7.3 Index bases
 
@@ -897,17 +904,18 @@ Canonical: `A1-10/5-7/A15-20 B`.
   (constraint).  As of Phase 4 always carries `(min_len, max_len)`
   with `min_len == max_len` for the resolved case.  Parser accepts
   bare integers (`5` → `(5,5)`) or ranges (`5-7` → `(5,7)`).
-- **`0`** = RFDiffusion chain-break marker; parses as
+- **`0`** = RFDiffusion chain-break marker.  It parses as
   `BreakSegment` (no length, position-math methods skip).
 - **Bare chain letter inside a block** (e.g. `A1-10/B/A15-20`) =
-  `PassthroughSegment(chain)` (no length at spec level; resolved
+  `PassthroughSegment(chain)` (no length at spec level, resolved
   later by callers with PDB access).
 
 Each `DesignedBackbone` has exactly one `ContigSpec`.
 
 Memory file `project_contig_string_format.md` flags this as a
 recurring Claude-mistake source.  Never use commas.  Always
-chain-prefix fixed; bare lengths for de novo.
+chain-prefix fixed segments, and use bare lengths for de novo
+segments.
 
 ### 7.5 Internal threshold catalogue
 
@@ -1021,7 +1029,7 @@ disagree.  When they do, **code wins**.  This document follows code.
   which would mis-label the wrong-placement-no-contamination case
   as tier A.
 - **Code (current)**: tier is derived from `n_pass / n_seeds` only
-  (`bin/cross_sequence_summary.py:205-239`); the docstring at
+  (`bin/cross_sequence_summary.py:205-239`).  The docstring at
   `:220-225` explicitly addresses this case.
 - This document, §4.11: tier derivation is `n_pass`-only.
 
@@ -1041,7 +1049,7 @@ disagree.  When they do, **code wins**.  This document follows code.
 - `notes/design_audit.md` Session 1 (Q36): multi-cycle is "live
   roadmap," not dead code.
 - **Code**: `cmd_iterate_*` and `cmd_kickoff*` (~600 LOC) exist but
-  are dormant; Nextflow only invokes the cycle-0 path
+  are dormant.  Nextflow only invokes the cycle-0 path
   (`kickoff-distances` → `kickoff-prefilter` → `kickoff-finalize
   --max-cycles 0`).
 - Production runs `n_cycles=1`.
@@ -1082,8 +1090,8 @@ recurring terms (line ranges below are in `06_ubiquitous_language.md`):
 | BSA / Sc / ΔΔG | §6, L495-498 |
 
 §10 of `06_ubiquitous_language.md` lists 11 flagged ambiguities
-(F1-F11); these are work items for future rename / consolidation
-passes and do not affect runtime behavior.
+(F1-F11).  These are work items for future rename / consolidation
+passes, and they do not affect runtime behavior.
 
 ---
 
@@ -1091,9 +1099,9 @@ passes and do not affect runtime behavior.
 
 When code changes any behavior described here, update this document
 in the same commit.  At minimum keep §4 and §8 synchronized with the
-negsteer code.  The `last_verified` date in the frontmatter should be
-bumped on every substantive update so future Claude sessions can
-detect staleness.
+negsteer code.  Bump the `last_verified` date in the frontmatter on
+every substantive update so future Claude sessions can detect
+staleness.
 
 When this document and `notes/phase4_architecture_spec.md` agree,
 they are both canonical.  When they disagree, prefer this document

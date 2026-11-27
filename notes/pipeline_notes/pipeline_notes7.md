@@ -39,9 +39,9 @@ design_0_seq_0 in run A ran 3 reversions (9 extra predictions) and is excluded f
 
 Kernels ON vs kernels OFF at d=5: **+54 s per sequence, +4.5 s per prediction, ~5% slower with kernels on.**
 
-Consistent across all four matched 0-reversion sequences (not noise). Code path confirmed clean — `boltz/model/layers/triangular_mult.py` and `triangular_attention/primitives.py` call `cuequivariance_torch.primitives.triangle.{triangle_multiplicative_update, triangle_attention}` directly under `use_kernels=True`, no try/except fallback. Triton cache populated on disk during runs, confirming kernels actually JIT-compile and execute.
+Consistent across all four matched 0-reversion sequences (not noise). The code path is confirmed clean. `boltz/model/layers/triangular_mult.py` and `triangular_attention/primitives.py` call `cuequivariance_torch.primitives.triangle.{triangle_multiplicative_update, triangle_attention}` directly under `use_kernels=True`, with no try/except fallback. Triton cache populated on disk during runs, confirming kernels actually JIT-compile and execute.
 
-Why they're slower isn't definitively traced, but most likely: cuEquivariance kernels are tuned for AlphaFold-scale tensor shapes (long MSA × large pair representation). Our complexes are small (~75-residue receptor + ~80-residue effector). At that size, kernel dispatch and memory-layout overhead likely exceed the arithmetic win.
+Why they're slower isn't definitively traced. The most likely explanation is that cuEquivariance kernels are tuned for AlphaFold-scale tensor shapes (long MSA × large pair representation), whereas our complexes are small (~75-residue receptor + ~80-residue effector). At that size, kernel dispatch and memory-layout overhead likely exceed the arithmetic win.
 
 **Decision: keep `negsteer_no_kernels = true` in production.** The kernel path works, it just isn't faster for our inputs. Rebuilt container is still valuable for unrelated reasons (modernized CUDA stack, cleaner dep management, the rebuild bug lessons). Keeping the fallback costs nothing at runtime.
 
@@ -82,9 +82,9 @@ The todo_list4 acceptance criteria quoted `notes13 baseline (median 105 min with
 
 ## Operational notes
 
-- `run_one_runtime_sec.txt` is written by `negative_steering_run_one.sh` BEFORE the final `extract_passing` step, so it's readable from the work dir as soon as the Boltz + metrics work is done — no need to wait for the full nextflow pipeline to complete. Handy for mid-run diagnosis.
-- Boltz predictions with different reversion counts aren't directly comparable; always filter to matched reversion counts when doing wall-time comparisons.
-- Each NEGSTEER_RUN_ONE task gets one A100 exclusively via `SLURM_JOB_GPUS`; `CUDA_VISIBLE_DEVICES=0` is always set within the cgroup but refers to a different physical GPU per job. When debugging apparent contention, always check `SLURM_JOB_GPUS`, not `CUDA_VISIBLE_DEVICES`.
+- `run_one_runtime_sec.txt` is written by `negative_steering_run_one.sh` BEFORE the final `extract_passing` step. It is readable from the work dir as soon as the Boltz + metrics work is done, with no need to wait for the full nextflow pipeline to complete. Handy for mid-run diagnosis.
+- Boltz predictions with different reversion counts aren't directly comparable. Always filter to matched reversion counts when doing wall-time comparisons.
+- Each NEGSTEER_RUN_ONE task gets one A100 exclusively via `SLURM_JOB_GPUS`. `CUDA_VISIBLE_DEVICES=0` is always set within the cgroup but refers to a different physical GPU per job. When debugging apparent contention, always check `SLURM_JOB_GPUS`, not `CUDA_VISIBLE_DEVICES`.
 - `nvidia-smi` from a plain SSH session to a GPU node may not show processes or utilization because of cgroup isolation. Use `srun --jobid=<id> --overlap --pty nvidia-smi` to see what a running job sees.
 
 ## Status on the two fixes baked into the rebuilt container
@@ -96,7 +96,7 @@ The todo_list4 acceptance criteria quoted `notes13 baseline (median 105 min with
 ## Files affected this session
 
 - `/mnt/project/pipeline_notes6.md` — this document
-- No code changes; production config keeps `negsteer_no_kernels = true`
+- No code changes, and production config keeps `negsteer_no_kernels = true`
 
 ## Open questions → future tasks
 

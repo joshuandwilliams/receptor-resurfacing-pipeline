@@ -2,8 +2,8 @@
 
 Supervisor demo prep on the production end-to-end run that v9 had
 submitted overnight (`tests/full_test_run/`). The overnight run
-completed but the cohort summary plot revealed multiple silent
-failures — six bugs surfaced and were fixed, the cohort plot
+completed, but the cohort summary plot revealed multiple silent
+failures. Six bugs surfaced and were fixed, the cohort plot
 received structural improvements, and a systemic Nextflow caching
 gotcha was diagnosed. End-to-end run now produces an honest
 tier-aware cohort summary on 34 sequences (4 tier-A, 3 tier-B,
@@ -33,48 +33,49 @@ above the data).
 `bin/fastrelax_for_ia.xml` declared `default_repeats="1"` as an
 attribute on `<FastRelax>`. Rosetta 2025.37 doesn't accept that
 attribute on the XML element — it must be a command-line option
-(`-relax:default_repeats`). Every Rosetta task globally exited with a
-schema validation error logged to stdout, but `run_rosetta_metrics.py`
-only captured stderr — so the actual error landed in
+(`-relax:default_repeats`). Every Rosetta task globally exited with
+a schema validation error logged to stdout. `run_rosetta_metrics.py`
+only captured stderr, so the actual error landed in
 `ROSETTA_CRASH.log` rather than `.command.err`. Result: blank `sc`
 and `rosetta_ddg` for every survivor.
 
-This is a v9-introduced bug — Task 14's FastRelax integration in v9
-was the first time `default_repeats=1` ran in production, but the
+This is a v9-introduced bug, since Task 14's FastRelax integration
+in v9 was the first time `default_repeats=1` ran in production. The
 attribute syntax was never validated against the Rosetta build
 actually used on the cluster.
 
-**Fix**: removed the attribute from the XML; added
+**Fix**: removed the attribute from the XML and added
 `-relax:default_repeats 1` to the rosetta_scripts cmdline in the
-python wrapper; both `_run_fast_relax` and `_run_interface_analyzer`
+python wrapper. Both `_run_fast_relax` and `_run_interface_analyzer`
 now echo last 25 lines of stdout AND last 10 of stderr on failure.
 
 After fix: `ddg` values landed in the −70 REU range, consistent with
-Bennett et al. 2023's calibration target. Task 47 (threshold audit)
-is now actionable.
+Bennett et al. 2023's calibration target, so Task 47 (threshold
+audit) is now actionable.
 
 ### Bug 2 — params.outdir relative-path leak
 
 User's `params.yml` had `outdir: "./results"`. publishDir handled the
-relative path correctly (resolves against launch dir), but
-`${params.outdir}` interpolated into a shell command line passed to a
-script that calls `Path.resolve()` inside the container resolved the
-path against the **task work dir** instead. Manifest's `is_file()`
-check rejected every row → orthogonal stage produced 0 outputs while
-the pipeline reported success.
+relative path correctly, resolving against the launch dir. But
+`${params.outdir}` was interpolated into a shell command line passed
+to a script calling `Path.resolve()` inside the container, which
+resolved the path against the **task work dir** instead. Manifest's
+`is_file()` check rejected every row → orthogonal stage produced 0
+outputs while the pipeline reported success.
 
-This bug exists because v9's path-stability fix (NEGSTEER_CROSS_SEQUENCE
-publishing canonical_pdb paths via the published tree, not work dirs)
-moved the path-resolution responsibility to `cross_sequence_summary.py`,
-which then resolves against its own CWD inside the container — not
+This bug exists because of v9's path-stability fix, where
+NEGSTEER_CROSS_SEQUENCE publishes canonical_pdb paths via the
+published tree rather than work dirs. That fix moved the
+path-resolution responsibility to `cross_sequence_summary.py`,
+which then resolves against its own CWD inside the container, not
 against the launch dir.
 
 **Workaround deployed**: changed line 26 of `params.yml` to an
-absolute path. After this, paths flow correctly through every stage.
+absolute path, after which paths flow correctly through every stage.
 
 **Fix attempted in `main.nf`** with an `isAbsolute()` check that
-reassigns `params.outdir` early — turns out to be a no-op because
-Nextflow ignores reassignment of externally-supplied params.
+reassigns `params.outdir` early, which turns out to be a no-op
+because Nextflow ignores reassignment of externally-supplied params.
 
 **Real fix deferred** to Task 60 in the v10 todo. The right thing is
 to either (a) `.toAbsolutePath()` the outdir at the workflow's main
@@ -84,18 +85,19 @@ in params.yml validation.
 ### Bug 3 — tier-none rows showing all metrics blank
 
 `_pick_representative` in `bin/cross_sequence_summary.py` returned
-`None` when no row in `passing_summary.csv` was tier-A/B/C, including
-the case where passing_summary was empty (which is the normal state
-for sequences whose every prediction failed the upstream eligibility
-gate at `boltz2_iterate_steering.py:_compute_unified_ranks`).
+`None` when no row in `passing_summary.csv` was tier-A/B/C. That
+included the case where passing_summary was empty, which is the
+normal state for sequences whose every prediction failed the
+upstream eligibility gate at
+`boltz2_iterate_steering.py:_compute_unified_ranks`.
 
 **Fix**: new helper `_pick_representative_from_aggregated` reads the
-sibling `aggregated_results.csv`, picks the best row by composite
-(`true_jaccard − 0.05·ra_eff`) with no eligibility gate, runs it
-through `extract_passing.extract_row` to build a passing-summary-
+sibling `aggregated_results.csv`. It picks the best row by composite
+(`true_jaccard − 0.05·ra_eff`) with no eligibility gate, then runs
+it through `extract_passing.extract_row` to build a passing-summary-
 shaped dict. Tier stays "none" because none of the rows actually
-passed — the rep is for display only. New `_picked_tier="none"` and
-`_fallback_composite` markers stamped on the output row for
+passed, so the rep is for display only. New `_picked_tier="none"`
+and `_fallback_composite` markers stamped on the output row for
 debuggability.
 
 After fix: 25/25 tier-none rows now populate.
@@ -103,31 +105,33 @@ After fix: 25/25 tier-none rows now populate.
 ### Bug 4 — extract_row stage selection wrong for failed-reversion verdicts
 
 `bin/extract_passing.py:extract_row` used `reverted_*` columns only
-for `pose_holds` verdicts, falling back to `steered_*` for everything
-else — including `pose_collapses` and `new_contamination`, where
-reversion ran but failed.
+for `pose_holds` verdicts. It fell back to `steered_*` for
+everything else, including `pose_collapses` and
+`new_contamination`, where reversion ran but failed.
 
 This meant the cohort summary surfaced **cold-start** metrics for
-designs that actually failed reversion. d11_s1 was the canary: best
-aggregated row had `verdict=pose_collapses` (2/3 seeds had the
-structure collapse on reversion, 1/3 no_data) but the cohort summary
-showed `steered_ra_eff_vs_truth_median=2.13` from the still-mutated
-cold-start prediction — making a failed design look great.
+designs that actually failed reversion. d11_s1 was the canary, with
+a best aggregated row at `verdict=pose_collapses` (2/3 seeds had the
+structure collapse on reversion, 1/3 no_data). The cohort summary
+still showed `steered_ra_eff_vs_truth_median=2.13` from the
+still-mutated cold-start prediction, making a failed design look
+great.
 
 The bug never surfaced through the normal pipeline flow because
 `extract_passing.main()` filters its input to
-`PASSING_VERDICTS = {"", "no_reversion", "pose_holds"}` —
+`PASSING_VERDICTS = {"", "no_reversion", "pose_holds"}`. So
 pose_collapses and new_contamination never reach `extract_row` via
 the published `passing_summary.csv`. Bug only surfaced once Bug 3's
 fallback started reading aggregated_results.csv directly. Classic
 "latent bug unmasked by new caller" pattern.
 
-**Fix**: stage selection rule changed from "reverted for pose_holds,
-steered otherwise" to **"reverted whenever reversion was attempted
-(pose_holds, pose_collapses, new_contamination), steered for
-no_reversion or singleton."** Semantic principle: if reversion was
-attempted, the reverted prediction IS the final design, even if it
-failed. Showing steered metrics in those cases hides the failure.
+**Fix**: the stage selection rule changed. Old rule: "reverted for
+pose_holds, steered otherwise". New rule: **"reverted whenever
+reversion was attempted (pose_holds, pose_collapses,
+new_contamination), steered for no_reversion or singleton"**.
+Semantic principle: if reversion was attempted, the reverted
+prediction IS the final design, even if it failed. Showing steered
+metrics in those cases hides the failure.
 
 After fix: d11_s1 now shows `representative_ra_eff_vs_truth_median =
 31.33` (reverted, honest failure mode), d12_s0 = 26.13 (3/3 seeds
@@ -164,21 +168,22 @@ numbering** starting from 1 (chain A 1-82, chain B 1-82). Parser
 intersected residue numbers between pred and ref → empty intersection
 on chain B for design_20 (and similar).
 
-design_19 happened to slip through with 5 residues of overlap
-(chain B residues 78-82 by accident of where chain B started in
-that ground truth) — barely above the 3-residue threshold. RMSD was
-computed on those 5 residues only, giving a meaningless ra_eff.
+design_19 happened to slip through with 5 residues of overlap,
+chain B residues 78-82, by accident of where chain B started in
+that ground truth. That is barely above the 3-residue threshold,
+and RMSD was computed on those 5 residues only, giving a
+meaningless ra_eff.
 
 **Fix**: switched from intersect-by-resnum to **pair-by-position**.
 `_chain_ca_records` (yielded `(resnum, xyz)` tuples) became
 `_chain_ca_coords` (returns ordered list of xyz coords). Pair
-`pred[i]` with `ref[i]` up to `min(len(pred), len(ref))`. Length
-mismatches flagged to stderr but not fatal. Long comment in
+`pred[i]` with `ref[i]` up to `min(len(pred), len(ref))`, with
+length mismatches flagged to stderr but not fatal. Long comment in
 `_chain_ca_coords` documents the bug history so the convention
 assumption doesn't get reintroduced.
 
 Validation: synthetic test confirmed glob picks up exactly 15 CIFs
-and excludes the top-level summary. After deployment, all 22
+and excludes the top-level summary, and after deployment all 22
 survivors populate AF3 metrics.
 
 ## Plot improvements
@@ -187,8 +192,8 @@ survivors populate AF3 metrics.
 
 New constant `_TIER_SORT_ORDER = {A:0, B:1, C:2, none:3}`.
 Sort key changed from `-composite` to `(tier_order, -composite)`.
-Tier A → B → C → none, within each by composite descending. Mirrors
-`cross_rank_by_composite` in the CSV.
+Tier A → B → C → none, within each by composite descending,
+mirroring `cross_rank_by_composite` in the CSV.
 
 ### Receptor RMSD column added
 
@@ -235,11 +240,11 @@ fixed:
   6 entries in one row). Per-panel threshold values moved into the
   x-axis label of each panel using unicode ≤/≥ glyphs (e.g.
   `"AF3 ra_eff (Å)  [thr ≤ 5 Å]"`). Y-padding within panels reduced
-  from 18% to 6% — no per-panel legend to clear means data fills
+  from 18% to 6%. With no per-panel legend to clear, data fills
   more of the panel.
 
-Smoke-tested against synthetic data; all 4 plots render cleanly with
-no warnings.
+Smoke-tested against synthetic data, with all 4 plots rendering
+cleanly and no warnings.
 
 ## Nextflow caching gotcha — diagnosed, partially mitigated
 
@@ -249,7 +254,7 @@ contents of external scripts the command references.**
 
 So `python ${projectDir}/bin/parse_af3_output.py ...` is byte-
 identical regardless of what the file at that path contains. Editing
-the python file does NOT bust the cache. `-resume` cache-hits and
+the python file does NOT bust the cache, so `-resume` cache-hits and
 silently returns the previous (broken) output as if nothing changed.
 
 Bit us 4 times this session:
@@ -261,13 +266,13 @@ Bit us 4 times this session:
    parser via a different path.
 3. Plot improvements appeared to deploy and `-resume` reported
    "Succeeded" but no plots re-rendered.
-4. Bug 4 fix — `extract_passing.py` is imported indirectly by
+4. Bug 4 fix. `extract_passing.py` is imported indirectly by
    `cross_sequence_summary.py`, which IS invoked by absolute path
-   in the .nf — Nextflow doesn't track indirect imports either.
+   in the .nf. Nextflow doesn't track indirect imports either.
 
 **Mitigation pattern applied this session**: declare the script as
-`path script_input` in the process input list. Nextflow then sees
-its content hash. Applied to:
+`path script_input` in the process input list, so Nextflow sees its
+content hash. Applied to:
 
 - `AF3_PARSE_OUTPUT` in `modules/negsteer_af3_nomsa.nf` (+ callers
   in `main.nf` and `tests/orthogonal_metrics/test_orthogonal_metrics.nf`
@@ -281,8 +286,8 @@ its content hash. Applied to:
   input audit.
 
 **Every other `${projectDir}/bin/<script>.py` invocation in the
-pipeline has the same gotcha.** Not yet audited. Tracked in v10 todo
-as Task 61.
+pipeline has the same gotcha.** Not audited yet, but tracked in v10
+todo as Task 61.
 
 ## d11_s1 — semantic clarification
 
@@ -295,19 +300,20 @@ metrics. Investigation revealed:
   iptm=0.58) — the cold-start prediction with all mutations was
   fine.
 - Reverted medians (which Bug 4 fix now correctly surfaces) were
-  poor (ra_eff=31.33, iptm=0.43) — when reversion attempted to back
+  poor (ra_eff=31.33, iptm=0.43). When reversion attempted to back
   some mutations out, the predicted complex collapsed.
 
 **Semantic interpretation**: the cold-start prediction looked great,
-but the design's mutations weren't load-bearing — when reversion
+but the design's mutations weren't load-bearing, so when reversion
 attempted to back some out, the structure couldn't hold the
 interface. Real signal of design fragility, not a code bug.
 
 After Bug 4 fix the cohort summary now shows the reverted metrics
 honestly. Tier-none + bad reverted metrics together convey "design
-failed reversion." A future addition could surface the verdict in
-an annotation column (e.g. tier-none with a `(pose_collapses)` tag)
-to make the WHY more prominent — added to v10 todo as Task 62.
+failed reversion". A future addition could surface the verdict in
+an annotation column, for example tier-none with a
+`(pose_collapses)` tag, to make the WHY more prominent. Added to
+v10 todo as Task 62.
 
 ## Cohort outcome at session close
 
@@ -316,7 +322,8 @@ total. **4 tier-A, 3 tier-B, 27 tier-none**. Cohort summary now
 shows tier-A/B with green/yellow stripes at top (sorted by composite
 within tier), tier-none rows below also sorted by composite. AF3
 ra_eff populated for all 34 (15 predictions per row aggregated to a
-median). Receptor RMSD column populated. Sc, BSA, ΔΔG populated.
+median). Receptor RMSD column populated, along with Sc, BSA and
+ΔΔG.
 
 The 4 tier-A candidates carrying through:
 
@@ -348,13 +355,14 @@ In `/mnt/user-data/outputs/` (presented to user, deployed by user):
 - `main.nf` — pass parse_script and plot_script as channels.
 - `tests/orthogonal_metrics/test_orthogonal_metrics.nf` — pass
   parse_script as channel.
-- `tests/full_test_run/params.yml` — outdir → absolute path
-  (workaround for Bug 2; user owns this file, only one line changed).
+- `tests/full_test_run/params.yml` — outdir → absolute path, the
+  workaround for Bug 2. The user owns this file, so only one line
+  changed.
 
 ## Tasks deferred to next session (added to v10 todo)
 
 1. **Task 60** — real fix for params.outdir relative-path leak. The
-   workaround works but is fragile; anyone editing params.yml could
+   workaround works but is fragile. Anyone editing params.yml could
    hit the same trap.
 2. **Task 61** — audit every `${projectDir}/bin/<script>.py`
    invocation in the .nf modules and convert to `path script_input`
@@ -384,7 +392,7 @@ A few things the user reasonably called out this session:
   the first time it bit us, I should have audited every other process
   invocation pattern instead of waiting to be told it bit again.
 - **I framed Bug 4 as "the existing convention is correct" when the
-  user pointed it out**. The user was right — `pose_collapses` rows
+  user pointed it out**. The user was right. `pose_collapses` rows
   showing steered metrics is misleading regardless of the historical
   convention. Should have just said "yes, that's wrong, here's the
   fix" instead of explaining the existing logic as if it were

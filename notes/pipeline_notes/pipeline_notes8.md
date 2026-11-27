@@ -1,7 +1,7 @@
 # pipeline_notes8.md
 
-Session handover — succeeds todo_list6 / pipeline_notes7. Documents what
-landed in the v7 planning session, what's staged for deployment, and
+Session handover — succeeds todo_list6 / pipeline_notes7. Records what
+landed in the v7 planning session, what is staged for deployment, and
 what the next chat needs to pick up. Written 2026-04-24.
 
 ---
@@ -9,29 +9,31 @@ what the next chat needs to pick up. Written 2026-04-24.
 ## Session outcome in one paragraph
 
 Closed out the v6 P0 block by staging code for Tasks 6 / 29 / 31 / 34
-/ 38; they flip to DONE once the test cascade runs green. Produced
-`todo_list7.docx` restructuring priorities around the user's 1–15
-execution plan: Task 32 promoted to P0 (blocks Task 7 throughput),
-Tasks 43–49 + 52–53 added (plots, multi-cycle, codebase/threshold
-audits, target selection), Tasks 15 + 19 demoted, Tasks 17 + 39
-re-scoped as standalone-by-hand analyses, Task 40 discarded. Revised
-Task 6 from 2N per-design controls (wrong semantics) to 2 total
-controls against the input structure — matches the user's "if
-RFDiffusion did a terrible job, what metrics would it get" framing.
-Updated test NF files with an upstream-first fallback-to-data/ chaining
-pattern so the tests form a natural cascade. User submitted the
-`test_rfdiffusion` job (8 designs × 50 iterations) at the end of
-the session; that's the first step of the v7 execution plan.
+/ 38, which flip to DONE once the test cascade runs green. Produced
+`todo_list7.docx`, restructuring priorities around the user's 1–15
+execution plan. Task 32 promoted to P0 (blocks Task 7 throughput),
+and Tasks 43–49 + 52–53 added (plots, multi-cycle, codebase/threshold
+audits, target selection). Tasks 15 + 19 demoted, Tasks 17 + 39
+re-scoped as standalone-by-hand analyses, and Task 40 discarded.
+Revised Task 6 from 2N per-design controls (wrong semantics) to 2
+total controls against the input structure. That matches the user's
+"if RFDiffusion did a terrible job, what metrics would it get"
+framing. Updated test NF files with an upstream-first
+fallback-to-data/ chaining pattern, so the tests form a natural
+cascade. The user submitted the `test_rfdiffusion` job (8 designs ×
+50 iterations) at the end of the session, the first step of the v7
+execution plan.
 
 ---
 
 ## Reference documents
 
 - **`todo_list7.docx`** — authoritative task list going forward.
-- **`todo_list6.docx`** — predecessor; still useful for anything v7
+- **`todo_list6.docx`** — predecessor, still useful for anything v7
   doesn't explicitly revise.
-- **`pipeline_notes7.md`** — predecessor; kernel A/B closure, 86 s per
-  Boltz prediction, 62 s fixed-overhead decomposition.
+- **`pipeline_notes7.md`** — predecessor, covering the kernel A/B
+  closure, 86 s per Boltz prediction, and the 62 s fixed-overhead
+  decomposition.
 
 ---
 
@@ -90,21 +92,23 @@ todo_list7.docx                       NEW
 
 - **`main.nf` Task 6 implementation**: `DERIVE_INPUT_INDICES` runs once
   per cohort after whichever preprocessing branch produced
-  `rfdiff_pdb_ch` and `contigs_ch`. A 2-element
-  `Channel.of("scrambled", "polyA")` is combined with the input-structure
+  `rfdiff_pdb_ch` and `contigs_ch`. It combines a 2-element
+  `Channel.of("scrambled", "polyA")` with the input-structure
   bundle to give exactly 2 controls per cohort. Gated on
   `params.run_negative_controls = true`. The onComplete block scans the
   final `cross_sequence_summary.csv` for control rows breaching
-  `controls_warning_ipsae_max=0.5` or `controls_warning_ra_eff_min=5.0`
-  and emits a ⚠ RANKER MISCALIBRATION banner. Warns only, does not fail.
+  `controls_warning_ipsae_max=0.5` or `controls_warning_ra_eff_min=5.0`.
+  Any such row emits a ⚠ RANKER MISCALIBRATION banner. It warns only
+  and does not fail.
 
 - **`derive_input_design_region.py`**: added, NOT replacing the existing
   `derive_design_region.py` or `derive_true_interface.py`. The per-
   design path (reading `rfdiffusion_metrics.json`) still uses those
-  scripts. The new script parses the contigs string + input PDB to
-  compute: (a) the design region as the receptor positions between
-  contig anchor segments (positions RFDiffusion was told to replace),
-  (b) the true interface via heavy-atom contacts on the input complex.
+  scripts. The new script parses the contigs string + input PDB and
+  computes two things. (a) The design region, the receptor positions
+  between contig anchor segments (positions RFDiffusion was told to
+  replace). (b) The true interface, via heavy-atom contacts on the
+  input complex.
   Emits files in the exact formats `derive_design_region.py` /
   `derive_true_interface.py` write, so downstream code consumes them
   identically.
@@ -135,8 +139,8 @@ todo_list7.docx                       NEW
       : _fallback_glob
   ```
   Uses `files()` (returns a list) not `file()`. Nextflow's CLI param
-  priority means `--<input> /direct/path` on the CLI still wins —
-  confirmed by the docs. Each test logs which source it selected at
+  priority means `--<input> /direct/path` on the CLI still wins, as
+  the docs confirm. Each test logs which source it selected at
   workflow start.
 
 - **`test_negative_steering.nf` extras**:
@@ -159,18 +163,19 @@ with receptor source = the design PDB. This session replaced it with
 2 total controls per cohort, receptor source = the input structure
 (rfdiffusion_input.pdb).
 
-**Why**: the wet-lab-decision-relevant question ("is the ranker fooled
-by sequences the predictor has every reason to reject?") is answered
-by 2 total controls across a cohort. Per-design pathology is a
-narrower question that Task 8 AUROC answers better. User framing:
-"if RFDiffusion did a terrible job, what metrics would those
-sequences get?"
+**Why**: 2 total controls across a cohort answer the
+wet-lab-decision-relevant question ("is the ranker fooled by
+sequences the predictor has every reason to reject?"). Per-design
+pathology is a narrower question, and Task 8 AUROC answers it
+better. User framing: "if RFDiffusion did a terrible job, what
+metrics would those sequences get?"
 
 **Design region for controls**: on the input receptor, the "design
-region" is the **gap between anchor segments** in the contigs string
-— the positions that RFDiffusion would rip out and replace with de
-novo chemistry. For contigs `A1-50 5-15 A60-100 B` on a 100-residue
-receptor, the design region is positions 51–59 on the input receptor.
+region" is the **gap between anchor segments** in the contigs string.
+Those are the positions that RFDiffusion would rip out and replace
+with de novo chemistry. For contigs `A1-50 5-15 A60-100 B` on a
+100-residue receptor, the design region is positions 51–59 on the
+input receptor.
 
 **polyA semantics**: design-region positions → A, EXCEPT native
 glycines are preserved as G (avoids forcing alanine into
@@ -183,8 +188,8 @@ glycine-only Φ/ψ wells that glycine specifically enables).
 ### Promoted
 
 - **Task 32 (RFDiffusion parallelisation)** P1 → P0. Blocks Task 7
-  throughput. Begins with a `trace.txt` diagnostic step confirming
-  the serial-execution hypothesis; refactor only if confirmed.
+  throughput. Begins with a `trace.txt` diagnostic step to confirm
+  the serial-execution hypothesis. Refactor only if confirmed.
 
 ### Demoted
 
@@ -254,9 +259,9 @@ not task IDs — maps to task IDs in the right column.
 | 14 | Noise-halo thresholds | 18 |
 | 15 | Delta-to-cold-start columns (maybe) | 15 |
 
-No formal "codebase freeze" gate — user opted for implicit discipline.
-The implicit rule: once Task 7 starts, no pipeline-behaviour changes
-until all three cohorts complete.
+No formal "codebase freeze" gate exists, since the user opted for
+implicit discipline. The implicit rule: once Task 7 starts, no
+pipeline-behaviour changes until all three cohorts complete.
 
 ---
 
@@ -270,8 +275,7 @@ until all three cohorts complete.
 
 ### Session one-liners not yet done
 
-None — everything discussed in the session that was agreed has been
-staged.
+None — everything agreed in the session has been staged.
 
 ### Pending in v7 but not started
 
@@ -281,11 +285,11 @@ The next chat should pick up with whatever step 1 produces:
    `test_rosetta_filtering` (it should automatically pick up the
    8 designs from `../rfdiffusion/results/rfdiffusion/split/` via
    the new chaining pattern).
-2. **If anything fails**: diagnose against the staged code; likely
-   suspects would be the contigs-parser in
-   `derive_input_design_region.py` on an unusual contig form, or
-   the `files()` glob pattern in the chained test NFs misbehaving
-   on an empty directory.
+2. **If anything fails**: diagnose against the staged code. The
+   first likely suspect is the contigs-parser in
+   `derive_input_design_region.py` on an unusual contig form. The
+   second is the `files()` glob pattern in the chained test NFs
+   misbehaving on an empty directory.
 
 ### Design decisions flagged for review once cohort data exists
 
@@ -294,9 +298,9 @@ The next chat should pick up with whatever step 1 produces:
   against the design_24 variance data.
 - Weighted-Jaccard formulation: implemented as per-pair Cβ–Cβ
   (strictly more discriminating) rather than residue-set weighted.
-  This was a design call made during Step 3 — both the existing
-  `true_jaccard` and the new `weighted_jaccard` flow through cross-
-  sequence summary, so Task 8 AUROC will decide which wins.
+  This was a design call made during Step 3. Both the existing
+  `true_jaccard` and the new `weighted_jaccard` flow through
+  cross-sequence summary, so Task 8 AUROC will decide which wins.
 
 ---
 
@@ -315,15 +319,15 @@ The next chat should pick up with whatever step 1 produces:
    the current pipeline. It stays in the codebase but is NOT part of
    the test cascade. `test_haddock` was deliberately left un-chained.
 
-4. **cuEquivariance kernels are OFF in production**: per P0-35's
+4. **cuEquivariance kernels are OFF in production**, per P0-35's
    closure. `negsteer_no_kernels = true` in both production params
    and the negsteer test defaults. The rebuilt container
    `boltz2_negsteer.img` at `/hpc-home/jowillia/singularity/...`
-   still has the kernel path available — we just don't take it.
+   still has the kernel path available. We just don't take it.
 
 5. **`contact_cutoff` default of 8 Å is the right ballpark** for
    RFDiffusion filtering. Cα–Cα because designs are polyvaline at
-   this stage. Do NOT tune this for test variety — it's a calibrated
+   this stage. Do NOT tune this for test variety. It's a calibrated
    threshold the downstream pipeline assumes. Task 47 revisits it
    with real data. Knobs safe to vary: `num_designs`, `rfdiff_iterations`,
    `hotspot`.
@@ -335,10 +339,10 @@ The next chat should pick up with whatever step 1 produces:
 
 7. **Task 45 (multi-cycle) has two unresolved decisions** the v7
    spec flagged: (a) convergence criterion (no-new-candidates vs
-   metric-stalls vs fixed-count); (b) whether controls get multiple
-   cycles. Spec recommends "no-new-candidates with fixed-count
-   fallback" and "controls stay single-cycle" — but these are to be
-   finalised during implementation.
+   metric-stalls vs fixed-count), and (b) whether controls get
+   multiple cycles. Spec recommends "no-new-candidates with
+   fixed-count fallback" and "controls stay single-cycle", but both
+   are to be finalised during implementation.
 
 8. **Nextflow DSL2 `params` priority** behaves as
    expected: CLI `--foo bar` overrides script-level `params.foo =`

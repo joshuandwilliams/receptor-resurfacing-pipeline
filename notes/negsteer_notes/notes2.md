@@ -3,11 +3,11 @@
 ## The problem
 
 The negative-steering pipeline converged cleanly on 6G10 (best effector
-RMSD ~1.8 Å, `true_jaccard` up to 0.88) but failed on 7QPX across 1309
-designs spanning 7 modes and 5 cycles — a hard floor at ~12.5 Å
+RMSD ~1.8 Å, `true_jaccard` up to 0.88). It failed on 7QPX across 1309
+designs spanning 7 modes and 5 cycles, hitting a hard floor at ~12.5 Å
 effector RMSD with max `true_jaccard` only 0.31. The two complexes
 had nearly identical sequences (4 interior point edits plus terminal
-trims), which framed the initial question as: *which residues, when
+trims). That framed the initial question. *Which residues, when
 introduced into the working background, flip Boltz from the correct
 pose to the 7QPX-style wrong pose?*
 
@@ -22,17 +22,17 @@ Added two flags to `boltz2_negative_steering.py plan`:
   true-site protection, and RMSD ranking.
 - `--effector-fasta PATH` — same for the effector.
 - `--skip-steering` — run only the initial cold-start prediction and
-  stop; useful for cheap sequence-walk diagnostics.
+  stop. Useful for cheap sequence-walk diagnostics.
 
 The override loader (`_load_seq_override` in `cmd_plan`) validates
 length against the ground-truth chain, reports all differing
-positions, and persists the override paths in `plan.json` so the
-iterate driver can pick them up. `rec_seq_truth` and `eff_seq_truth`
-are kept separate from `rec_seq` / `eff_seq` so that
-`find_contact_residues_heavy` on the ground truth uses the truth
-sequence (satisfying its `expected_rec_seq` assertion) while the
-call on the prediction uses the override (because that's what was
-actually folded). Without overrides, behaviour is fully backwards
+positions, and persists the override paths in `plan.json`. The
+iterate driver picks them up from there. `rec_seq_truth` and
+`eff_seq_truth` are kept separate from `rec_seq` / `eff_seq`. That
+way `find_contact_residues_heavy` on the ground truth uses the truth
+sequence, satisfying its `expected_rec_seq` assertion. The
+call on the prediction uses the override, because that is what was
+actually folded. Without overrides, behaviour is fully backwards
 compatible.
 
 ### 2. Effector-override propagation in the iterate driver
@@ -49,12 +49,12 @@ the override forward.
 ### 3. Singularity bind-path fix in the submission script
 
 `submit_boltz2_negative_steering.sh` now intercepts
-`--receptor-fasta` / `--effector-fasta` during arg parsing, validates
-the files exist on the login node (fast-fail instead of after sbatch
-has queued jobs), and adds the parent directories to the Singularity
-bind list so the overrides are visible inside the container. The
-flags still pass through the existing `EXTRA_PLAN_ARGS` mechanism to
-reach `plan`.
+`--receptor-fasta` / `--effector-fasta` during arg parsing. It
+validates the files exist on the login node, so it fast-fails instead
+of failing after sbatch has queued jobs. It also adds the parent
+directories to the Singularity bind list, so the overrides are visible
+inside the container. The flags still pass through the existing
+`EXTRA_PLAN_ARGS` mechanism to reach `plan`.
 
 ### 4. Waypoint generators
 
@@ -65,23 +65,23 @@ reach `plan`.
   the chain assignment was wrong.
 
 Both produce per-waypoint FASTA pairs and a ready-to-run submission
-shell script with narrow-steering settings
+shell script. That script uses narrow steering
 (`--mode mild --max-mutations 4 --candidate-pool-size 8 --n-designs 4 --n-cycles 2 --no-effector-template`),
 about 8 Boltz calls per waypoint.
 
 ### 5. Aggregation and combine scripts
 
 - **`aggregate_waypoints.sh`** — SLURM job that runs `aggregate` per
-  waypoint inside the boltz container (which has gemmi, numpy,
-  Bio.Align) and then attempts a combined pandas summary inside the
-  TensorFlow container (which, despite the `.def` file, turned out
-  not to have pandas).
+  waypoint inside the boltz container, which has gemmi, numpy and
+  Bio.Align. It then attempts a combined pandas summary inside the
+  TensorFlow container, which, despite the `.def` file, turned out
+  not to have pandas.
 - **`combine_waypoints.py`** — stdlib-only combiner that reads the
-  per-waypoint `all_results_multicycle.csv` files directly, produces
-  `runs/waypoint_combined_results.csv` (every design, tagged with
-  `anchor` and `waypoint`) and `runs/waypoint_summary.csv` (one row
-  per waypoint with initial / best / max statistics). Works on the
-  login node with no container.
+  per-waypoint `all_results_multicycle.csv` files directly. It
+  produces `runs/waypoint_combined_results.csv`, holding every design
+  tagged with `anchor` and `waypoint`. It also produces
+  `runs/waypoint_summary.csv`, one row per waypoint with initial /
+  best / max statistics. Works on the login node with no container.
 
 ## The diagnostic walk and what it revealed
 
@@ -102,8 +102,8 @@ effector. Results:
 | walk_7QPX | rev_effN16H | 16.31 | 0.33 | floor |
 | walk_7QPX | rev_all3 | 16.65 | 0.25 | floor |
 
-Sharp gap — 3 Å vs 14 Å, nothing in between — with the gap aligning
-perfectly with the *anchor*, not with which edits were applied.
+The gap is sharp, 3 Å vs 14 Å with nothing in between, and it aligns
+perfectly with the *anchor* rather than with which edits were applied.
 `rev_all3` (every 7QPX→6G10 reversion expressible within the 7QPX
 scaffold) sat at the same floor as `baseline_7QPX`. Every sequence
 hypothesis was ruled out.
@@ -112,11 +112,10 @@ hypothesis was ruled out.
 
 You inspected 7QPX in ChimeraX and found that the interacting pair is
 **chain B + chain C**, not chain A + chain C. The original pipeline
-had been pointed at the wrong receptor chain, so
-`find_contact_residues_heavy(7QPX.pdb, "A", "C", ...)` was reading
-the "true site" off an unrelated chain pair and Boltz was being
-measured against an interaction that doesn't exist in the relevant
-biological assembly.
+had been pointed at the wrong receptor chain. As a result,
+`find_contact_residues_heavy(7QPX.pdb, "A", "C", ...)` read the "true
+site" off an unrelated chain pair. Boltz was measured against an
+interaction that doesn't exist in the relevant biological assembly.
 
 Chain comparison from the 7QPX PDB:
 
@@ -150,7 +149,7 @@ reran with narrow steering:
 
 Every chain-B waypoint converged. `baseline_7QPX` went from 14.46 Å
 (chain A) to 2.41 Å (chain B) with no sequence editing at all. The
-sequence walk was never the right question; the chain assignment
+sequence walk was never the right question. The chain assignment
 was the only thing wrong. The elaborate hypotheses built around the
 chain-A results (the `del_E12` deletion theory, the "Boltz
 fundamentally can't predict 7QPX" hypothesis, the alanine-padding
@@ -170,23 +169,25 @@ experiment (`--mode mild --max-mutations 6 --candidate-pool-size 6
 
 **7B1I** converged on the cold start alone. Boltz placed the effector
 at 5.47 Å with both chains folding correctly (rec 2.55 Å, eff 0.51
-Å), and all 19 residues at the "wrong" interface were also on the
-true interface — no surface to push against. The plan stage
+Å). All 19 residues at the "wrong" interface were also on the
+true interface, leaving no surface to push against. The plan stage
 correctly wrote `skip_steering=true` and exited cleanly. This is
-success, not failure; negative steering is the wrong tool for
+success, not failure, because negative steering is the wrong tool for
 complexes Boltz already gets right.
 
-**7QPX** converged in a single cycle. Cold start was 24.6 Å; the two
-surviving cycle-0 designs landed at 1.04 Å and 1.35 Å effector RMSD.
-Cycle 1 exhausted immediately because every remaining wrong-interface
-residue now belonged to the true interface — same "nowhere left to
-push" condition as 7B1I, but after steering rather than before.
+**7QPX** converged in a single cycle. Cold start was 24.6 Å, and the
+two surviving cycle-0 designs landed at 1.04 Å and 1.35 Å effector
+RMSD. Cycle 1 exhausted immediately because every remaining
+wrong-interface residue now belonged to the true interface. That is
+the same "nowhere left to push" condition as 7B1I, but after steering
+rather than before.
 
-**7QZD** showed the canonical negative-steering pattern: wildly
-wrong cold start (24.6 Å), dramatic rescue by cycle 0 (2.06 Å),
-continued refinement through cycle 1 (1.71 Å, `true_jaccard` 0.92,
-22 of 24 true-interface residues correctly identified) and cycle 2
-(1.07 Å). The single cleanest positive example across the three.
+**7QZD** showed the canonical negative-steering pattern. The cold
+start was wildly wrong (24.6 Å) and cycle 0 delivered a dramatic
+rescue (2.06 Å). Refinement continued through cycle 1 (1.71 Å,
+`true_jaccard` 0.92, 22 of 24 true-interface residues correctly
+identified) and cycle 2 (1.07 Å). The single cleanest positive
+example across the three.
 
 ## Files produced
 
@@ -204,20 +205,20 @@ the first three):
 ## Lessons for the benchmark at large
 
 All three of the "failing" complexes (7QPX, 7B1I, 7QZD) turned out to
-need chains B and C rather than A and C. That's not a coincidence —
-it's consistent with a crystal-form or deposition convention where
-chain A is a monomer or a crystallographic partner and the
+need chains B and C rather than A and C. That's not a coincidence. It
+is consistent with a crystal-form or deposition convention where
+chain A is a monomer or a crystallographic partner, and the
 biological interaction sits on later chains. A small audit script
-that, for each benchmark entry, counts the number of heavy-atom
-contacts between every chain pair and flags entries where the
-user-specified pair has noticeably fewer contacts than the best pair
-would catch this across your whole benchmark in a single pass.
-Worth a few hours of work.
+would catch this across the whole benchmark in a single pass. For
+each benchmark entry it would count heavy-atom contacts between every
+chain pair, then flag entries where the user-specified pair has
+noticeably fewer contacts than the best pair. Worth a few hours of
+work.
 
 The override infrastructure, the waypoint generators, the iterate
 driver fix, and the combine script all worked correctly. They were
 exercising the right machinery against the wrong target. They are
-useful infrastructure for any future experiment where you legitimately
-need to walk a sequence between two complexes — worth keeping even
-though the specific diagnostic they were built for turned out to be
+useful infrastructure for any future experiment that genuinely needs
+to walk a sequence between two complexes. Worth keeping, even though
+the specific diagnostic they were built for turned out to be
 unnecessary.

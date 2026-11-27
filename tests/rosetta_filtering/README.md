@@ -23,7 +23,7 @@ See `data/README.md` for the per-file contract.
 - `rosetta_filtering/scored/design_*.pdb` — every input PDB after
   Rosetta scoring (with the score sidecar).
 - `rosetta_filtering/passing/design_*.pdb` — designs with Sc above
-  threshold; canonical input feed for the MPNN test.
+  threshold. Canonical input feed for the MPNN test.
 - `rosetta_filtering/failing/design_*.pdb` — below-threshold designs.
 - `rosetta_filtering/rosetta_filter_metrics.json` — aggregate metrics.
 - `rosetta_filter_plots/*.png` — diagnostic plots.

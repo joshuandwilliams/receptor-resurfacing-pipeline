@@ -4,7 +4,7 @@ The single canonical reference for domain terminology used in this project. Each
 
 This is the language the pipeline *should* use consistently. Where the current code is inconsistent — using one name for two concepts, or two names for one concept — those are flagged in §10. Phase 3 cleanup should resolve them.
 
-**Scope**: terms come from the domain (computational structural biology of de novo binder design + Boltz validation), not from code conventions. Code variants are listed only as recognition aids; they should not be read as endorsing the names. Where a term has multiple casings or punctuations (e.g. `design_region`, `designRegion`, `design-region`), only the underscored Python form is listed unless the variant matters semantically.
+**Scope**: terms come from the domain (computational structural biology of de novo binder design + Boltz validation), not from code conventions. Code variants are listed only as recognition aids, not as endorsement of the names. Where a term has multiple casings or punctuations (e.g. `design_region`, `designRegion`, `design-region`), only the underscored Python form is listed unless the variant matters semantically.
 
 **Terminology authority**: where Baker-lab / RFDiffusion-paper terminology (Watson et al. 2023, "motif scaffolding") differs from informal project usage, this glossary adopts the published terminology. Deviations from field standard are flagged.
 
@@ -48,7 +48,7 @@ Structural prediction model used as the core predictor for the negative-steering
 - **Variants in code**: `boltz`, `boltz2`, `Boltz`, `BOLTZ2_*`
 
 ### AlphaFold3 (AF3)
-Independent structure predictor used as an orthogonal cross-check against Boltz on cohort survivors. **In this pipeline AF3 is always run without an MSA** — a deliberate choice to ensure orthogonality with Boltz. The "AF3-no-MSA" qualifier is therefore implicit; bare "AF3" in this codebase always means the no-MSA configuration.
+Independent structure predictor used as an orthogonal cross-check against Boltz on cohort survivors. **In this pipeline AF3 is always run without an MSA**, a deliberate choice to ensure orthogonality with Boltz. The "AF3-no-MSA" qualifier is therefore implicit. Bare "AF3" in this codebase always means the no-MSA configuration.
 
 - **Variants in code**: `af3`, `AF3`, `alphafold3`, `AF3_NOMSA_ON_SURVIVORS`, `AF3_PARSE_OUTPUT`
 
@@ -78,12 +78,12 @@ Fast sequence clustering tool. Used to cluster MPNN-designed sequences before to
 - **Variants in code**: `mmseqs`, `mmseqs_bin`, `run_mmseqs_cluster`
 
 ### CAPRI / clustfcc
-Output-table formats from HADDOCK. CAPRI is the per-model scoring table; clustfcc is the cluster table. Both are parsed by `haddock_utils`.
+Output-table formats from HADDOCK. CAPRI is the per-model scoring table, and clustfcc is the cluster table. Both are parsed by `haddock_utils`.
 
 - **Variants in code**: `parse_capri_tsv`, `parse_clustfcc_tsv`
 
 ### ColabFold (historical)
-MSA-search tool referenced in `nextflow.config` and `project_map.md` as part of an earlier MSA-based Boltz path. **Not wired into the current workflow**; mention in code is historical.
+MSA-search tool referenced in `nextflow.config` and `project_map.md` as part of an earlier MSA-based Boltz path. **Not wired into the current workflow**, and the mention in code is historical.
 
 - **Variants in code**: `colabfold`, `ColabFold`, `COLABFOLD_*`
 
@@ -91,7 +91,7 @@ MSA-search tool referenced in `nextflow.config` and `project_map.md` as part of 
 
 ## 2. Pipeline stages
 
-Stages listed in workflow order. The pipeline is one Nextflow DSL2 workflow (`main.nf`) that runs preprocessing → optional HADDOCK docking → backbone generation → Rosetta filtering → sequence design → negative-steering validation → orthogonal-metrics validation → plotting.
+Stages listed in workflow order. The pipeline is one Nextflow DSL2 workflow (`main.nf`). It runs preprocessing → optional HADDOCK docking → backbone generation → Rosetta filtering → sequence design → negative-steering validation → orthogonal-metrics validation → plotting.
 
 ### Preprocessing
 Sequence extraction from input PDBs and resolution of contigs before backbone generation.
@@ -122,23 +122,23 @@ ProteinMPNN proposes K sequences per surviving backbone. Includes correction (re
 - **Processes**: `MPNN_FIXED_POSITIONS`, `PROTEINMPNN`, `SEQUENCE_CORRECTION`, `SEQUENCE_QC`, `MPNN_DESIGN_REGION_SCORE`, `MPNN_CLUSTER`, `MPNN_SELECT_TOP`, `MPNN_PLOTS`
 
 ### Negative-steering validation
-Per-MPNN-sequence validation. Predict the design with Boltz, identify residues at the "wrong" predicted interface, mutate them to push Boltz off the wrong site, re-predict, then run a reversion pass to test whether the pose holds when the steering mutations are reverted. The full chain (plan → predict-one array → collect → prefilter → build-contaminated → plan-reversions → predict-reversion array → harvest-reversions → finalize → aggregate → compute-final-metrics → aggregate-per-sequence → extract-passing) runs as one SLURM GPU job per MPNN sequence.
+Per-MPNN-sequence validation. Predict the design with Boltz, identify residues at the "wrong" predicted interface, then mutate them to push Boltz off the wrong site. Re-predict, then run a reversion pass to test whether the pose holds once the steering mutations are reverted. The full chain runs as one SLURM GPU job per MPNN sequence. Chain order: plan → predict-one array → collect → prefilter → build-contaminated → plan-reversions → predict-reversion array → harvest-reversions → finalize → aggregate → compute-final-metrics → aggregate-per-sequence → extract-passing.
 
 - **Processes**: `NEGSTEER_DERIVE_INDICES`, `NEGSTEER_RUN_ONE`, `NEGSTEER_CROSS_SEQUENCE`, `NEGSTEER_PLOTS`, `NEGSTEER_WITHIN_SEQUENCE_PLOTS`
 - **Variants in code**: `negative_steering`, `negsteer`
 
 ### Multi-cycle steering (currently dormant)
-Repeated steering cycles where each cycle starts from the validated reverted sequence of the previous cycle. Implemented in `boltz2_iterate_steering.py` as a 14-subcommand orchestrator but **not wired into the current Nextflow integration** — the current pipeline only runs single-cycle (`--n-cycles 1`). Multi-cycle is on the roadmap.
+Repeated steering cycles where each cycle starts from the validated reverted sequence of the previous cycle. Implemented in `boltz2_iterate_steering.py` as a 14-subcommand orchestrator, but **not wired into the current Nextflow integration**. The current pipeline only runs single-cycle (`--n-cycles 1`). Multi-cycle is on the roadmap.
 
 - **Variants in code**: `iterate_steering`, `iterate-plan`, `kickoff_*`, `--n-cycles`
 
 ### Reversion pass (sub-stage of steering)
-Sub-stage that takes each steered design, identifies steering mutations *inside the protected set* (design region ∪ true interface), reverts them back to the MPNN design's original residues, and re-predicts with Boltz. The reverted prediction is the *final* design — even if reversion fails, its metrics are what the cohort summary reports. Tests whether the pose holds without the load-bearing steering mutations.
+Sub-stage that takes each steered design and identifies steering mutations *inside the protected set* (design region ∪ true interface). It reverts them back to the MPNN design's original residues, then re-predicts with Boltz. The reverted prediction is the *final* design. Even if reversion fails, its metrics are what the cohort summary reports. Tests whether the pose holds without the load-bearing steering mutations.
 
 - **Variants in code**: `reversion`, `plan-reversions`, `harvest-reversions`, `reverted_*`, `build_reverted_sequence`
 
 ### Negative controls
-Two synthetic non-design sequences (`scrambled`, `polyA`) generated and run through the same negsteer chain as a real MPNN sequence, to test that the framework rejects nonsense receptors. Note: cold-start predictions on controls typically have no contact residues to mutate, so the steering phase silently skips — controls effectively become "3 cold-start predictions, no steered designs" and never reach tier A. This is semantically correct for testing the prediction-and-ranking framework, but the name "negative steering control" is mildly misleading because steering rarely fires.
+Two synthetic non-design sequences (`scrambled`, `polyA`) generated and run through the same negsteer chain as a real MPNN sequence, to test that the framework rejects nonsense receptors. Cold-start predictions on controls typically have no contact residues to mutate, so the steering phase silently skips. Controls effectively become "3 cold-start predictions, no steered designs" and never reach tier A. This is semantically correct for testing the prediction-and-ranking framework. The name "negative steering control" is mildly misleading, though, because steering rarely fires.
 
 - **Processes**: `DERIVE_INPUT_INDICES`, `NEGSTEER_CONTROLS`
 - **Variants in code**: `controls`, `control_scrambled`, `control_polyA`
@@ -179,7 +179,7 @@ The specific binder protein this pipeline redesigns. **Receptor is an instance o
 - **See also**: Binder (parent concept), §9 chain-A/B convention
 
 ### Native (≡ wild-type)
-The protein as it arose through evolution — i.e. *not* designed. In this project, the native receptor is the starting structure that RFDiffusion generates designs around. "Native" and "wild-type" are synonyms.
+The protein as it arose through evolution, i.e. *not* designed. In this project, the native receptor is the starting structure that RFDiffusion generates designs around. "Native" and "wild-type" are synonyms.
 
 - **Variants in code**: `native_*`, `wild_type_*`, `wt_*`
 
@@ -196,7 +196,7 @@ The polypeptide main chain: **N, Cα, C, and O atoms** along the polymer. Side c
 - **Audit note**: prose in this codebase that says "backbone" while operating on `read_ca_atoms` output is computing Cα-trace operations, not full-backbone operations. Flagged in §10.
 
 ### Cα trace
-The sequence of Cα atoms only — a coarse representation that ignores the rest of the backbone (N/C/O) and all side-chain atoms. **Most geometry helpers in this codebase operate on Cα traces** (`read_ca_atoms`, `_chain_ca_coords`, `_kabsch_align`), not full backbones.
+The sequence of Cα atoms only, a coarse representation that ignores the rest of the backbone (N/C/O) and all side-chain atoms. **Most geometry helpers in this codebase operate on Cα traces** (`read_ca_atoms`, `_chain_ca_coords`, `_kabsch_align`), not full backbones.
 
 - **Variants in code**: `read_ca_atoms`, `read_ca_seq_*`, `ca_coords`, `_chain_ca_coords`, `CAEntry`
 
@@ -206,15 +206,15 @@ One RFDiffusion-generated backbone (with its derived metadata: contigs, motif bo
 - **Variants in code**: `design`, `design_id`, `design_idx`, `RFDiffusion design`, `d{N}`
 
 ### Motif (Baker-lab framing)
-Receptor residues **preserved** from the native sequence/structure during RFDiffusion. The fixed anchor regions of the contig — the parts that are NOT regenerated. Aligned with the "motif scaffolding" terminology of Watson et al. 2023.
+Receptor residues **preserved** from the native sequence/structure during RFDiffusion. The fixed anchor regions of the contig, the parts that are NOT regenerated. Aligned with the "motif scaffolding" terminology of Watson et al. 2023.
 
-- **Audit note**: this codebase has historically used `scaffold` for this concept (e.g. `calc_scaffold_and_region_metrics`, `scaffold_rmsd`). Under the Baker-lab framing adopted here, that usage is **inverted** — the code's `scaffold_*` actually measures the motif. **Strongly flagged for rename in §10.**
+- **Audit note**: this codebase has historically used `scaffold` for this concept (e.g. `calc_scaffold_and_region_metrics`, `scaffold_rmsd`). Under the Baker-lab framing adopted here, that usage is **inverted**. The code's `scaffold_*` actually measures the motif. **Strongly flagged for rename in §10.**
 
 ### Scaffold (≡ Design region)
-Receptor residues **generated de novo** by RFDiffusion — the new structure built around the motif. Synonym of design region; "design region" is the preferred term in this glossary because it is unambiguous in code, while "scaffold" is the upstream Baker-lab term and may appear in upstream documentation.
+Receptor residues **generated de novo** by RFDiffusion, the new structure built around the motif. Synonym of design region. This glossary prefers "design region" because it is unambiguous in code. "Scaffold" is the upstream Baker-lab term and may appear in upstream documentation.
 
 - **See also**: Design region (preferred name), Motif (the complement)
-- **Note**: existing code uses `scaffold` for the *motif* (the inverse meaning). When updating code, use `design_region` for the de novo region; reserve `motif` for the preserved region. **Strongly flagged in §10.**
+- **Note**: existing code uses `scaffold` for the *motif* (the inverse meaning). When updating code, use `design_region` for the de novo region, and reserve `motif` for the preserved region. **Strongly flagged in §10.**
 
 ### Design region
 The set of receptor residue positions that ProteinMPNN was allowed to redesign. These are the de novo-generated positions, expressed as 1-based residue indices into the receptor sequence.
@@ -224,7 +224,7 @@ The set of receptor residue positions that ProteinMPNN was allowed to redesign. 
 - **Complement within receptor**: Motif
 
 ### Contig
-RFDiffusion's specification string for a design: a comma-separated list of segments where each segment is either an *anchor* (residue range copied from native, contributing to the motif) or *de novo* (range to be generated, contributing to the design region). Resolved at preprocessing time.
+RFDiffusion's specification string for a design. It is a comma-separated list of segments. Each segment is either an *anchor* (residue range copied from native, contributing to the motif) or *de novo* (range to be generated, contributing to the design region). Resolved at preprocessing time.
 
 - **Variants in code**: `contig`, `contigs`, `contigmap`, `parse_block_segments`, `resolve_contigs`
 
@@ -234,7 +234,7 @@ A segment in a contig string that RFDiffusion generates from scratch. The union 
 - **Variants in code**: `denovo`, `de novo`, `find_denovo_residues`
 
 ### Anchor
-A native-sequence residue range that is pinned in place during design — i.e. part of the motif. The MPNN-corrected sequence is aligned back to native via these anchors.
+A native-sequence residue range that is pinned in place during design, i.e. part of the motif. The MPNN-corrected sequence is aligned back to native via these anchors.
 
 - **Variants in code**: `anchor`, `align_to_native_by_anchors`, `native_anchor_regions`
 
@@ -247,20 +247,20 @@ Receptor residues identified by HADDOCK as participating in the docked interface
 The set of receptor residue positions that contact the effector in the design's *intended* binding mode (i.e. as Boltz would predict if it predicted the design correctly). Stored as 0-based indices. Used as the gold-standard target the steering machinery is trying to hit.
 
 - **Variants in code**: `true_interface`, `true_interface_idx`, `true_interface_indices`
-- **Note**: stored 0-based by historical convention; design region is stored 1-based. The index-base difference is a code accident, not a domain distinction. See §9 and §10.
+- **Note**: stored 0-based by historical convention, while design region is stored 1-based. The index-base difference is a code accident, not a domain distinction. See §9 and §10.
 
 ### Wrong interface
-The set of receptor residue positions Boltz predicts as contacting the effector in the cold-start (pre-steering) prediction — i.e. the residues at the *unintended* binding mode the steering pass aims to push Boltz away from.
+The set of receptor residue positions Boltz predicts as contacting the effector in the cold-start (pre-steering) prediction, i.e. the residues at the *unintended* binding mode the steering pass aims to push Boltz away from.
 
 - **Variants in code**: `wrong_interface`, `wrong_interface_residues`, `initial_wrong_interface_idx`
 
 ### Protected set
-The union (design region ∪ true interface): receptor positions where mutation contamination matters. The reversion pass reverts steering mutations only when they sit inside the protected set; mutations outside it are accepted as legitimate steering contacts.
+The union (design region ∪ true interface): receptor positions where mutation contamination matters. The reversion pass reverts steering mutations only when they sit inside the protected set. Mutations outside it are accepted as legitimate steering contacts.
 
 - **Variants in code**: `protected_set`, `contamination_gating_positions`
 
 ### Chimeric receptor
-A receptor sequence assembled by splicing native (anchored) and MPNN-designed (de novo) fragments — i.e. the corrected output of `pipeline_correct_sequences.py`.
+A receptor sequence assembled by splicing native (anchored) and MPNN-designed (de novo) fragments, i.e. the corrected output of `pipeline_correct_sequences.py`.
 
 - **Variants in code**: `chimera`, `chimeric`, `corrected_receptor`
 
@@ -280,7 +280,7 @@ A receptor sequence with mutations applied at wrong-interface positions to push 
 - **Variants in code**: `steered`, `steered_*`, `make_steered_sequence`
 
 ### Reverted design
-A steered sequence with the protected-set steering mutations reverted back to the MPNN design's original residues. The reverted prediction is the *final* design — Boltz's prediction on this sequence is what's reported in cohort summaries when reversion was attempted.
+A steered sequence with the protected-set steering mutations reverted back to the MPNN design's original residues. The reverted prediction is the *final* design. Boltz's prediction on this sequence is what the cohort summaries report when reversion was attempted.
 
 - **Variants in code**: `reverted`, `reverted_*`, `build_reverted_sequence`
 
@@ -303,7 +303,7 @@ The plasmid containing the designed receptor sequence, used for agroinfiltration
 Computed predicates on cohort rows. Two granularities, both produced by `classify_mutation_reliance`:
 
 - **`mutation_reliance_flag`** — the predicted pose depends on at least one mutated position contacting the effector.
-- **`construct_reliance_flag`** — the predicted pose depends on a mutated position *inside the protected set* — i.e. on a mutation that would not exist in the wet-lab construct (because the reversion pass would have removed it). This is the wet-lab-relevant flag.
+- **`construct_reliance_flag`** — the predicted pose depends on a mutated position *inside the protected set*, i.e. on a mutation that would not exist in the wet-lab construct (because the reversion pass would have removed it). This is the wet-lab-relevant flag.
 
 - **Variants in code**: `mutation_reliance_flag`, `construct_reliance_flag`, `classify_mutation_reliance`
 - **Note**: the `construct_` prefix here is unrelated to Construct (the plasmid). Two different uses of the same root.
@@ -315,37 +315,37 @@ Computed predicates on cohort rows. Two granularities, both produced by `classif
 The pipeline operates at four distinct granularities, finest first.
 
 ### Diffusion sample
-One AF3 per-sample output (5 per seed, organised as `seed-N_sample-M/` directories). Specific to AF3 output structure; not a unit elsewhere in the pipeline.
+One AF3 per-sample output (5 per seed, organised as `seed-N_sample-M/` directories). Specific to AF3 output structure, and not a unit elsewhere in the pipeline.
 
 - **Variants in code**: `diffusion_samples`, `negsteer_diffusion_samples`
 
 ### Seed
-One Boltz (or AF3) prediction trial — a single random-seeded run of the predictor. Typically 3 seeds per `(sequence, sequence_group)` pair.
+One Boltz (or AF3) prediction trial, a single random-seeded run of the predictor. Typically 3 seeds per `(sequence, sequence_group)` pair.
 
 - **Variants in code**: `seed`, `seed_idx`, `seed_index`, `num_seeds`
 
 ### Sequence group (sg)
-A computational grouping of seeds that share the same input receptor sequence under one design. **No biological meaning** — the term comes from the standalone negsteer pipeline as a bookkeeping device. Aggregators group rows by the `sequence_group` integer.
+A computational grouping of seeds that share the same input receptor sequence under one design. **No biological meaning**. The term comes from the standalone negsteer pipeline as a bookkeeping device. Aggregators group rows by the `sequence_group` integer.
 
 - **Variants in code**: `sg`, `sg_idx`, `sequence_group`, `sgs`
 
 ### Sequence (cohort sense)
-One MPNN-designed sequence for one RFDiffusion design — the unit one row of `cross_sequence_summary.csv` represents. Identified in plots and CSVs by names like `d19_s1` (design 19, sequence 1).
+One MPNN-designed sequence for one RFDiffusion design, the unit one row of `cross_sequence_summary.csv` represents. Identified in plots and CSVs by names like `d19_s1` (design 19, sequence 1).
 
 - **Variants in code**: `seq_name`, `mpnn_sequence`, `MPNN sequence`, `s{N}`
 
 ### Representative seed
-The single seed chosen to represent a (sequence, sg) pair in cohort plots and the cross-sequence CSV — typically the seed with the best composite score.
+The single seed chosen to represent a (sequence, sg) pair in cohort plots and the cross-sequence CSV, typically the seed with the best composite score.
 
 - **Variants in code**: `rep_sg`, `rep_*` column prefix, `_rep_sg_for_outcomes`
 
 ### Cohort
-The full set of MPNN sequences (plus the two negative controls) processed together in one pipeline run — the rows of `cross_sequence_summary.csv`.
+The full set of MPNN sequences (plus the two negative controls) processed together in one pipeline run, the rows of `cross_sequence_summary.csv`.
 
 - **Variants in code**: `cohort`, `load_unified_cohort`, `cross_sequence_*`
 
 ### Cycle (multi-cycle only — currently dormant)
-One iteration of the multi-cycle steering loop. The current Nextflow integration runs only `cycle_0` (single-cycle); cycles 1+ exist in `boltz2_iterate_steering.py` as dormant orchestration code.
+One iteration of the multi-cycle steering loop. The current Nextflow integration runs only `cycle_0` (single-cycle). Cycles 1+ exist in `boltz2_iterate_steering.py` as dormant orchestration code.
 
 - **Variants in code**: `cycle`, `n_cycles`, `cycle_0`
 
@@ -355,12 +355,12 @@ The lineage of steering mutations across multiple cycles for one design. Encoded
 - **Variants in code**: `pathway`, `pathway_label`, `make_pathway_label`
 
 ### Leaf label vs parent label (multi-cycle only)
-A pathway label is itself a leaf label — the full chain identifying the tip of the lineage (e.g. `c0d05.c1d03`). The parent label is the prefix obtained by dropping the last segment (`c0d05`); it names the directory the leaf's design lives inside (`pathway_<parent>`).
+A pathway label is itself a leaf label, the full chain identifying the tip of the lineage (e.g. `c0d05.c1d03`). The parent label is the prefix obtained by dropping the last segment (`c0d05`). It names the directory the leaf's design lives inside (`pathway_<parent>`).
 
 - **Variants in code**: `leaf_label`, `parent_pathway_label`
 
 ### Cumulative mutations (multi-cycle only)
-The union of mutated positions accumulated across all ancestors in a pathway — the full set of receptor positions that have been mutated to reach a given leaf prediction.
+The union of mutated positions accumulated across all ancestors in a pathway, the full set of receptor positions that have been mutated to reach a given leaf prediction.
 
 - **Variants in code**: `accumulated_mutated_positions`, `read_cumulative_mutations`
 
@@ -383,24 +383,24 @@ The classification produced by `classify_reversion_verdict` for one seed's rever
 ### `clean_steered` (per-seed)
 A seed whose **steered** prediction had zero mutated-position contamination AND was structurally OK (intact + ra_eff < 5Å). Reversion was correctly skipped for this seed because there was nothing to revert. Counts as pass-equivalent in tier classification (`n_pass += 1`).
 
-- **Variants in code**: `clean_steered`, `_row_is_clean_steered`; contributes to `n_pass`
-- **See also**: `no_reversion` (the per-sequence outcome label that fires when every seed in the group was clean_steered or cold-start-skipped — same underlying state at different granularities; outcome=`no_reversion` is NOT a tier proxy)
+- **Variants in code**: `clean_steered`, `_row_is_clean_steered` (contributes to `n_pass`)
+- **See also**: `no_reversion`, the per-sequence outcome label that fires when every seed in the group was clean_steered or cold-start-skipped. Same underlying state at different granularities. Outcome=`no_reversion` is NOT a tier proxy.
 
 ### `no_data` (per-seed)
-A seed whose reverted prediction is missing, unparseable, or incomplete enough that the classifier cannot place it in any of the other four buckets. Operationally fires when the reverted-* fields can't be read AND the clean_steered heuristic also fails (e.g. steered ra_eff ≥ 5Å with zero contamination → wrong placement, no reversion attempted, classifier can't decide). Does NOT count as pass-equivalent — `n_pass` ignores `no_data` seeds.
+A seed whose reverted prediction is missing, unparseable, or incomplete enough that the classifier cannot place it in any of the other four buckets. Operationally fires when the reverted-* fields can't be read AND the clean_steered heuristic also fails (e.g. steered ra_eff ≥ 5Å with zero contamination → wrong placement, no reversion attempted, classifier can't decide). Does NOT count as pass-equivalent, because `n_pass` ignores `no_data` seeds.
 
-- **Variants in code**: `no_data`; contributes to neither `n_pass` numerator nor failure modes (treated as "abstain")
+- **Variants in code**: `no_data` (contributes to neither the `n_pass` numerator nor the failure modes, and is treated as "abstain")
 
 ### Outcome (per-sequence, renamed from `aggregated_verdict`)
 The sequence-level label computed from per-seed reversion verdicts. Possible values include the four reversion-verdict classes above plus:
 
-- **`no_reversion`** — no seed in this group needed reversion. Fires either when (a) all seeds passed cold-start `skip_steering`, or (b) steering ran but every seed's steered prediction had zero contamination. Note: **outcome `no_reversion` does NOT imply n_pass == n_seeds.** A wrong-placement-no-contamination group is `no_reversion` with n_pass == 0 → tier none. Use `n_pass / n_seeds` for tiering.
-- **`singleton`** — passthrough row (cycle-0 initial baseline); not aggregated.
+- **`no_reversion`** — no seed in this group needed reversion. Fires either when (a) all seeds passed cold-start `skip_steering`, or (b) steering ran but every seed's steered prediction had zero contamination. **Outcome `no_reversion` does NOT imply n_pass == n_seeds.** A wrong-placement-no-contamination group is `no_reversion` with n_pass == 0 → tier none. Use `n_pass / n_seeds` for tiering.
+- **`singleton`** — passthrough row (cycle-0 initial baseline), not aggregated.
 
 - **Variants in code**: `outcome`, `outcome_reason`, `_classify_outcome` (formerly `aggregated_verdict` / `_classify_aggregated_verdict`)
 
 ### `n_pass` (per-sequence)
-The number of seeds in a sequence-group that passed the structural+contamination filters: `n_pass = (# pose_holds seeds) + (# clean_steered seeds)`. **Path-agnostic** — computed the same way regardless of whether reversion ran. Drives cohort tier directly. Replaces the five `n_seeds_*` per-verdict count columns from the pre-rename schema.
+The number of seeds in a sequence-group that passed the structural+contamination filters: `n_pass = (# pose_holds seeds) + (# clean_steered seeds)`. **Path-agnostic**, computed the same way regardless of whether reversion ran. Drives cohort tier directly. Replaces the five `n_seeds_*` per-verdict count columns from the pre-rename schema.
 
 ### `PASSING_OUTCOMES`
 The set of outcome labels allowed to populate `passing_summary.csv`: `{pose_holds, no_reversion, ""}`. The empty string covers rows that haven't been outcome-classified.
@@ -439,7 +439,7 @@ The final gate after the orthogonal-metrics merge. True iff **all three** of the
 - **BSA** (Rosetta `dSASA_int`, buried surface area) ≥ threshold
 - **ΔΔG** (Rosetta `dG_separated`, binding energy) ≤ threshold
 
-`interface_plddt` is NOT in the orthogonal cascade — it is a Boltz-derived confidence metric and was removed from `bin/merge_orthogonal_metrics.py` in commit `47cb9f2`. AF3 (ra_eff disagreement against Boltz) is computed but **demoted to flag-only** in the merge step (does not gate, only informs).
+`interface_plddt` is NOT in the orthogonal cascade. It is a Boltz-derived confidence metric, and was removed from `bin/merge_orthogonal_metrics.py` in commit `47cb9f2`. AF3 (ra_eff disagreement against Boltz) is computed but **demoted to flag-only** in the merge step (does not gate, only informs).
 
 - **Variants in code**: `passes_orthogonal_filters`, `_apply_filters`, `orthogonal_flags`
 
@@ -447,12 +447,12 @@ The final gate after the orthogonal-metrics merge. True iff **all three** of the
 The audit-confirmed mental model for reading cohort survivor rows: each design is evaluated along three orthogonal axes that gate independently.
 
 1. **Boltz-2 structure** — `ra_eff_vs_truth_median`, `independent_receptor_rmsd_median`, `independent_effector_rmsd_median`, `true_jaccard_median`. Drives the negsteer outcome and the tier.
-2. **Boltz-2 confidence** — `complex_plddt`, `iptm`, `ipae`, `pae_pass_frac_median`, `interface_plddt_median`, `weighted_jaccard_median`. Diagnostic — feeds `confidence_flag` but does not gate on its own in production.
+2. **Boltz-2 confidence** — `complex_plddt`, `iptm`, `ipae`, `pae_pass_frac_median`, `interface_plddt_median`, `weighted_jaccard_median`. Diagnostic. It feeds `confidence_flag` but does not gate on its own in production.
 3. **Orthogonal** — Rosetta Sc + BSA + ΔΔG (gating, see `passes_orthogonal_filters` above), plus AF3-no-MSA ra_eff (informational flag only). Computed only on cohort survivors (tier-A/B/C rows whose representatives have a `rep_canonical_pdb`).
 
 Cohort summary plots (`bin/orthogonal_metrics_plots.py`) lay out the columns into these three visual groups so the reader can scan a single row across the three axes at once. The AF3 disagreement column is suffixed `(best)` because it reports the best of 5 AF3 seeds.
 
-- **Variants in code**: not a single identifier — read across the column families above.
+- **Variants in code**: not a single identifier, so read across the column families above.
 
 ---
 
@@ -462,7 +462,7 @@ Cohort summary plots (`bin/orthogonal_metrics_plots.py`) lay out the columns int
 
 These come from Boltz / AF3 output per prediction.
 
-- **pLDDT** — per-residue confidence score; aggregated as `avg_plddt`, `complex_plddt`, `interface_plddt`.
+- **pLDDT** — per-residue confidence score, aggregated as `avg_plddt`, `complex_plddt`, `interface_plddt`.
 - **PAE** — predicted aligned error matrix between residue pairs.
 - **`pae_pass_frac` (paepf)** — fraction of inter-chain residue pairs whose PAE is below cutoff.
 - **iPAE** — interface-restricted PAE summary.
@@ -473,14 +473,14 @@ These come from Boltz / AF3 output per prediction.
 
 ### 6.2 Geometry metrics
 
-- **Receptor-aligned effector RMSD (`ra_eff`)** — after Kabsch-aligning predicted receptor onto reference receptor (Cα trace), RMSD of the predicted effector vs reference effector. The headline geometry metric of the steering pass; threshold typically 5 Å. Variants: `ra_eff`, `receptor_aligned_effector_rmsd`, `ra_eff_vs_truth`.
+- **Receptor-aligned effector RMSD (`ra_eff`)** — after Kabsch-aligning predicted receptor onto reference receptor (Cα trace), RMSD of the predicted effector vs reference effector. The headline geometry metric of the steering pass, with threshold typically 5 Å. Variants: `ra_eff`, `receptor_aligned_effector_rmsd`, `ra_eff_vs_truth`.
 - **Independent receptor RMSD** — receptor-only RMSD vs reference (Cα trace). Used to detect whether the receptor's own fold survived steering.
 - **Independent effector RMSD** — effector-only RMSD vs reference.
 - **Receptor intact / effector intact** — boolean: independent RMSD below 5 Å (`RECEPTOR_INTACT_CUTOFF=5.0`, `EFFECTOR_INTACT_CUTOFF=5.0`). Used as a structural-pass gate.
 - **iRMSD** — CAPRI-style interface RMSD.
 - **fnat** — fraction of native interface contacts recovered.
 - **DockQ** — CAPRI-derived combined metric of interface quality.
-- **Pose distance** — receptor-aligned RMSD between two predicted poses; used by maximin selection in multi-cycle planning.
+- **Pose distance** — receptor-aligned RMSD between two predicted poses, used by maximin selection in multi-cycle planning.
 - **COM displacement** — centre-of-mass shift of the design region between native and design.
 - **Kabsch alignment** — optimal rigid-body superposition used for all RMSD computations (`_kabsch_align`).
 
@@ -492,7 +492,7 @@ These come from Boltz / AF3 output per prediction.
 - **Weighted jaccard** — distance-weighted Jaccard variant using Gaussian contact weights (`_WJ_MU=4.0`, `_WJ_TWO_SIGMA_SQ=2.25`).
 - **Intact core** — pLDDT-trimmed RMSD-filter check on the receptor core.
 - **BSA** — buried surface area (FreeSASA).
-- **Sc (shape complementarity)** — Rosetta interface shape-complementarity score; used as the pre-MPNN filter.
+- **Sc (shape complementarity)** — Rosetta interface shape-complementarity score, used as the pre-MPNN filter.
 - **dG_separated, dSASA_int** — Rosetta InterfaceAnalyzer interface-energy and ΔSASA outputs.
 - **ΔΔG (`rosetta_ddg`)** — Rosetta InterfaceAnalyzer ΔΔG of binding (post-FastRelax). Calibrated against the −30 REU threshold of Bennett et al. 2023.
 - **Interface H-bonds** — MDAnalysis-derived hydrogen-bond count at the predicted interface.
@@ -522,7 +522,7 @@ Eligibility gate run before reversion: drops candidates that fail the upstream s
 - **Variants in code**: `prefilter`, `iterate-collect-prefilter`, `kickoff-prefilter`
 
 ### Build-contaminated
-Identifies which steering mutations contact the effector inside the protected set — these are the mutations the reversion pass will attempt to revert.
+Identifies which steering mutations contact the effector inside the protected set. These are the mutations the reversion pass will attempt to revert.
 
 - **Variants in code**: `build-contaminated`, `cmd_build_contaminated`, `contaminated.json`
 
@@ -542,7 +542,7 @@ Phase that produces the finalised per-cycle CSV with verdicts merged in.
 - **Variants in code**: `finalize`, `iterate-collect-finalize`, `kickoff-finalize`
 
 ### Aggregate (per-experiment)
-Reduces per-prediction rows to per-sequence rows. Two granularities exist within the same chain: `cmd_aggregate` builds the per-prediction flat CSV; `cmd_aggregate_per_sequence` reduces that to per-sequence rows.
+Reduces per-prediction rows to per-sequence rows. Two granularities exist within the same chain. `cmd_aggregate` builds the per-prediction flat CSV, and `cmd_aggregate_per_sequence` reduces that to per-sequence rows.
 
 - **Variants in code**: `cmd_aggregate`, `cmd_aggregate_per_sequence`, `_aggregate_per_sequence`
 - **Note**: an older standalone `aggregate_results.sh` (cross-experiment combiner) existed in the pre-Nextflow era and has been retired (see `project_map.md` and `05_findings.md` A2).
@@ -553,7 +553,7 @@ Derives the final metric columns + tier classification on the per-sequence CSV.
 - **Variants in code**: `cmd_compute_final_metrics`
 
 ### Kickoff (multi-cycle only — currently dormant)
-Submitter for downstream stages of multi-cycle runs. Five `cmd_kickoff*` family members exist in `boltz2_iterate_steering.py` (~600 LOC); none are reachable via the current Nextflow integration.
+Submitter for downstream stages of multi-cycle runs. Five `cmd_kickoff*` family members exist in `boltz2_iterate_steering.py` (~600 LOC), and none are reachable via the current Nextflow integration.
 
 - **Variants in code**: `kickoff`, `cmd_kickoff*`
 
@@ -567,7 +567,7 @@ Greedy farthest-from-anything-seen pose selection used to pick cycle-N+1 candida
 ## 8. File artefacts
 
 ### `rfdiffusion_metrics.json`
-Per-design metric blob emitted by RFDiffusion filter; consumed by all three "derive" scripts (`derive_design_region.py`, `derive_true_interface.py`, `derive_input_design_region.py`) to extract design-region and true-interface index sets.
+Per-design metric blob emitted by RFDiffusion filter. All three "derive" scripts (`derive_design_region.py`, `derive_true_interface.py`, `derive_input_design_region.py`) consume it to extract design-region and true-interface index sets.
 
 ### `plan.json`
 Per-sequence plan blob written by negsteer's plan phase. Holds the cold-start prediction metadata, true-interface indices, ground-truth path, effector-template path, and the list of steered designs to predict.
@@ -582,13 +582,13 @@ Per-sequence ranked steered-prediction summary from `cmd_collect`.
 Per-sequence aggregate of all seed predictions (steered + reverted), with median/majority columns.
 
 ### `passing_summary.csv`
-One canonical row per MPNN sequence after tier classification — the unit `cross_sequence_summary` aggregates from. Filtered to `PASSING_VERDICTS` when written.
+One canonical row per MPNN sequence after tier classification, the unit `cross_sequence_summary` aggregates from. Filtered to `PASSING_VERDICTS` when written.
 
 ### `cross_sequence_summary.csv`
-Cohort-level join of all per-sequence passing summaries. The canonical "cohort table" — driver of plots and the survivor manifest.
+Cohort-level join of all per-sequence passing summaries. The canonical "cohort table", which drives the plots and the survivor manifest.
 
 ### `survivor_manifest.csv`
-Fan-out CSV with one row per cohort row that has a representative PDB on disk. Drives the orthogonal-metrics streams. **Term flagged in §10 — current usage of "survivor" does not match its connotation.**
+Fan-out CSV with one row per cohort row that has a representative PDB on disk. Drives the orthogonal-metrics streams. **Term flagged in §10, because current usage of "survivor" does not match its connotation.**
 
 ### `all_results_multicycle.csv`
 Per-experiment flat CSV of every prediction across all cycles (multi-cycle output). Currently only `cycle_0` rows are produced.
@@ -644,15 +644,15 @@ These are terms whose current code usage is ambiguous, contradictory, or non-sta
 
 **Code reality**: any cohort row whose `rep_canonical_pdb` is a file on disk, with no metric/tier check (`extract_survivor_manifest.py:9-11, :110`).
 
-A failed-metric row with an output PDB on disk is a "survivor" under the current definition. Pre-2026-04-29 the term effectively did imply tier-passage (because tier-none rows had no representative populated), but Bug 3's tier-none-fallback fix in pipeline_notes14 means tier-none rows now also acquire representatives for display, and so also become survivors. A bad prediction with a parseable PDB is now a survivor.
+A failed-metric row with an output PDB on disk is a "survivor" under the current definition. Pre-2026-04-29 the term effectively did imply tier-passage, because tier-none rows had no representative populated. Bug 3's tier-none-fallback fix in pipeline_notes14 means tier-none rows now also acquire representatives for display, and so also become survivors. A bad prediction with a parseable PDB is now a survivor.
 
-**Recommendation**: rename the file/symbol family (`survivor_manifest`, `EXTRACT_SURVIVOR_MANIFEST`, `_find_workdir`'s "survivor" vocabulary) to a tier-agnostic term such as `cohort_manifest` / `EXTRACT_COHORT_MANIFEST`, OR add an explicit tier-pass filter to the manifest extractor and keep the name. Pending decision.
+**Recommendation**: rename the file/symbol family to a tier-agnostic term such as `cohort_manifest` / `EXTRACT_COHORT_MANIFEST`. That family is `survivor_manifest`, `EXTRACT_SURVIVOR_MANIFEST` and `_find_workdir`'s "survivor" vocabulary. The alternative is to add an explicit tier-pass filter to the manifest extractor and keep the name. Pending decision.
 
 ### F2. Backbone usage in narrative comments (audit)
 
 **Domain definition**: N/Cα/C/O main-chain atoms.
 
-**Code reality**: most "backbone" prose in this codebase refers to operations on `read_ca_atoms` output, which is Cα-only — a Cα trace, not a backbone.
+**Code reality**: most "backbone" prose in this codebase refers to operations on `read_ca_atoms` output, which is Cα-only, a Cα trace rather than a backbone.
 
 **Recommendation**: audit narrative comments and rename Cα-only operations as `ca_*` consistently. Reserve `backbone_*` for operations that genuinely use N/Cα/C/O.
 
@@ -660,9 +660,9 @@ A failed-metric row with an output PDB on disk is a "survivor" under the current
 
 **Baker-lab framing (adopted here)**: scaffold = the de novo-generated region (synonym of design region).
 
-**Code reality**: `calc_scaffold_and_region_metrics`, `scaffold_rmsd`, `scaffold_str` use `scaffold` to mean the *non-designed* (motif) region — the inverse meaning.
+**Code reality**: `calc_scaffold_and_region_metrics`, `scaffold_rmsd`, `scaffold_str` use `scaffold` to mean the *non-designed* (motif) region, the inverse meaning.
 
-**Recommendation**: rename code uses of `scaffold` (in their current sense) to `motif`. Avoid `scaffold` as an identifier altogether; prefer `design_region` for the de novo region. Visiting these renames during Phase 3 will require a coordinated touch across `rfdiffusion_filter.py`, `rfdiffusion_plots.py`, and any test scripts.
+**Recommendation**: rename code uses of `scaffold` (in their current sense) to `motif`. Avoid `scaffold` as an identifier altogether, and prefer `design_region` for the de novo region. Visiting these renames during Phase 3 will require a coordinated touch across `rfdiffusion_filter.py`, `rfdiffusion_plots.py`, and any test scripts.
 
 ### F4. Index-base convention (1-based vs 0-based)
 
@@ -672,7 +672,7 @@ A failed-metric row with an output PDB on disk is a "survivor" under the current
 
 ### F5. Contig-parsing duplication
 
-Four independent contig parsers exist (`contig_utils.parse_block_segments`, `derive_input_design_region._parse_contigs`, `haddock3_prepare.parse_contig_segments`, `pipeline_correct_sequences.parse_contig_segments`). Each is scoped slightly differently but they share the core grammar. Already flagged in `05_findings.md` C6.
+Four independent contig parsers exist (`contig_utils.parse_block_segments`, `derive_input_design_region._parse_contigs`, `haddock3_prepare.parse_contig_segments`, `pipeline_correct_sequences.parse_contig_segments`). Each is scoped differently, but they share the core grammar. Already flagged in `05_findings.md` C6.
 
 ### F6. `find_contact_residues_heavy` defined twice
 
@@ -692,8 +692,8 @@ In `build_contigs.py`, `boltz2_negative_steering.py` (twice — `THREE_TO_ONE` p
 
 ### F10. Construct (plasmid) vs `construct_reliance_flag`
 
-The root `construct` is overloaded: a domain noun (the wet-lab plasmid) vs the prefix on a flag predicate (`construct_reliance_flag`). The flag's name comes from "the wet-lab construct's predicted pose"; readability suffers because the plasmid sense is rarely surfaced in code while the flag is. Recommend keeping the flag name but adding a glossary cross-reference (already present here) and ensuring any new "construct"-named symbol is the flag, never the plasmid.
+The root `construct` is overloaded: a domain noun (the wet-lab plasmid) vs the prefix on a flag predicate (`construct_reliance_flag`). The flag's name comes from "the wet-lab construct's predicted pose". Readability suffers because the plasmid sense is rarely surfaced in code while the flag is. Recommend keeping the flag name but adding a glossary cross-reference (already present here) and ensuring any new "construct"-named symbol is the flag, never the plasmid.
 
 ### F11. `outcome` overloaded — per-sequence column vs per-seed plot label
 
-After the 2026-05-12 rename, `outcome` is the per-sequence column name in `aggregated_results.csv` / `passing_summary.csv` (values: `pose_holds`, `pose_collapses`, `new_contamination`, `no_reversion`, `singleton`). The negsteer per-seed plots (`negsteer_within_sequence_plots.py`, `negsteer_plots.py`) use the same word `outcome` for a separate per-seed pass/fail decomposition (`pass`, `off_target`, `poor_prediction`, `multiple_failures`, `new_contamination`, `no_data`). The two sets overlap on `new_contamination` and `no_data` but mean different things at different aggregation levels. Consider renaming the per-seed plot concept (e.g. `seed_class` or `per_seed_outcome`) in a future cleanup pass.
+After the 2026-05-12 rename, `outcome` is the per-sequence column name in `aggregated_results.csv` / `passing_summary.csv` (values: `pose_holds`, `pose_collapses`, `new_contamination`, `no_reversion`, `singleton`). The negsteer per-seed plots (`negsteer_within_sequence_plots.py`, `negsteer_plots.py`) use the same word `outcome` for a separate per-seed pass/fail decomposition. Those values are `pass`, `off_target`, `poor_prediction`, `multiple_failures`, `new_contamination`, `no_data`. The two sets overlap on `new_contamination` and `no_data` but mean different things at different aggregation levels. Consider renaming the per-seed plot concept (e.g. `seed_class` or `per_seed_outcome`) in a future cleanup pass.

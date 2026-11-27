@@ -2,7 +2,7 @@
 
 ## Context
 
-This session focused on defining design region strategies for RFDiffusion-based receptor resurfacing to avoid constitutive signalling (autoactivity) in plant NLR immune receptors. The discussion covered both technical methodology and practical issues with conversation flagging by content classifiers when discussing computational protein design in plant pathology contexts.
+This session defined design region strategies for RFDiffusion-based receptor resurfacing. The goal is to avoid constitutive signalling (autoactivity) in plant NLR immune receptors. The discussion covered the technical methodology. It also covered a practical problem, namely content classifiers flagging conversations about computational protein design in plant pathology.
 
 ## Classifier Flagging Analysis
 
@@ -19,7 +19,7 @@ This session focused on defining design region strategies for RFDiffusion-based 
 - "I want to avoid autoactivity in the plant" + "I want to make sure RFDiffusion has enough flexibility to work with" — flagged when combined
 
 **Project context effect:**
-Adding the user to a project with extensive technical notes about negative steering, contamination detection, effectors, receptors, and computational design workflows appears to increase flagging frequency. The classifier likely responds to increased density of domain-specific vocabulary when project context is loaded.
+Flagging appears more frequent once the user is added to a project holding extensive technical notes. Those notes cover negative steering, contamination detection, effectors, receptors, and computational design workflows. The classifier likely responds to the denser domain-specific vocabulary that project context loads.
 
 ### Mitigation Strategies
 
@@ -31,7 +31,7 @@ Adding the user to a project with extensive technical notes about negative steer
 - Frontload context: "I'm a plant pathology researcher at the John Innes Centre working on computational design of disease-resistance receptors"
 
 **Consistent feedback:**
-Use thumbs-down button on flagged responses—provides direct signal to classifier tuning team with conversation context attached.
+Use the thumbs-down button on flagged responses. It signals the classifier tuning team directly, with conversation context attached.
 
 ## RFDiffusion Design Region Strategies
 
@@ -40,56 +40,56 @@ User is currently avoiding:
 - Residues whose side chains point inwards (based on native structure)
 - Residues not on the natural interface
 
-This pairs with the negative steering validation workflow, leveraging the fact that structure prediction models are biased toward canonical binding sites.
+This pairs with the negative steering validation workflow. It exploits the bias of structure prediction models toward canonical binding sites.
 
 ### Four Strategies Assessed
 
 #### Strategy 1: Alternating Outward-Facing Residues Only
 **Description:** Only diffuse every other residue across interface regions where sidechains point outward.
 
-**Subject specialist perspective:** Most biologically conservative for preserving autoinhibition, but risks designing surfaces that are geometrically plausible but biologically blind to specificity-determining features. Sidechain orientation filters based on single conformational states miss allosteric rearrangements that occur during activation.
+**Subject specialist perspective:** Most biologically conservative for preserving autoinhibition. It risks surfaces that are geometrically plausible but biologically blind to specificity-determining features. Sidechain orientation filters built on a single conformational state miss the allosteric rearrangements of activation.
 
-**Computational perspective:** Under-utilizes RFDiffusion's strengths. Diffusing alternating residues with frozen intervening positions provides little backbone flexibility—essentially sidechain-level redesign with extra steps. ProteinMPNN alone would be more appropriate for this scope.
+**Computational perspective:** Under-utilizes RFDiffusion's strengths. Diffusing alternating residues with frozen intervening positions gives little backbone flexibility. It amounts to sidechain-level redesign with extra steps. ProteinMPNN alone suits this scope better.
 
-**Reviewer perspective:** Would question why RFDiffusion is used at all with such constraints. Would expect benchmarking against sidechain-only redesign to demonstrate backbone diffusion's contribution.
+**Reviewer perspective:** Would question why RFDiffusion is used at all under such constraints. Would expect benchmarking against sidechain-only redesign to show what backbone diffusion contributes.
 
 #### Strategy 2: Known-Important + Variable Residues + Neighbors  
 **Description:** Target residues known to be important for binding in homologues, highly variable positions, plus surrounding residues.
 
-**Subject specialist perspective:** Most defensible for Pik-style scaffolds with mapped allelic variation. Uses evolutionary signal to identify recognition plasticity. Limited to scaffolds with resolved allelic data, but highest-signal within that scope.
+**Subject specialist perspective:** Most defensible for Pik-style scaffolds with mapped allelic variation. Uses evolutionary signal to find recognition plasticity. Limited to scaffolds with resolved allelic data, but the highest-signal option within that scope.
 
-**Computational perspective:** Technically tractable but requires contiguous diffusable segments (4-6 residues minimum) for optimal RFDiffusion performance. May need to expand "surrounding residues" to achieve continuity. Strongest case for negative steering validation.
+**Computational perspective:** Technically tractable, but RFDiffusion works best on contiguous diffusable segments (4-6 residues minimum). May need to widen "surrounding residues" to get continuity. Strongest case for negative steering validation.
 
-**Reviewer perspective:** Would probe independence between "important/variable" residue selection and validation test set. Information leakage concern if same allelic series used for both design guidance and recognition testing.
+**Reviewer perspective:** Would probe whether "important/variable" residue selection is independent of the validation test set. Information leaks if the same allelic series both guides design and tests recognition.
 
 #### Strategy 3: Whole-Interface Redesign
 **Description:** Redesign entire binding interface while maintaining intact backbone scaffold for topology constraint.
 
-**Subject specialist perspective:** Highest autoactivity risk, but risk varies by scaffold. Relatively safe for integrated HMA domains (Pik-1) where recognition module is decoupled from NBD regulatory machinery. Dangerous for canonical sensor NLRs where LRR does double duty (recognition + NBD restraint).
+**Subject specialist perspective:** Highest autoactivity risk, though the risk varies by scaffold. Relatively safe for integrated HMA domains (Pik-1), where the recognition module is decoupled from NBD regulatory machinery. Dangerous for canonical sensor NLRs, where the LRR does double duty (recognition + NBD restraint).
 
-**Computational perspective:** Optimal use of RFDiffusion's capabilities. Canonical binder design recipe with fixed scaffold + effector conditioning. Requires high throughput due to low success rates (single-digit percent). Needs downstream autoactivity filter—full-length receptor prediction comparing NBD-LRR interface to native autoinhibited state.
+**Computational perspective:** Optimal use of RFDiffusion's capabilities. Canonical binder design recipe with fixed scaffold + effector conditioning. Requires high throughput because success rates are low (single-digit percent). Needs a downstream autoactivity filter. That filter predicts the full-length receptor and compares its NBD-LRR interface to the native autoinhibited state.
 
-**Reviewer perspective:** Would demand wet-lab autoactivity data. Computational story must end with falsifiable predictions tested in planta.
+**Reviewer perspective:** Would demand wet-lab autoactivity data. The computational story must end with falsifiable predictions tested in planta.
 
 #### Strategy 4: Hotspot-Driven Shell Design (Proposed)
 **Description:** Specify hotspot residues on effector, let RFDiffusion choose receptor residues to redesign within bounded shell (e.g., 8 Å radius from effector hotspots).
 
 **Advantages:**
-- Doesn't pre-commit to native binding mode—can discover non-native recognition geometries
-- Geometrically bounded redesign region keeps diffusable area contiguous
+- Doesn't pre-commit to native binding mode, so it can discover non-native recognition geometries
+- Geometrically bounded redesign region keeps the diffusable area contiguous
 - Autoactivity risk tunable via shell radius (6 Å conservative, 10 Å aggressive)  
-- Natural integration with negative steering: redesigned residues that predictors want to push toward canonical sites become negative examples
+- Integrates naturally with negative steering, since redesigned residues that predictors push toward canonical sites become negative examples
 
 **Requirements:** Initial effector placement (from RFDiffusion, docking, or AF3 prediction of homologous complex)
 
 ## Current Task Context: Reproducing Rational Engineering
 
 ### Problem Setup
-The current validation target is reproducing binding demonstrated through rational engineering—a single residue change. This creates specific challenges:
+The current validation target is binding demonstrated by rational engineering, a single residue change. This creates specific challenges:
 
-**Structure predictor limitations:** AF3/Boltz-2 cannot distinguish functional effects of single residue changes, especially with limited plant-specific training data. Models predict near-identical structures for wild-type vs. functionally different point mutants.
+**Structure predictor limitations:** AF3/Boltz-2 cannot resolve the functional effect of a single residue change, especially with limited plant-specific training data. The models predict near-identical structures for wild-type and functionally different point mutants.
 
-**Validation paradox:** Telling RFDiffusion exactly which residue to change effectively hands it the answer, making successful "recovery" uninformative as a pipeline test.
+**Validation paradox:** Telling RFDiffusion exactly which residue to change hands it the answer. Successful "recovery" is then uninformative as a pipeline test.
 
 ### Reframed Evaluation Question
 **Not:** "Can we recover the rational design's exact solution?"  
@@ -106,9 +106,9 @@ These are standard input requirements for the method, not "giving away the answe
 
 ### Primary Geometric Metrics
 **Correct placement score:** Does Boltz-2 place the effector where RFDiffusion intended?  
-**Weighted Jaccard contact overlap:** Predicted interface contacts vs. intended contacts, using smooth distance weighting (e.g., `exp(-(d-4)²/2.25)`) instead of hard cutoffs for robustness to predictor noise.
+**Weighted Jaccard contact overlap:** Predicted interface contacts vs. intended contacts. Uses smooth distance weighting (e.g., `exp(-(d-4)²/2.25)`) instead of hard cutoffs, for robustness to predictor noise.
 
-**DockQ vs. experimental structure:** Most biologically grounded metric—compares predicted complex against experimentally solved rational design structure (ground truth validation, not self-consistency).
+**DockQ vs. experimental structure:** Most biologically grounded metric. It compares the predicted complex against the experimentally solved rational design structure. That is ground truth validation, not self-consistency.
 
 ### Secondary Orthogonal Metrics
 **Rosetta interface energy (ddG):** Most informative energy metric, with caveats about minimization sensitivity and hydrogen bond bias.  
@@ -122,7 +122,7 @@ These are standard input requirements for the method, not "giving away the answe
 - No consistency as affinity predictors
 
 ### Composite Ranking Strategy
-**Tier-then-composite method:** DockQ vs. experimental structure as dominant term (ground truth validation), supported by geometric consistency metrics (placement + weighted Jaccard), with orthogonal energy metrics as secondary filters.
+**Tier-then-composite method:** DockQ vs. experimental structure is the dominant term, giving ground truth validation. Geometric consistency metrics support it (placement + weighted Jaccard). Orthogonal energy metrics act as secondary filters.
 
 ## Key Insights
 
@@ -130,13 +130,13 @@ These are standard input requirements for the method, not "giving away the answe
 Structure predictors excel at geometry prediction (what the PDB teaches) but fail at affinity discrimination (what the PDB doesn't teach). Leverage the strength, acknowledge the limitation.
 
 ### On Validation Design
-For single-residue rational designs: geometric primary metrics with energetic checks provide more defensible validation than confidence-based ranking. Comparison against experimental structure gives genuine ground truth rather than self-consistency checks.
+For single-residue rational designs, geometric primary metrics with energetic checks validate more defensibly than confidence-based ranking. Comparison against the experimental structure gives genuine ground truth, not a self-consistency check.
 
 ### On Autoactivity Risk Management
-Risk varies dramatically by scaffold architecture. Integrated HMA domains (Pik-1) allow aggressive interface redesign; canonical sensor NLRs (Sr35/ZAR1-like) where LRR restrains NBD require conservative approaches. Full-length receptor prediction comparing NBD-LRR interface geometry to native autoinhibited state provides computational autoactivity filter.
+Risk varies dramatically by scaffold architecture. Integrated HMA domains (Pik-1) allow aggressive interface redesign. Canonical sensor NLRs (Sr35/ZAR1-like), where the LRR restrains the NBD, require conservative approaches. A computational autoactivity filter can predict the full-length receptor and compare NBD-LRR interface geometry to the native autoinhibited state.
 
 ### On Negative Steering Integration
-Predictor bias toward canonical sites becomes a feature, not a bug. Redesigned positions that predictors want to revert to canonical interfaces provide negative steering examples for validation workflow.
+Predictor bias toward canonical sites becomes a feature, not a bug. Redesigned positions that predictors revert to canonical interfaces supply the negative steering examples the validation workflow needs.
 
 ## Next Steps
 
@@ -153,4 +153,4 @@ Predictor bias toward canonical sites becomes a feature, not a bug. Redesigned p
 4. Develop full-length receptor autoactivity filter for high-priority designs
 
 ### Wet-lab Validation
-Progress from geometric+energetic computational filters to plant cell pack (PCP) throughput triage, then agroinfiltration of top candidates for final validation.
+Progress from geometric+energetic computational filters to plant cell pack (PCP) throughput triage. Agroinfiltration of top candidates then gives final validation.

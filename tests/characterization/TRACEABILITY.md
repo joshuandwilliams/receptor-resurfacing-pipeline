@@ -2,9 +2,9 @@
 
 This document maps each characterization test to the pipeline producer it pins. It is the canonical answer to "if I touch <file>, which tests should I expect to flicker?"
 
-This file is updated as `check_test_run`-tier tests are added. Comparator unit tests (`logic`) are NOT listed here — they test the comparators themselves, not the pipeline. The lone exception is `test_rfdiffusion_filter_fail_branch_unit` (covers the predicate at `bin/rfdiffusion_filter.py:820`, a defensive code path no fixture can reach — see notes/inventory/15_discovery_run_path_coverage.md Coverage gap 1).
+This file is updated as `check_test_run`-tier tests are added. Comparator unit tests (`logic`) are NOT listed here, because they test the comparators themselves, not the pipeline. The lone exception is `test_rfdiffusion_filter_fail_branch_unit`. It covers the predicate at `bin/rfdiffusion_filter.py:820`, a defensive code path no fixture can reach (see notes/inventory/15_discovery_run_path_coverage.md Coverage gap 1).
 
-Reference paths are now per-module: `tests/<stage>/example_output_files/`. Output paths are per-module: `tests/<stage>/receptor_resurfacing_results/`. The deprecated single-root `tests/full_test_run/example_output_files/` is retired (the alias fixtures in conftest.py exist only to ease transition).
+Reference and output paths are now per-module. References live under `tests/<stage>/example_output_files/`, outputs under `tests/<stage>/receptor_resurfacing_results/`. The deprecated single-root `tests/full_test_run/example_output_files/` is retired (the alias fixtures in conftest.py exist only to ease transition).
 
 ## Tests
 

@@ -2,18 +2,19 @@
 
 ## Context
 
-This session was the long-deferred step of replacing the legacy
-`boltz2.nf` module (per notes6 open work item 4 and the deferred
-entry in `pipeline_notes2.md`'s Boltz2 block) with a NextFlow port of
-the negative-steering pipeline developed across notes7–notes11.
+This session was the long-deferred replacement of the legacy
+`boltz2.nf` module with a NextFlow port of the negative-steering
+pipeline developed across notes7–notes11. The deferral is recorded in
+notes6 open work item 4 and in `pipeline_notes2.md`'s Boltz2 block.
 
 Scope entering this session:
 
-1. Port the standalone negative-steering SLURM chain (`plan` →
+1. Port the standalone negative-steering SLURM chain into NextFlow,
+   downstream of ProteinMPNN. The chain is `plan` →
    `predict-one array` → `collect` → `build-contaminated` →
    `plan-reversions` → `predict-reversion array` → `harvest` →
    `finalize` → `compute-final-metrics` → `aggregate-per-sequence` →
-   `extract_passing`) into NextFlow, downstream of ProteinMPNN.
+   `extract_passing`.
 2. Validate the integration end-to-end on a small test run.
 3. Run overnight on a realistic batch (16 MPNN sequences across 4
    parent RFDiffusion designs).
@@ -48,9 +49,8 @@ sequences × 20 designs × 3 seeds), a naive port would have produced
 The integration collapses this to **one GPU SLURM job per MPNN
 sequence**, running the complete single-cycle chain inline via a shell
 orchestrator (`bin/negative_steering_run_one.sh`). Per-design
-parallelism within a sequence is traded away in exchange for loading
-the GPU and Boltz weights once per sequence, which turns out to be a
-much bigger win at this scale.
+parallelism within a sequence is traded for loading the GPU and Boltz
+weights once per sequence, a much bigger win at this scale.
 
 Three NextFlow processes in the new `modules/negative_steering.nf`:
 
@@ -67,13 +67,13 @@ Three NextFlow processes in the new `modules/negative_steering.nf`:
   `bin/cross_sequence_summary.py` to produce the single ranked output
   `cross_sequence_summary.csv`.
 
-Total NextFlow jobs: `1 + N_designs + N_MPNN_sequences + 1`. For the
-16-sequence run: **21 SLURM submissions**.
+Total NextFlow jobs: `1 + N_designs + N_MPNN_sequences + 1`, which is
+**21 SLURM submissions** for the 16-sequence run.
 
-Files touched: new `modules/negative_steering.nf`, new
-`tests/negative_steering/test_negative_steering.nf` +
-`run_test_negative_steering_slurm.sh` +
-`tests/negative_steering/data/` + symlinked
+Files touched: new `modules/negative_steering.nf`. New test files:
+`tests/negative_steering/test_negative_steering.nf`,
+`run_test_negative_steering_slurm.sh`,
+`tests/negative_steering/data/`, and symlinked
 `tests/negative_steering/bin -> ../../bin`. `main.nf` gained the
 three-process wiring downstream of `MPNN_SELECT_TOP.out`. Legacy
 `modules/boltz2.nf`, `modules/msa.nf`, `modules/aggregate.nf`,
@@ -94,7 +94,7 @@ Three new scripts went into `bin/`:
   the full single-cycle chain inline. Takes a long argv list (sequence
   name, ground-truth PDB, receptor/effector chain IDs, receptor/effector
   FASTA files, indices files, workdir, bin dir, boltz container, plan
-  extra args, postprocess thresholds), and chains seven stages
+  extra args, postprocess thresholds). Chains seven stages
   sequentially. Uses argv arrays rather than `eval` so quoting is never
   a problem.
 - **`cross_sequence_summary.py`** — tier-then-composite aggregator,
@@ -109,14 +109,14 @@ negative-steering repo, unchanged in this session:
 
 ### 3. Three rounds of channel-topology debugging
 
-This is the part that took a while to get right. Each fix looked
+This is the part that took a while to get right, as each fix looked
 reasonable but introduced a new failure mode.
 
 **Round 1 — `.join()` is one-to-one, not one-to-many.** The initial
 graph wanted: "for each MPNN FASTA, look up its parent design's PDB
-and derive outputs." Used `.join()` on `design_id`. Symptom: only the
-first MPNN sequence per parent design ran; the other 3 silently
-vanished. `.join()` consumes the PDB channel on the first match and
+and derive outputs." Used `.join()` on `design_id`, with the symptom
+that only the first MPNN sequence per parent design ran and the other 3
+silently vanished. `.join()` consumes the PDB channel on the first match and
 drops siblings — correct semantics for a 1:1 join, wrong for a 1:N
 fan-out. Fixed by using `.combine(by: 0)`, which broadcasts the PDB to
 every matching FASTA.
@@ -132,9 +132,9 @@ first read — the second reader got an empty channel.
 designs that have matching FASTAs" filter was the source of the
 dual-consumer problem. Cost of running `NEGSTEER_DERIVE_INDICES`
 unconditionally on every design PDB regardless of FASTA availability:
-~5s per orphan design. Not worth the code complexity. Dropped the
-filter. Added `.first()` on `metrics_json_ch` so it becomes a value
-channel (broadcastable without consumption).
+~5s per orphan design. Not worth the code complexity, so the filter
+was dropped. Added `.first()` on `metrics_json_ch` so it becomes a
+value channel (broadcastable without consumption).
 
 Verified end-to-end on 4 FASTAs × 2 designs (8 runs): all 8 submitted,
 all 8 completed.
@@ -146,10 +146,9 @@ one shared `rfdiffusion_metrics.json`, and 16 MPNN FASTAs (4 per
 design). First test run used defaults matching production.
 
 Test outcome: 21 SLURM jobs submitted, all 21 completed,
-`cross_sequence_summary.csv` produced. 7 tier-A, 2 tier-B, 7 tier-none
-— numbers that turned out to be consistent with the subsequent
-overnight run on the same sequences, which is how we discovered the
-bugs in step 5.
+`cross_sequence_summary.csv` produced. 7 tier-A, 2 tier-B, 7 tier-none,
+consistent with the subsequent overnight run on the same sequences,
+which is how we discovered the bugs in step 5.
 
 ### 5. Two semantic bugs exposed at production scale (patches v3)
 
@@ -160,9 +159,9 @@ sequences were compared side-by-side in the NextFlow run.
 **Bug (a): `clean_steered` misclassified as `no_data`.**
 
 Setup: a sequence where 2/3 Boltz seeds predict the correct pose
-without needing any load-bearing mutations (zero contamination on the
-steering mutations, so reversion is correctly skipped), and 1/3 seeds
-end up contaminated but their reverted prediction holds the pose
+without any load-bearing mutations, so with zero contamination on the
+steering mutations reversion is correctly skipped. The remaining 1/3 of
+seeds end up contaminated, but their reverted prediction holds the pose
 (pose_holds).
 
 Pre-patch, the aggregator's `_per_seed_verdict_breakdown` treated the
@@ -228,9 +227,9 @@ Supporting fixes in `boltz2_iterate_steering.py`:
   `initial_s<N>/` for sidecar discovery.
 - `_agg_row_is_clean_steered` admits cold-start aggregates
   (design==`initial` AND verdict==`no_reversion`) as ranking-eligible
-  with a relaxed ra_eff cap read from the plan's `rmsd_threshold`
-  (default 5.0 for legacy compatibility, typically 6.0 for cold-start
-  runs).
+  with a relaxed ra_eff cap read from the plan's `rmsd_threshold`. That
+  cap defaults to 5.0 for legacy compatibility, and is typically 6.0
+  for cold-start runs.
 
 Supporting fix in `extract_passing.py`: `n_seeds_clean_steered` added
 to `OUTPUT_FIELDS`.
@@ -257,13 +256,13 @@ Parent-design breakdown: `design_3` strongest (3/4 tier A),
 was tier B).
 
 **Two survivors validated the v3 patches.** `design_2_seq_0` (rank 1)
-had `ph=1 cs=2` — under pre-patch code, the 2 `clean_steered` seeds
-would have been classified `no_data`, demoting the sequence to tier C
-and filtering it out. `design_3_seq_0` (rank 5) and `design_3_seq_2`
-(rank 2) and `design_2_seq_2` (rank 6) were all
-`aggregated_verdict=no_reversion` cold-start binders — under pre-patch
-code, `plan` would have run ONE cold-start seed, not three, and the
-aggregator would have had insufficient data to promote any to tier A.
+had `ph=1 cs=2`. Pre-patch, the 2 `clean_steered` seeds would have been
+classified `no_data`, demoting the sequence to tier C and filtering it
+out. `design_3_seq_0` (rank 5), `design_3_seq_2` (rank 2) and
+`design_2_seq_2` (rank 6) were all `aggregated_verdict=no_reversion`
+cold-start binders. Pre-patch, `plan` would have run ONE cold-start
+seed, not three, so the aggregator would have had insufficient data to
+promote any to tier A.
 
 Three picks for wet-lab:
 
@@ -288,13 +287,13 @@ overprovisioning on NEGSTEER_RUN_ONE:
 
 The 4h 7m outlier was `design_3_seq_3` — pose_holds 3/3 with high
 reversion-pass inflation (rchar=373 GB vs the typical ~170 GB). Not a
-bug; just a sequence where many steering candidates all passed the
+bug, just a sequence where many steering candidates all passed the
 steered filter and all needed reversion validation. 6h gives ~45%
 headroom over this observed worst case.
 
 NEGSTEER_DERIVE_INDICES and NEGSTEER_CROSS_SEQUENCE were both wildly
-overprovisioned (4 GB / 15-30m for tasks using 25 MB / 15 seconds).
-Tightened to 1 GB / 5m each.
+overprovisioned (4 GB / 15-30m for tasks using 25 MB / 15 seconds),
+and were tightened to 1 GB / 5m each.
 
 Also added `fields = '…'` to the `trace {}` block in
 `nextflow.config` so `%cpu / peak_rss / peak_vmem` are always present
@@ -305,8 +304,8 @@ in future `trace.txt` files.
 Added `run_one_runtime_sec` as a column in `passing_summary.csv` and
 as a top-level column in `cross_sequence_summary.csv`. Covers the
 whole-script wall-clock for one NEGSTEER_RUN_ONE invocation (plan +
-predict-one + collect + reversion + harvest + finalize + postprocess;
-excludes `extract_passing` which writes the column itself).
+predict-one + collect + reversion + harvest + finalize + postprocess,
+excluding `extract_passing` which writes the column itself).
 
 Implementation: `negative_steering_run_one.sh` stamps `SECONDS=0` after
 the banner and writes `run_one_runtime_sec.txt` to the workdir before
@@ -325,9 +324,8 @@ Three files in `bin/` touched: `negative_steering_run_one.sh`,
 `sinfo -p jic-gpu` showed 10 A100 nodes totalling 26 GPUs. At the time
 of inspection, ~19 GPUs were free (one competing user holding 7 for
 multi-day jobs). Recommended bump from `max_af2_parallel = 5` (current)
-to `max_af2_parallel = 12` for a ~2.4× throughput improvement on
-sequence parallelism, still leaving ~30% partition headroom for
-competing users.
+to `max_af2_parallel = 12`, a ~2.4× throughput improvement on sequence
+parallelism that leaves ~30% partition headroom for competing users.
 
 Combined with `diffusion_samples = 2` (staged in
 `params_example.yml`), the next production run should do 16 sequences
@@ -343,9 +341,9 @@ rounds of debugging to internalise.
 
 **Per-sequence SLURM job collapse is a massive win at this scale.**
 ~4200 naive-port submissions → 21. Loading the GPU and Boltz weights
-once per MPNN sequence rather than once per (sequence, design, seed)
-tuple trades modest parallelism loss for very large wall-clock savings
-and very large queue-pressure reduction.
+once per MPNN sequence, rather than per (sequence, design, seed) tuple,
+trades modest parallelism loss for very large wall-clock savings and
+queue-pressure reductions.
 
 **Semantic bugs that are latent at development scale show up
 immediately at production scale.** The `clean_steered` classifier bug
@@ -362,8 +360,8 @@ shorten queue pending times.
 
 **Skill scaling: cold-start all-clean is a legitimate output path.**
 Some MPNN sequences are good enough that Boltz gets the pose right
-without steering. Pre-patch these were being dropped on the floor.
-Post-patch they're tier-A candidates via the `no_reversion` verdict.
+without steering. Pre-patch these were dropped on the floor, and
+post-patch they're tier-A candidates via the `no_reversion` verdict.
 Three of the seven tier-A survivors from the overnight run came
 through this path.
 
@@ -377,19 +375,19 @@ Staged patches by deployment group:
 - `runtime_instrumentation/` — `negative_steering_run_one.sh`,
   `extract_passing.py`, `cross_sequence_summary.py`. Deploy as a set.
   Note: `extract_passing.py` and `cross_sequence_summary.py` appear
-  in both — the `runtime_instrumentation/` copies include both the v3
-  semantic patches AND the runtime column, so deploy the
+  in both groups. The `runtime_instrumentation/` copies include both
+  the v3 semantic patches AND the runtime column, so deploy the
   `runtime_instrumentation/` copies.
 - `config_tuning/nextflow.config` — resource sizing for NEGSTEER
   processes, explicit trace `fields`. **Diff against the live repo
   copy before replacing** — the project knowledge indexed here is
   stale and may not include the current NEGSTEER blocks.
 
-NextFlow integration files (already deployed in an earlier stage of
-this session): `main.nf`, `modules/negative_steering.nf`,
-`params_example.yml`, `tests/negative_steering/`, new `bin/` scripts
-(`derive_true_interface.py`, `negative_steering_run_one.sh`,
-`cross_sequence_summary.py`).
+NextFlow integration files, already deployed in an earlier stage of
+this session: `main.nf`, `modules/negative_steering.nf`,
+`params_example.yml`, `tests/negative_steering/`. Plus new `bin/`
+scripts: `derive_true_interface.py`, `negative_steering_run_one.sh`,
+`cross_sequence_summary.py`.
 
 ## Status summary
 

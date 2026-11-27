@@ -1,10 +1,10 @@
 # Phase 2 Wave 1 Scaffolding — Prompts for Claude Code
 
-Two prompts, executed in order on the `remediation` branch. Prompt 1 produces a working but empty framework; Prompt 2 fills in the comparators and their unit tests and establishes `TRACEABILITY.md`.
+Two prompts, executed in order on the `remediation` branch. Prompt 1 produces a working but empty framework, while Prompt 2 fills in the comparators and their unit tests and establishes `TRACEABILITY.md`.
 
 Two further prompts (3 and 4) are placeholders for later sessions:
 - **Prompt 3** will write the hpc-tier characterization tests, one per producer file, populating `TRACEABILITY.md` as it goes.
-- **Prompt 4** will be a standalone suspicion-finding pass that reads each producer in `TRACEABILITY.md` and writes `SUSPICIONS.md`. Splitting suspicion-finding from test-writing keeps each task focused — reading code for "what does this do" is a different cognitive job from reading code for "does this match what it claims to do."
+- **Prompt 4** will be a standalone suspicion-finding pass that reads each producer in `TRACEABILITY.md` and writes `SUSPICIONS.md`. Splitting suspicion-finding from test-writing keeps each task focused. Reading code for "what does this do" is a different cognitive job from reading code for "does this match what it claims to do."
 
 Both prompts below treat `notes/inventory/11_phase_2_plan.md` as the authoritative reference. Claude Code should read it before writing anything.
 
@@ -143,7 +143,7 @@ proceed to comparators in this prompt.
 
 Run after Prompt 1 is committed and acceptance verified.
 
-Goal: the four comparator modules with full unit test coverage, plus an empty `TRACEABILITY.md` ready for Prompt 3 to populate. Acceptance: `pytest -m local_unit` passes; `TRACEABILITY.md` exists with the documented schema and zero rows.
+Goal: the four comparator modules with full unit test coverage, plus an empty `TRACEABILITY.md` ready for Prompt 3 to populate. Acceptance: `pytest -m local_unit` passes, and `TRACEABILITY.md` exists with the documented schema and zero rows.
 
 ```
 Continuing Phase 2 Wave 1. Prompt 1 created the framework foundation;
@@ -337,18 +337,18 @@ prompt — that is Prompt 3.
 
 ## Notes for the human (you)
 
-**On running these prompts.** Prompt 1 is small and should produce a clean acceptance check on the first run; if it doesn't, the framework foundation has a structural issue worth diagnosing before Prompt 2. Prompt 2 is larger and Claude Code may iterate against `pytest -m local_unit` before all tests pass — that's expected.
+**On running these prompts.** Prompt 1 is small and should produce a clean acceptance check on the first run. If it doesn't, the framework foundation has a structural issue worth diagnosing before Prompt 2. Prompt 2 is larger, and Claude Code may iterate against `pytest -m local_unit` before all tests pass, which is expected.
 
 **On the two corrections to the plan document.** Prompt 1 calls these out explicitly so Claude Code uses 32-char workdir hashes and the right pattern ordering. After both prompts succeed, the plan document at §4.4 should be amended to fix the "30-char hash" wording. That's a one-line edit best done as part of the same commit that updates `remediation_state.md`.
 
 **On verification.** When Claude Code finishes each prompt, you should:
-- Read the diff yourself before accepting it. The acceptance criteria are necessary but not sufficient — they verify the code runs, not that it does what it should.
+- Read the diff yourself before accepting it. The acceptance criteria are necessary but not sufficient, since they verify the code runs, not that it does what it should.
 - Run `pytest -m local_unit -v` and skim the test names. If a test name doesn't match its docstring, or the failure message format on a deliberately-broken test is unhelpful, push back.
 - Spot-check one comparator implementation against plan §4 to make sure the contract is faithfully implemented (not just plausible-looking).
 
 **On Prompts 3 and 4.** Both are deferred to future sessions:
 - **Prompt 3** writes hpc-tier characterization tests. Should be drafted only after the cache-busting audit and the gap-fill HPC hunt (per plan §6.1) are complete, because both inform what tests can actually run.
-- **Prompt 4** is the suspicion-finding pass. Reads each producer in `TRACEABILITY.md` (populated by Prompt 3) and writes `SUSPICIONS.md`. Standalone task; no test code touched. Producing this in its own prompt — not bundled into Prompt 3 — keeps the cognitive job clean: writing tests is "what does this code do," finding suspicions is "does it match what it claims."
+- **Prompt 4** is the suspicion-finding pass. Reads each producer in `TRACEABILITY.md` (populated by Prompt 3) and writes `SUSPICIONS.md`. It is a standalone task, with no test code touched. Producing this in its own prompt, rather than bundling it into Prompt 3, keeps the cognitive job clean. Writing tests asks "what does this code do," while finding suspicions asks "does it match what it claims."
 
 **On the broader plan amendment.** Two updates to the plan document worth doing alongside Prompt 1:
 1. §4.4 — fix "30-char hash" to "32-char hash" (corrected in the prompt).

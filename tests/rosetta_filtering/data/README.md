@@ -30,7 +30,7 @@ Per-file shape:
 - **Fail branch**: exercised by `design_14` (marginal) and `design_59`
   (clearly below threshold).
 - The marginal cases either side of `sc_threshold=0.5` exercise the
-  threshold gate exactly; the clear cases exercise the typical
+  threshold gate exactly. The clear cases exercise the typical
   pass/fail metric ranges.
 
 See `notes/inventory/15_discovery_run_path_coverage.md` §Rosetta

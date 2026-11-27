@@ -20,72 +20,74 @@ to the ProteinMPNN block:
 
 The plan was to do all five, run the four available test suites (HADDOCK,
 RFDiffusion, Rosetta filtering, ProteinMPNN), and stop. Same ground rule
-as last session — minimal targeted changes, no scope creep — but with
-one explicit exception: the user indicated upfront that "if it's broken,
-fix it now" was preferred over "leave a TODO marker for next time."
+as last session, minimal targeted changes and no scope creep. The one
+explicit exception was that the user indicated upfront that "if it's
+broken, fix it now" was preferred over "leave a TODO marker for next
+time."
 
 What actually happened: items 1, 2, 3, 5 went roughly as planned. Item 4
-expanded into a much larger investigation when the test results made it
-clear that the original RMSD function had an atom-correspondence bug
-inherited from before this session, and that "fix the RMSD" was the wrong
-goal in the first place — what the user actually wanted to measure was
-"how much did RFDiffusion change the structure," for which RMSD is a poor
-choice. We replaced the broken RMSD function with three new
+expanded into a much larger investigation when the test results showed
+that the original RMSD function had an atom-correspondence bug inherited
+from before this session. The results also showed that "fix the RMSD" was
+the wrong goal in the first place. What the user actually wanted to
+measure was "how much did RFDiffusion change the structure," for which
+RMSD is a poor choice. We replaced the broken RMSD function with three new
 geometry-based metrics, then audited and re-fixed each of them as new
-edge cases surfaced. Then a follow-on observation about the
-`test_proteinmpnn.nf` test file led to a small but important architectural
-fix: the test had its own inline duplicate of `EXTRACT_SEQUENCES`
-diverging from production, which we removed and replaced with the
-production module's actual process.
+edge cases surfaced. A follow-on observation about the
+`test_proteinmpnn.nf` test file then led to a small but important
+architectural fix. The test had its own inline duplicate of
+`EXTRACT_SEQUENCES` diverging from production, which we removed and
+replaced with the production module's actual process.
 
 ## What we built
 
 ### 1. `receptor_start_pdb` plumbing through MPNN (Item 1)
 
 The previous session had fixed `EXTRACT_SEQUENCES` and `BUILD_CONTIGS` to
-write `receptor_start_pdb` to their JSON outputs, but the MPNN-side
+write `receptor_start_pdb` to their JSON outputs. But the MPNN-side
 consumers (`MPNN_FIXED_POSITIONS` and `SEQUENCE_CORRECTION` in
-`proteinmpnn.nf`) were still using `${params.receptor_start_pdb ?: 1}` as
-a fallback that silently defaulted to 1 even when the producer had
-computed the real value. This silently mis-aligned MPNN fixed positions
-for any input PDB whose receptor chain didn't start at residue 1.
+`proteinmpnn.nf`) were still using `${params.receptor_start_pdb ?: 1}`.
+That fallback silently defaulted to 1 even when the producer had computed
+the real value. It silently mis-aligned MPNN fixed positions for any
+input PDB whose receptor chain didn't start at residue 1.
 
 The fix is straightforward plumbing: parse `receptor_start_pdb` out of
 the JSON in `main.nf`'s `seqs_ch` map alongside the existing receptor
-and effector sequences, expose it as a value channel
+and effector sequences. Expose it as a value channel
 (`receptor_start_pdb_ch`), and pass it as a new `val receptor_start_pdb`
 input to both `MPNN_FIXED_POSITIONS` and `SEQUENCE_CORRECTION`. Each
 process's script block then references the input variable instead of the
 params fallback.
 
 Touched: `main.nf`, `proteinmpnn.nf`, `test_proteinmpnn.nf`. The test
-file's inline `EXTRACT_SEQUENCES` (which we ended up deleting later in
-the session — see Item 6 below) was also updated to write
-`receptor_start_pdb` to match production at the time.
+file's inline `EXTRACT_SEQUENCES` was also updated to write
+`receptor_start_pdb` to match production at the time. We deleted that
+inline copy later in the session (see Item 6 below).
 
 While reading `main.nf` we also found dead code from the old
-user-provided-sequences entry point (`if (params.receptor_seq && params.effector_seq)`
-branches in the seqs_ch resolution and Branch B's `EXTRACT_SEQUENCES`
-conditional). This branch was retired with the FASTA-input archive in
-the previous session but the surrounding `if/else` shells remained.
-Removed both, plus a `Channel.empty()` dead else-branch in Branch B that
-was unreachable once the params were always null.
+user-provided-sequences entry point. It was the
+`if (params.receptor_seq && params.effector_seq)` branches in the
+seqs_ch resolution and in Branch B's `EXTRACT_SEQUENCES` conditional.
+This branch was retired with the FASTA-input archive in the previous
+session but the surrounding `if/else` shells remained. Removed both,
+plus a `Channel.empty()` dead else-branch in Branch B that was
+unreachable once the params were always null.
 
 Two `params.receptor_seq` / `params.effector_seq` references were left
-in place: their `null` defaults at the top of `main.nf` and the
+in place. They are their `null` defaults at the top of `main.nf` and the
 `params.receptor_seq ?: ""` arguments passed to `EXTRACT_HOTSPOTS` as
-the H10 chain-disambiguation fallback hint. Both effectively dead but
-removing them would require touching `extract_hotspots.py`'s CLI, which
-was out of scope.
+the H10 chain-disambiguation fallback hint. Both are effectively dead,
+but removing them would require touching `extract_hotspots.py`'s CLI,
+which was out of scope.
 
 ### 2(a). `denovo_length` → `design_region_length_observed` rename
 
-The CSV column `denovo_length` in `sequence_metadata.csv` was
-ambiguous — it could mean the contig spec range ("what was asked for"),
-the per-design observed length ("what RFDiffusion actually produced"),
-or gap arithmetic on the input PDB ("what the original gap was"). The
-three concepts had been silently conflated, which led to misleading
-plots and confused analysis.
+The CSV column `denovo_length` in `sequence_metadata.csv` was ambiguous.
+It could mean the contig spec range ("what was asked for"), the
+per-design observed length ("what RFDiffusion actually produced"), or
+input-PDB gap arithmetic ("what the original gap was"). The three
+concepts had been silently conflated, causing misleading plots and
+confused analysis.
 
 Rename: `denovo_length` → `design_region_length_observed`. Added a new
 sibling column `design_region_spec` carrying the per-segment "min-max"
@@ -110,9 +112,9 @@ input PDB, which only matched reality for fixed-length contigs. The
 authoritative per-design source `per_design_design_residues` (computed
 via the R7-fixed `build_receptor_resnum_map`) is still present, so
 consumers should use that. `rfdiffusion_plots.py` still references the
-top-level field at line 834 with a `.get(..., [])` default, which means
-plots silently use an empty fallback set rather than erroring — verified
-this didn't break the plot test, the fallback path is not actually used
+top-level field at line 834 with a `.get(..., [])` default, so plots
+silently use an empty fallback set rather than erroring. Verified this
+didn't break the plot test. The fallback path is not actually used,
 because `_get_per_design_residues` prefers the per-design field.
 
 Touched: `rfdiffusion_filter.py` (two write-site edits). `rfdiffusion_plots.py`
@@ -148,18 +150,18 @@ wiring).
 ### 3. R7 cross-pollination in `align_to_native_by_anchors`
 
 The previous session's R7 fix in `rfdiffusion_filter.build_receptor_resnum_map`
-restructured the de novo segment allocation as: fixed-length segments
-first (exact assignment), then variable-length segments share leftover
-budget with proportional split and per-segment clamping. The same bug
-existed in `pipeline_correct_sequences.align_to_native_by_anchors`
-(lines 273–320) and had the same shape — purely proportional allocation
-that violated fixed-length specs and didn't properly clamp the final
-segment.
+restructured the de novo segment allocation. Fixed-length segments come
+first with exact assignment, then variable-length segments share the
+leftover budget with a proportional split and per-segment clamping. The
+same bug existed in `pipeline_correct_sequences.align_to_native_by_anchors`
+(lines 273–320) and had the same shape. It was purely proportional
+allocation that violated fixed-length specs and didn't properly clamp
+the final segment.
 
 Ported the R7 structure verbatim, adapted to the local dict-keyed
 segment representation (`s['min_len']`, `s['max_len']` instead of
 tuples). Replaced the inline allocation-during-walk loop with a
-precomputed `seg_index_to_alloc` dict; the walk loop now just looks up
+precomputed `seg_index_to_alloc` dict. The walk loop now just looks up
 the allocation per de novo segment by index. Three classes of bug
 fixed:
 
@@ -183,18 +185,18 @@ that actually answer the question."
 
 The original `calc_design_region_rmsd` did a positional-index comparison
 (`input_coords[i]` vs `design_coords[i]`) without any superposition,
-producing 100+ Å values dominated by global rigid-body motion. First
-attempt was to add Kabsch superposition on the fixed scaffold residues
-and compute RMSDs on the aligned coordinates — which fixed the
-superposition issue but still had a hidden bug: the positional-index
-correspondence between input and design atom lists is only valid when
-the design region has the same length as the input gap, which it
-doesn't for variable-length contigs (the common case).
+producing 100+ Å values dominated by global rigid-body motion. The first
+attempt added Kabsch superposition on the fixed scaffold residues and
+computed RMSDs on the aligned coordinates, which fixed the superposition
+issue but left a hidden bug. The positional-index correspondence between
+input and design atom lists is valid only when the design region matches
+the input gap length, which it doesn't for variable-length contigs (the
+common case).
 
 The deeper problem was that **per-residue RMSD is the wrong metric** for
-"how much did RFDiffusion change the structure." For variable-length
+"how much did RFDiffusion change the structure". For variable-length
 designs there's no per-residue correspondence between the new region
-and what was there before; for fixed-length designs there is but you'd
+and what was there before. For fixed-length designs there is, but you'd
 have to commit to a strategy that handles both. After a back-and-forth
 discussion about what we actually wanted to measure, we replaced the
 single-RMSD function with three new metrics:
@@ -216,9 +218,9 @@ single-RMSD function with three new metrics:
 
 The function is now `calc_scaffold_and_region_metrics`. Critically, it
 uses **resnum-keyed atom correspondence** rather than positional
-indexing — each design atom is matched to its input atom via
+indexing. Each design atom is matched to its input atom via
 `resnum_map`'s recorded input residue number, not by list position.
-This was the real underlying bug: positional indexing fails as soon as
+This was the real underlying bug. Positional indexing fails as soon as
 the design region has a different atom count than the input gap,
 shifting every fixed atom that follows.
 
@@ -239,9 +241,9 @@ Three subtleties fell out of testing:
   C-terminus, the residues didn't exist, and the function correctly
   returned NaN. Confused this for a function bug initially. Resolved
   by switching the test fixture to an AF3-derived complex of the full
-  Pikp-1 HMA domain (78 residues, 1–78) with a contig
-  (`A1-32/10-20/A46-72/6-6 C`) that places the `6-6` region inside the
-  natural domain so all six residues exist for comparison.
+  Pikp-1 HMA domain (78 residues, 1–78). Its contig
+  (`A1-32/10-20/A46-72/6-6 C`) places the `6-6` region inside the
+  natural domain, so all six residues exist for comparison.
 - **The original fixture had been built from the wrong PDB.** The user
   noticed mid-debugging that they'd built the input from 6G10 instead
   of 7QZD and had been missing the C-terminal residues entirely. This
@@ -255,15 +257,16 @@ sorted left-to-right by maximum per-region displacement, viridis
 colours per region with a legend for multi-region contigs. Defensive
 about None entries and missing data. Verified that the four existing
 plots in `rfdiffusion_plots.py` still run cleanly after the
-`design_residues` JSON-field drop from Item 2(a) — none of them
-actually used the field, just the `_get_per_design_residues` helper
-which prefers the still-present per-design source.
+`design_residues` JSON-field drop from Item 2(a). None of them actually
+used the field, just the `_get_per_design_residues` helper which prefers
+the still-present per-design source.
 
-Touched: `rfdiffusion_filter.py` (function rewrite, call site update,
-metrics dict update, progress print update, new
-`_parse_receptor_segments` precompute outside the design loop),
-`rfdiffusion_plots.py` (new plot function, register in `ALL_PLOT_FILES`,
-add to `main()`).
+Touched: `rfdiffusion_filter.py` and `rfdiffusion_plots.py`. The filter
+changes were the function rewrite, the call site update, the metrics
+dict update, the progress print update, and a new
+`_parse_receptor_segments` precompute outside the design loop. The plots
+changes were the new plot function, its registration in
+`ALL_PLOT_FILES`, and its addition to `main()`.
 
 ### 5. H15 `min_population` consolidation
 
@@ -276,19 +279,20 @@ deferred to the MPNN block "where the param-passing pattern is clearer."
 Single source of truth now lives in `nextflow.config` as
 `params.haddock_min_cluster_size = 4`. The value is substituted into
 the HADDOCK config heredoc in `haddock.nf` line 127
-(`min_population = ${params.haddock_min_cluster_size}`), and passed via
-`--min-cluster-size` CLI flag to both Python script invocations
-(`collect_haddock3_dock.py` line 147, `haddock3_plots.py` line 184).
+(`min_population = ${params.haddock_min_cluster_size}`). It is also
+passed via `--min-cluster-size` CLI flag to both Python script
+invocations (`collect_haddock3_dock.py` line 147, `haddock3_plots.py`
+line 184).
 
-The Python scripts use a small idiom to keep the diff minimal: the
-module-level `MIN_CLUSTER_SIZE` constant is preserved, the new
-`--min-cluster-size` CLI argument defaults to it, and `main()`
+The Python scripts use a small idiom to keep the diff minimal. The
+module-level `MIN_CLUSTER_SIZE` constant is preserved, and the new
+`--min-cluster-size` CLI argument defaults to it. `main()` then
 re-binds the constant from the CLI arg via `global MIN_CLUSTER_SIZE`
-before any other code runs. This means all the existing internal
-references (function bodies, `parse_clustfcc_tsv` calls, error messages)
-keep working unchanged — no function signature plumbing required.
+before any other code runs. All the existing internal references
+(function bodies, `parse_clustfcc_tsv` calls, error messages) keep
+working unchanged, with no function signature plumbing required.
 
-`haddock_utils.py` (docstring reference only) left as-is — out of scope
+`haddock_utils.py` (docstring reference only) left as-is, out of scope
 for the consolidation since it's not a real call site.
 
 Touched: `nextflow.config`, `haddock.nf`, `collect_haddock3_dock.py`,
@@ -299,12 +303,12 @@ Touched: `nextflow.config`, `haddock.nf`, `collect_haddock3_dock.py`,
 Discovered late in the session, after the user pushed back on a
 chain-renaming workaround for what looked like a chain-layout problem.
 The actual problem was that `test_proteinmpnn.nf` had its own inline
-copy of `EXTRACT_SEQUENCES` (a simplified Python heredoc inside the
-test file's process block) that read chain letters from `params.input_pdb`
-in a way that conflicted with how the MPNN block's downstream processes
-treated the same chain-letter params for the split design PDBs. The
-test was effectively reimplementing the input-PDB contig and chain
-plumbing in a buggier way than `main.nf` Branch B did it.
+copy of `EXTRACT_SEQUENCES`, a simplified Python heredoc inside the
+test file's process block. That copy read chain letters from
+`params.input_pdb` in a way that conflicted with how the MPNN block's
+downstream processes treated the same chain-letter params for the split
+design PDBs. The test was effectively reimplementing the input-PDB
+contig and chain plumbing in a buggier way than `main.nf` Branch B did it.
 
 Surveyed all five test files: only `test_proteinmpnn.nf` had this
 problem. The other four (`test_haddock.nf`, `test_rfdiffusion.nf`,
@@ -314,22 +318,23 @@ duplicates.
 
 The fix was to delete the inline `EXTRACT_SEQUENCES` and rewrite the
 test workflow to mirror `main.nf` Branch B end-to-end up to the MPNN
-block: load the input PDB, call the production `RESOLVE_CONTIGS` to
-resolve the contigs, call the production `EXTRACT_SEQUENCES` to extract
-sequences and `receptor_start_pdb`, parse the JSON into value channels,
-feed everything into the MPNN processes. The test now exercises the
-exact same code paths as production, so chain-letter handling, contig
-resolution, residue numbering, and `receptor_start_pdb` plumbing all
-behave identically here and in `main.nf`.
+block. The new workflow loads the input PDB and calls the production
+`RESOLVE_CONTIGS` to resolve the contigs. It then calls the production
+`EXTRACT_SEQUENCES` to extract sequences and `receptor_start_pdb`,
+parses the JSON into value channels, and feeds everything into the MPNN
+processes. The test now exercises the exact same code paths as
+production, so chain-letter handling, contig resolution, residue
+numbering, and `receptor_start_pdb` plumbing all behave identically here
+and in `main.nf`.
 
 The chain-layout confusion that triggered this work resolved itself
-once production `EXTRACT_SEQUENCES` was in use — `params.receptor_chain`
-in production is the chain letter the user specifies for *the input
-PDB* (and for the contig string, which uses the same convention),
-and the MPNN block handles split-design-PDB chain layout internally
-via length-based identification in `pipeline_correct_sequences.py`.
-The two roles of `params.receptor_chain` were never actually conflated
-in production; only the test file conflated them via its inline copy.
+once production `EXTRACT_SEQUENCES` was in use. In production,
+`params.receptor_chain` is the chain letter the user specifies for *the
+input PDB*, and for the contig string, which uses the same convention.
+The MPNN block handles split-design-PDB chain layout internally via
+length-based identification in `pipeline_correct_sequences.py`. The two
+roles of `params.receptor_chain` were never actually conflated in
+production, only in the test file via its inline copy.
 
 Touched: `test_proteinmpnn.nf` (substantial rewrite, smaller and
 cleaner than the original).
@@ -344,10 +349,10 @@ PikP1/AVR-PikF fixture with the literature-derived contig
   honoured end-to-end, top model selected from cluster 1 (4 members),
   capri scores match expected values.
 - **RFDiffusion** ✅ — Item 4 fix verified with sub-Å scaffold RMSDs
-  (0.11–0.14 Å) across all four designs, both endpoint distances
-  reported correctly per region, COM displacement reported correctly
-  for both regions including the trailing `6-6` via the leading-only
-  branch (3.4–4.3 Å for region 2). Item 2(a) verified with
+  (0.11–0.14 Å) across all four designs. Both endpoint distances were
+  reported correctly per region, as was COM displacement for both
+  regions, including the trailing `6-6` via the leading-only branch
+  (3.4–4.3 Å for region 2). Item 2(a) verified with
   `design_residues` top-level field absent from JSON. The new
   `rfdiff_com_displacement.png` plot rendered successfully.
 - **Rosetta filtering** ✅ — untouched by this session, regression-tested
@@ -357,7 +362,7 @@ PikP1/AVR-PikF fixture with the literature-derived contig
   (`A1-32/10-20/A46-72/6-6 C32-113`). `sequence_metadata.csv` headers
   show both `design_region_length_observed` and `design_region_spec`
   columns populated correctly. Per-design observed lengths (14, 18,
-  19, 20 for region 1; 6 for region 2) match RFDiffusion's output and
+  19, 20 for region 1, and 6 for region 2) match RFDiffusion's output and
   the contig spec. Zero `denovo` references anywhere in the metadata
   pipeline. No length-mismatch warnings, meaning the Item 3 allocation
   logic produces self-consistent accounting on the multi-region contig.
@@ -450,7 +455,7 @@ These three blocks have never been audited. Pick them up in order:
    but worth removing the dead fallback path for clarity.
 
 2. **`haddock_utils.py` `min_population` docstring reference.** Cosmetic
-   only; the docstring still mentions the constant by name but it's
+   only. The docstring still mentions the constant by name, but it's
    not a real call site. Update the docstring to point to
    `params.haddock_min_cluster_size` in `nextflow.config` as the
    single source of truth.
@@ -458,7 +463,7 @@ These three blocks have never been audited. Pick them up in order:
 3. **HADDOCK test threshold-fragility.** The test fixture produces
    exactly 4 cluster members at the `min_population = 4` threshold.
    Any stochastic variation that produces one fewer member will fail
-   the test with "No cluster has >= 4 models." Either lower the
+   the test with "No cluster has >= 4 models". Either lower the
    test-specific `params.haddock_min_cluster_size` to 3 or pick a
    fixture that produces more obvious clustering.
 

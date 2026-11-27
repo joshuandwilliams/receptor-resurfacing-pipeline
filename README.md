@@ -7,9 +7,9 @@
 ![nextflow](https://img.shields.io/badge/nextflow-25.10.4-0dc09d?logo=nextflow)
 
 A Nextflow DSL2 pipeline for *de novo* binder design. It takes a docked
-receptor–effector complex, redesigns the receptor surface around the effector
-pose, and outputs candidate binder sequences with quality metrics from several
-orthogonal validators.
+receptor–effector complex and redesigns the receptor surface around the
+effector pose. The output is candidate binder sequences with quality metrics
+from several orthogonal validators.
 
 Negative steering of the Boltz-2 predictions is a separate repository,
 [structure-negative-steering](https://github.com/joshuandwilliams/structure-negative-steering),
@@ -18,23 +18,23 @@ installed once per site and called as a tool.
 ## Status
 
 Test coverage over `bin/` is **10.81%**, gated as a ratchet in `pyproject.toml`
-so it can only go up. That is low, and the reason is that most of `bin/` is
-reached only by the `check_test_run` tier, which needs a finished pipeline run
-and so cannot contribute to a laptop or CI figure. Raising it is tracked in
+so it can only go up. Coverage is low because most of `bin/` is reached only
+by the `check_test_run` tier. That tier requires a completed pipeline run, so
+it cannot contribute to a laptop or CI figure. Raising it is tracked in
 [`notes/upstream_parity_plan.md`](notes/upstream_parity_plan.md).
 
 Active work is on the `phase4-impl` branch. `main` is the pre-Phase-4
 baseline.
 
-The remediation this codebase is going through is planned in
-[`notes/codebase_remediation_plan.md`](notes/codebase_remediation_plan.md),
-and the work to bring it in line with the engine repository is in
-[`notes/upstream_parity_plan.md`](notes/upstream_parity_plan.md).
+[`notes/codebase_remediation_plan.md`](notes/codebase_remediation_plan.md)
+plans the remediation this codebase is going through.
+[`notes/upstream_parity_plan.md`](notes/upstream_parity_plan.md) covers the
+work to bring it in line with the engine repository.
 [`notes/things_to_fix.md`](notes/things_to_fix.md) lists the known defects
 that would change results.
 
 `notes/SESSION_HANDOFF.md` and `notes/remediation_state.md` are per-session
-working documents rather than orientation. They were last written in May 2026
+working documents rather than orientation. Both were last written in May 2026
 and describe an in-flight run, so read them for history, not for current
 state.
 
@@ -51,16 +51,16 @@ When you supply `params.receptor_input` + `params.effector_input`,
 each must be a **monomer PDB** (not a pre-aligned complex split into
 chains). The constraint-driven pose solver
 ([`modules/pose_solver.nf`](modules/pose_solver.nf)) places the two
-monomers into a compact, clash-free arrangement that satisfies
-user-supplied CA–CA pair restraints, giving RFDiffusion a good
-starting point. Its job is **geometric placement** only — energetics
-are redesigned downstream, so the pose needs to be geometrically
-sensible, not energetically optimal.
+monomers into a compact, clash-free arrangement satisfying
+user-supplied CA–CA pair restraints. That arrangement gives
+RFDiffusion a good starting point. Its job is **geometric placement**
+only. Energetics are redesigned downstream, so the pose needs to be
+geometrically sensible, not energetically optimal.
 
 Branch A **requires** `params.pose_solver_pairs`: one or more
-hard-pinned CA–CA contacts, written as space-separated,
-chain-prefixed residue pairs — e.g. `"A73-B31 A71-B33 A8-B22"`, with
-an optional `@distance` target per pair (e.g. `"A73-B48@4.5"`). `A`
+hard-pinned CA–CA contacts. Write them as space-separated,
+chain-prefixed residue pairs, e.g. `"A73-B31 A71-B33 A8-B22"`, with an
+optional `@distance` target per pair (e.g. `"A73-B48@4.5"`). `A`
 is the receptor, `B` the effector. See the "Pose Solver" block in
 [`params_example.yml`](params_example.yml) for the rest of the knobs
 (exclusions, min/max pair distance, clash and contact cutoffs,
@@ -68,7 +68,7 @@ restart count, the differential-evolution toggle, and interpolation
 weight).
 
 An optional manual-pick checkpoint lets you inspect the solved pose
-before the expensive design stages: run with
+before the expensive design stages. Run with
 `params.stop_after_pose_solve: true`, open
 `${outdir}/pose_solver/solved_pose_posed.pdb` in ChimeraX, then resume
 with `stop_after_pose_solve: false` (`-resume` reuses the solved pose).
@@ -79,9 +79,10 @@ shape complementarity, and ProteinMPNN designs amino-acid sequences for
 the survivors. Each designed sequence is then validated through a
 negative-steering Boltz2 stage (cold-start prediction → identify
 wrong-interface contacts → mutate → re-predict → revert
-contamination → re-predict) and graded into tiers A/B/C/none.
+contamination → re-predict). That stage grades it into tiers
+A/B/C/none.
 
-Cohort survivors are passed through three orthogonal validators
+Cohort survivors then pass through three orthogonal validators
 (AlphaFold3 no-MSA, biophysical metrics, Rosetta InterfaceAnalyzer)
 plus a per-row interface-metrics step (iRMSD, fnat, DockQ, weighted
 Jaccard). The output is a ranked cohort table of candidate binder
@@ -122,12 +123,12 @@ $EDITOR site.conf
 `scripts/site_conf.sh` loads it, and the launchers source that. A value already
 in the environment beats site.conf, so a one-off override works without
 editing the file. With no site.conf at all the partitions resolve to null and
-jobs go to the cluster default, which is right for the CPU stages and wrong for
-the GPU ones on most sites.
+jobs go to the cluster default. On most sites that is right for the CPU stages
+and wrong for the GPU ones.
 
 ## Running the pipeline
 
-The pipeline runs on HPC; the local Mac repo is for editing only.
+The pipeline runs on HPC. The local Mac repo is for editing only.
 Submit a run with:
 
 ```bash
@@ -135,7 +136,7 @@ sbatch run_pipeline.slurm.sh ./params_full_test.yml
 ```
 
 Copy [`params_example.yml`](params_example.yml) as a starting point
-for your own parameter file — it documents every parameter inline.
+for your own parameter file. It documents every parameter inline.
 A reference small-scale params file lives at
 [`tests/full_test_run/params_full_test.yml`](tests/full_test_run/params_full_test.yml).
 
@@ -143,9 +144,9 @@ A reference small-scale params file lives at
 
 Three layers, each with a different cost and a different question it answers:
 
-- **`pytest -m logic`** (Mac, fast). Tests the comparator framework itself — the helpers in `tests/characterization/helpers/` that pin reference outputs against fresh runs. Run on every commit during development.
-- **Per-module Nextflow tests** (HPC, minutes per stage). Each `tests/<module>/test_<module>.nf` runs one pipeline stage end-to-end against a curated fixture in `tests/<module>/data/`. The fixtures are hand-picked from a discovery pipeline run to exercise every distinct path through that stage. Run with the per-module wrappers, e.g. `sbatch tests/negative_steering/run_test_negative_steering.slurm.sh`. This is the primary characterization safety net during refactoring.
-- **`pytest -m check_test_run`** (HPC, slow). Cohort-level characterization tests that pin output files from a fresh pipeline run against committed reference outputs. Currently parametrized over a legacy sequence trio; restructuring against the per-module reference sets is in progress.
+- **`pytest -m logic`** (Mac, fast). Tests the comparator framework itself, the helpers in `tests/characterization/helpers/` that pin reference outputs against fresh runs. Run on every commit during development.
+- **Per-module Nextflow tests** (HPC, minutes per stage). Each `tests/<module>/test_<module>.nf` runs one pipeline stage end-to-end against a curated fixture in `tests/<module>/data/`. The fixtures are hand-picked from a discovery pipeline run to exercise every distinct path through that stage. Run them with the per-module wrappers, e.g. `sbatch tests/negative_steering/run_test_negative_steering.slurm.sh`. This is the primary characterization safety net during refactoring.
+- **`pytest -m check_test_run`** (HPC, slow). Cohort-level characterization tests that pin output files from a fresh pipeline run against committed reference outputs. They are currently parametrized over a legacy sequence trio. Restructuring them against the per-module reference sets is in progress.
 
 ```bash
 # Local
@@ -181,8 +182,8 @@ covers the per-module testing strategy in full.
 
 Develop on Mac with Claude Code, sync to HPC with
 `./scripts/sync_to_hpc.sh`, run the pipeline or tests there, iterate.
-The HPC has no git; the Mac repo is authoritative and the only place
-commits happen. Round-trips are slow — plan thoroughly before
+The HPC has no git. The Mac repo is authoritative and the only place
+commits happen. Round-trips are slow, so plan thoroughly before
 transferring, batch related changes, and lean on `pytest -m logic`
 plus static analysis (`ruff`, `vulture`, `radon`) for fast feedback
 during development.
