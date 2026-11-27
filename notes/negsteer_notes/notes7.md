@@ -2,23 +2,23 @@
 
 ## Context
 
-Notes 6 built the full reversion validation pass: for any steered design whose
+Notes 6 built the full reversion validation pass. For any steered design whose
 rescue depends on mutations at "protected-set positions" (design region ∪ true
-interface), revert those mutations and re-run Boltz to check if the pose holds.
-This session discovered that the protected-set concept itself was fundamentally
-wrong, fixed it, ran three validation experiments (v1 smoke, v2 full, v3 with
-diffusion samples), and identified the next feature needed: multi-seed validation
-of final candidates.
+interface), revert those mutations and re-run Boltz to check whether the pose
+holds. This session found that the protected-set concept itself was
+fundamentally wrong and fixed it. It then ran three validation experiments (v1
+smoke, v2 full, v3 with diffusion samples) and identified the next feature
+needed, multi-seed validation of final candidates.
 
 ## The critical bug: protected-set contamination filter
 
 ### What the code was doing
 
 The contamination check gated on `mutated_positions ∩ contact_residues ∩
-protected_set`. A mutation at a position *outside* the protected set (design
-region ∪ true interface) that was contacting the effector in the steered prediction
-was considered acceptable — the code treated these as "proposed point-mutants the
-construct can carry."
+protected_set`. Take a mutation at a position *outside* the protected set (design
+region ∪ true interface) that was contacting the effector in the steered
+prediction. The code counted it as acceptable, treating these as "proposed
+point-mutants the construct can carry."
 
 ### Why that was wrong
 

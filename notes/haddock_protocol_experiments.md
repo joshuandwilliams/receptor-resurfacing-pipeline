@@ -11,23 +11,23 @@ Last updated: 2026-05-18.
 
 ## Background: HADDOCK's role in this pipeline
 
-HADDOCK is used to place two monomer PDBs (receptor HMA domain + effector
-target) in a compact, biologically plausible relative orientation to serve
-as input to RFDiffusion.  Its job is **geometric placement** — not affinity
-prediction, not energetic optimisation.
+HADDOCK places two monomer PDBs (receptor HMA domain + effector target) in
+a compact, biologically plausible relative orientation, which then serves
+as input to RFDiffusion.  Its job is **geometric placement**, not affinity
+prediction and not energetic optimisation.
 
 The receptor and target both come from crystal structures.  They are
 biologically correct.  Neither should be structurally modified.  Sidechain
-rotamer optimisation in HADDOCK is irrelevant because RFDiffusion +
-ProteinMPNN replace the design-region sequences, Boltz-2 reproduces the
-structure, and Rosetta FastRelax re-relaxes for the orthogonal metrics —
-all downstream.
+rotamer optimisation in HADDOCK is irrelevant because every downstream
+stage overwrites it.  RFDiffusion + ProteinMPNN replace the design-region
+sequences, Boltz-2 reproduces the structure, and Rosetta FastRelax
+re-relaxes for the orthogonal metrics.
 
 ---
 
 ## Standing clarifications
 
-These represent decisions or observations locked in over the course of this
+These are decisions and observations locked in over the course of this
 work.  Do not relitigate without new evidence.
 
 1. **Rigid-body equivalence**: In pure rigid-body docking, "freeze the

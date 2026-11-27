@@ -24,9 +24,9 @@ compared.
 writes the effector template into every `input.json`, but with empty
 `queryIndices` and `templateIndices`. AF3 3.0.0 builds template features by
 iterating `query_to_hit_mapping.items()` in
-`alphafold3/data/templates.py:get_polymer_features`, so an empty mapping leaves
-the atom positions and masks all zero and the template sequence all gaps. The
-effector was therefore untemplated in every AF3 run, the same net outcome as
+`alphafold3/data/templates.py:get_polymer_features`. An empty mapping therefore
+leaves the atom positions and masks all zero and the template sequence all
+gaps. The effector was untemplated in every AF3 run, the same net outcome as
 the Boltz-2 nested-block bug but for a different reason. Fix by emitting the
 index mapping, or drop the template and say so.
 
@@ -37,9 +37,9 @@ than it looks. Either match them or state the asymmetry wherever controls are
 reported.
 
 **Shape complementarity filter scores bare backbone.** RFdiffusion writes
-N, CA, C and O only, with de novo positions labelled glycine, so
-InterfaceAnalyzer builds side chains for the retained scaffold and scores the
-design region on backbone alone. The threshold had to drop from the 0.62
+N, CA, C and O only, with de novo positions labelled glycine. InterfaceAnalyzer
+therefore builds side chains for the retained scaffold and scores the design
+region on backbone alone. The threshold had to drop from the 0.62
 default to 0.3, and across the AVR-PikF campaign Sc ran 0.444 to 0.611, so the
 gate never fired. Either drop the gate and keep the value as a diagnostic, or
 replace it with something that works on backbones.
@@ -102,16 +102,17 @@ positions. This wording propagated into a thesis draft before being caught.
 ## Portability and packaging
 
 **Cluster settings split across two files.** `nextflow.config` holds the
-executor, queues, `clusterOptions` and container paths;
+executor, queues, `clusterOptions` and container paths.
 `run_pipeline.slurm.sh` separately hardcodes `#SBATCH -p jic-medium`,
 `PIPELINE_DIR=/hpc-home/jowillia/...` and a mail address.
 
 **No nf-core scaffolding.** No `nextflow_schema.json`, `.nf-core.yml` or
 `CITATIONS.md`. `nf-core pipelines create` gives the structure, lint and CI
-without any obligation to submit. Full membership is a much higher bar and
-probably not worth pursuing: it needs MIT, a `TEMPLATE` branch, two reviewers
-including one from core or maintainers, and a test profile that runs end to
-end on trivial data, which is hard for GPU stages with large weights. Rosetta
+without any obligation to submit. Full membership is a much higher bar, and not
+worth pursuing on current evidence. It needs MIT, a `TEMPLATE` branch, two
+reviewers including one from core or maintainers, and a test profile that runs
+end to end on trivial data. That last requirement is hard for GPU stages with
+large weights. Rosetta
 is also free for academics only, which sits awkwardly against nf-core's
 open-to-all stance.
 

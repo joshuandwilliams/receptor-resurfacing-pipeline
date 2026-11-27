@@ -11,12 +11,12 @@ files so that future Claude sessions (and future humans) can find
 authoritative information without spelunking through 25+ session
 logs.
 
-The trigger for this document: the repo has built up enough notes,
-one-off scripts, and superseded design docs that there is no longer
-a fast way to answer "what is the current truth about X."  The
-`notes/` directory mixes timeless reference material with
-session-by-session handover narratives.  Frontmatter and a directory
-shape will fix this without losing history.
+The trigger is accumulation.  The repo now holds enough notes,
+one-off scripts and superseded design docs that "what is the current
+truth about X" has no fast answer.  The `notes/` directory mixes
+timeless reference material with session-by-session handover
+narratives.  Frontmatter and a directory shape will fix this without
+losing history.
 
 **No deletions.**  Every move proposed below is `git mv` into an
 archive subtree so history and `git log --follow` survive intact.
@@ -28,20 +28,21 @@ how-it-works reference (added in the same session as this proposal).
 
 ## 1. The problem in one paragraph
 
-Authoritative content (`phase4_architecture_spec.md`, the glossary
-`inventory/06_ubiquitous_language.md`, the HADDOCK protocol log) and
-session-snapshot content (`pipeline_notes15.md`,
-`SESSION_HANDOFF.md`, 14 numbered predecessor `pipeline_notesN.md`
-files, 11 numbered `notesN.md` files under `negsteer_notes/`,
-multiple `.docx` todo lists) sit at the same nesting level in
-`notes/`.  Nothing in filenames or directory structure tells the
+Authoritative and session-snapshot content sit at the same nesting
+level in `notes/`.  The authoritative files are
+`phase4_architecture_spec.md`, the glossary
+`inventory/06_ubiquitous_language.md` and the HADDOCK protocol log.
+The snapshots are `pipeline_notes15.md`, `SESSION_HANDOFF.md`, 14
+numbered predecessor `pipeline_notesN.md` files, 11 numbered
+`notesN.md` files under `negsteer_notes/` and multiple `.docx` todo
+lists.  Nothing in filenames or directory structure tells the
 reader (Claude or otherwise) which to treat as current.  The
 inventory documents `01-17` under `notes/inventory/` are a
 point-in-time snapshot from `2026-05-12` but read as if they were
 current.  Old planning prompts (`12_phase_2_prompts.md`,
 `13_prompt_3_hpc_tier_tests.md`, `16_prompt_phase_2_9.md`) and
-static-analysis dumps (`07-09`) clutter alongside the actually
-useful `06_ubiquitous_language.md`.
+static-analysis dumps (`07-09`) clutter alongside the useful
+`06_ubiquitous_language.md`.
 
 ## 2. The four-layer fix
 
@@ -65,9 +66,9 @@ Four labels exhaustively partition the file set:
 - **TRANSIENT** — current state-of-the-work that is expected to be
   overwritten each session (`SESSION_HANDOFF.md`,
   `remediation_state.md`).
-- **HISTORICAL** — point-in-time record kept for traceability; do
+- **HISTORICAL** — point-in-time record kept for traceability.  Do
   not treat as current.  Includes archived session logs, old
-  planning docs, grill-me transcripts after their decisions have
+  planning docs, and grill-me transcripts whose decisions have
   been folded into authoritative docs.
 - **DRAFT** — work-in-progress, not yet authoritative.  Becomes
   AUTHORITATIVE on next promotion.
@@ -78,9 +79,8 @@ of X" answerable by `rg "scope: subsystem:negsteer" notes/`.
 ### Layer 2 — `CLAUDE.md` at the repo root
 
 Claude Code auto-loads `CLAUDE.md` from the repo root into every
-session's context.  This is the cheapest possible mechanism to
-give every future session the right starting set without paying
-that cost in tokens manually.
+session's context.  That is the cheapest way to give every future
+session the right starting set, with no manual token cost.
 
 Proposed `CLAUDE.md` content (sketch — exact wording TBD on
 approval):
@@ -177,7 +177,7 @@ notes/
 
 ### Layer 4 — Naming convention for ephemera
 
-Files matching these patterns are by convention **session logs** —
+Files matching these patterns are by convention **session logs**,
 HISTORICAL the moment a successor exists:
 
 - `pipeline_notes\d+\.md`
@@ -186,9 +186,8 @@ HISTORICAL the moment a successor exists:
 - `experiment_notes\d+\.md`
 - `weekly_progress_.*\.docx`
 
-The convention should be documented in `CLAUDE.md` so future logs go
-straight into `notes/archive/<category>/` the moment they are
-superseded.
+Document the convention in `CLAUDE.md` so future logs go straight
+into `notes/archive/<category>/` the moment they are superseded.
 
 ### Special case: one-off analysis scripts
 
@@ -201,8 +200,8 @@ files there are:
 - `experiments/campaigns/pikp1_avrpia/analysis2_misfold_localisation.py`
 
 Both hardcode threshold values, contig-derived fixed-segment
-lengths, and run-specific paths.  They run, they answer a question,
-and then their context is forgotten.
+lengths and run-specific paths.  They run, they answer a question,
+and then their context is lost.
 
 Proposed convention: `experiments/campaigns/<campaign>/analyses/`
 with a sibling `analysis_<N>.yml` per script:
@@ -227,8 +226,8 @@ ran_by: joshua
 ```
 
 Even a 10-line YAML next to each script restores reproducibility
-without forcing the script into the main pipeline.  Convention to be
-documented in `experiments/README.md`.
+without forcing the script into the main pipeline.  Document the
+convention in `experiments/README.md`.
 
 ---
 

@@ -135,15 +135,6 @@ process NEGSTEER_RUN_ONE {
     val  postprocess_rmsd_threshold
     val  postprocess_metric_column
     val  postprocess_contact_cutoff
-    // Stage the orchestrator bash script as a path input so edits to
-    // it bust the cache.  NOTE: bin/negative_steering_run_one.sh
-    // invokes several bin/*.py sub-scripts via --bin-dir
-    // ${projectDir}/bin; those indirect dependencies are NOT
-    // content-hashed by this declaration.  Declaring them all
-    // individually would invent a pattern the rest of the codebase
-    // does not use, so it is left for a future targeted task.
-    path orchestrator_script
-
     output:
     // Publish the entire per-sequence workdir.  passing_summary.csv
     // and aggregated_results.csv are both inside it; the cross-
@@ -197,33 +188,53 @@ print(f"wrote {out_dir/'receptor.fasta'} ({len(chains['receptor'][0])} residues)
       f"and {out_dir/'effector.fasta'}")
 PYEOF
 
-    # ─── Invoke the inline orchestrator ──────────────────────────────
-    # bin/negative_steering_run_one.sh expects absolute paths; it
-    # calls readlink -f internally but --bin-dir must resolve cleanly.
-    bash ${orchestrator_script} \\
-        --seq-name                     "${seq_name}" \\
-        --ground-truth                 "${design_pdb}" \\
-        --receptor-chain               "${receptor_chain}" \\
-        --effector-chain               "${effector_chain}" \\
-        --receptor-fasta               "${seq_name}/inputs/receptor.fasta" \\
-        --effector-fasta               "${seq_name}/inputs/effector.fasta" \\
-        --true-interface-indices-file  "${true_interface}" \\
-        --design-region-indices-file   "${design_region}" \\
-        --workdir                      "${seq_name}" \\
-        --bin-dir                      "${projectDir}/bin" \\
-        --boltz-container              "${params.boltz2_container}" \\
-        --plan-extra-args              "${plan_extra_args}" \\
-        --postprocess-rmsd-threshold   "${postprocess_rmsd_threshold}" \\
-        --postprocess-metric-column    "${postprocess_metric_column}" \\
-        --postprocess-contact-cutoff   "${postprocess_contact_cutoff}"
+    # ─── Hand the sequence to the negative-steering engine ───────────
+    # `negsteer run` is the engine's tool interface.  It replaces the
+    # 458-line orchestrator this pipeline used to vendor, along with the
+    # five bin/*.py stages that orchestrator drove.  The engine is a
+    # separate repository installed once per site, so this pipeline no
+    # longer carries a copy that can drift from it.
+    #
+    # plan_extra_args is spliced in directly because every flag it holds
+    # (--mode, --max-mutations, --candidate-pool-size,
+    # --protected-set-source, --n-designs, --num-seeds,
+    # --diffusion-samples, --recycling-steps, --rmsd-threshold,
+    # --contact-cutoff) is a first-class option of `negsteer run`.
+    #
+    # --nv because the engine runs Boltz-2 on a GPU inside this same
+    # container, matching how modules/rfdiffusion.nf invokes its image.
+    singularity exec --nv --bind \${PWD}:\${PWD} ${params.negsteer_container} \\
+        negsteer run \\
+            --name            "${seq_name}" \\
+            --receptor-fasta  "${seq_name}/inputs/receptor.fasta" \\
+            --effector-fasta  "${seq_name}/inputs/effector.fasta" \\
+            --reference-pdb   "${design_pdb}" \\
+            --design-region   "${design_region}" \\
+            --true-interface  "${true_interface}" \\
+            --receptor-chain  "${receptor_chain}" \\
+            --effector-chain  "${effector_chain}" \\
+            --outdir          "${seq_name}" \\
+            ${plan_extra_args} \\
+            --postprocess-rmsd-threshold  "${postprocess_rmsd_threshold}" \\
+            --metric-column               "${postprocess_metric_column}" \\
+            --postprocess-contact-cutoff  "${postprocess_contact_cutoff}"
 
     # Sanity: the final deliverable must exist or publishDir will still
     # publish the directory but downstream aggregation will have
     # nothing to pick up.  Fail loudly here so the log shows the
     # broken invariant immediately.
+    # The engine's output contract says to read negsteer_result.json rather
+    # than globbing the run directory, so its absence is the real failure.
+    # passing_summary.csv is checked separately because the cross-sequence
+    # aggregator downstream globs for that file by name.
+    if [[ ! -f "${seq_name}/negsteer_result.json" ]]; then
+        echo "ERROR: ${seq_name}/negsteer_result.json not produced" >&2
+        ls -la ${seq_name}/ || true
+        exit 1
+    fi
     if [[ ! -f "${seq_name}/passing_summary.csv" ]]; then
         echo "ERROR: ${seq_name}/passing_summary.csv not produced" >&2
-        ls -la ${seq_name}/ || true
+        cat "${seq_name}/negsteer_result.json" || true
         exit 1
     fi
     """
