@@ -1,5 +1,5 @@
 # =============================================================================
-# Example parameters — Receptor Resurfacing Pipeline v0.3.0
+# Example parameters — Receptor Resurfacing Pipeline v0.4.0
 # =============================================================================
 # Usage:
 #   sbatch /hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/run_pipeline.slurm.sh ./params.yml
