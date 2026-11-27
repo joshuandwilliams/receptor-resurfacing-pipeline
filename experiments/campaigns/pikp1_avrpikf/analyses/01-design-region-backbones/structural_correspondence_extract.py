@@ -30,6 +30,7 @@ Usage:
 import argparse
 import glob
 import os
+import sys
 import warnings
 
 warnings.filterwarnings("ignore")
@@ -37,6 +38,10 @@ warnings.filterwarnings("ignore")
 import numpy as np
 import pandas as pd
 from Bio.PDB import PDBParser
+
+# The shared refuse-to-shrink guard, one directory up.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from _committed_output import guard
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 RUN = os.path.join(
@@ -72,6 +77,9 @@ def kabsch(P, Q):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--cutoff", type=float, default=MATCH_CUTOFF)
+    ap.add_argument("--allow-partial", action="store_true",
+                    help="write even if the table came out shorter than the "
+                         "committed one")
     ap.add_argument("--output", default=os.path.join(
         HERE, "structural_correspondence.csv"))
     args = ap.parse_args()
@@ -137,8 +145,12 @@ def main():
         })
 
     out = pd.DataFrame(rows)
-    out.to_csv(args.output, index=False)
     long_path = args.output.replace(".csv", "_per_design.csv")
+    # Both tables are committed, so check both before writing either.
+    # An empty rfdiffusion/ glob is what makes them collapse.
+    guard(args.output, len(out), allow_partial=args.allow_partial)
+    guard(long_path, len(per_design), allow_partial=args.allow_partial)
+    out.to_csv(args.output, index=False)
     pd.DataFrame(per_design).to_csv(long_path, index=False)
     print(f"wrote {long_path}")
     print(f"wrote {args.output}")
