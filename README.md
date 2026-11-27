@@ -1,4 +1,4 @@
-# Receptor Resurfacing Pipeline
+# Receptor Resurfacing Pipeline <img src="docs/logo.png" align="right" height="120" alt="" />
 
 [![Tests](https://github.com/joshuandwilliams/receptor-resurfacing-pipeline/actions/workflows/test.yml/badge.svg)](https://github.com/joshuandwilliams/receptor-resurfacing-pipeline/actions/workflows/test.yml)
 [![Lint](https://github.com/joshuandwilliams/receptor-resurfacing-pipeline/actions/workflows/lint.yml/badge.svg)](https://github.com/joshuandwilliams/receptor-resurfacing-pipeline/actions/workflows/lint.yml)
