@@ -22,6 +22,14 @@ tests/*/receptor_resurfacing_results/
 slurm-*.out
 slurm-*.err
 
+# ----- Coverage -----
+# Written on every pytest run, because addopts carries --cov.
+.coverage
+.coverage.*
+coverage.xml
+lcov.info
+htmlcov/
+
 # ----- Python -----
 __pycache__/
 *.py[cod]
