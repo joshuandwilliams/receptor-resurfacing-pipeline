@@ -28,9 +28,9 @@ Class 1 sequences (e.g. ``design_28_seq_1``) skip steering entirely, so
 absent. The ``_maybe_skip`` helper handles the per-sequence absence.
 
 Producers (per ``modules/negative_steering.nf`` and the bin/ scripts it
-orchestrates via ``bin/negative_steering_run_one.sh``):
-- ``bin/boltz2_negative_steering.py``   (cmd_plan, cmd_collect)
-- ``bin/boltz2_iterate_steering.py``    (per-cycle orchestration)
+produces via the installed negative-steering engine, `negsteer run`):
+- the engine's plan and collect stages
+- the engine's per-cycle orchestration
 - ``bin/reversion.py``                  (contamination + reversion harvest)
 - ``bin/extract_passing.py``            (passing_summary.csv)
 - ``bin/cross_sequence_summary.py``     (aggregated_results.csv at per-sequence scope)
@@ -94,7 +94,7 @@ def _maybe_skip(ref_path, sequence: str, label: str) -> None:
 @pytest.mark.check_test_run
 @pytest.mark.parametrize("sequence", SEQUENCE_COHORT)
 def test_aggregated_results_from_boltz2_iterate_steering_py(ref, out, sequence):
-    """bin/boltz2_iterate_steering.py — CSV-EXACT (per-sequence aggregated_results.csv)."""
+    """the negative-steering engine — CSV-EXACT (per-sequence aggregated_results.csv)."""
     ref_dir, act_dir = _per_sequence_dir(ref, out, sequence)
     target = ref_dir / "aggregated_results.csv"
     _maybe_skip(target, sequence, "aggregated_results.csv")
@@ -104,7 +104,7 @@ def test_aggregated_results_from_boltz2_iterate_steering_py(ref, out, sequence):
 @pytest.mark.check_test_run
 @pytest.mark.parametrize("sequence", SEQUENCE_COHORT)
 def test_all_results_multicycle_from_boltz2_iterate_steering_py(ref, out, sequence):
-    """bin/boltz2_iterate_steering.py — CSV-EXACT (all_results_multicycle.csv)."""
+    """the negative-steering engine — CSV-EXACT (all_results_multicycle.csv)."""
     ref_dir, act_dir = _per_sequence_dir(ref, out, sequence)
     target = ref_dir / "all_results_multicycle.csv"
     _maybe_skip(target, sequence, "all_results_multicycle.csv")
@@ -126,7 +126,7 @@ def test_all_results_multicycle_with_metrics_from_boltz2_iterate_steering_py(
 @pytest.mark.check_test_run
 @pytest.mark.parametrize("sequence", SEQUENCE_COHORT)
 def test_cycle_statistics_from_boltz2_iterate_steering_py(ref, out, sequence):
-    """bin/boltz2_iterate_steering.py — CSV-EXACT (cycle_statistics.csv).
+    """the negative-steering engine — CSV-EXACT (cycle_statistics.csv).
 
     Class 1 sequences (e.g. ``design_28_seq_1``) skip steering and emit no
     cycle_statistics.csv; ``_maybe_skip`` handles the absence.
@@ -155,7 +155,7 @@ def test_passing_summary_from_extract_passing_py(ref, out, sequence):
 @pytest.mark.check_test_run
 @pytest.mark.parametrize("sequence", SEQUENCE_COHORT)
 def test_pathways_from_boltz2_iterate_steering_py(ref, out, path_normalizer, sequence):
-    """bin/boltz2_iterate_steering.py — JSON-MODULO-PATHS (workdir paths in cells)."""
+    """the negative-steering engine — JSON-MODULO-PATHS (workdir paths in cells)."""
     ref_dir, act_dir = _per_sequence_dir(ref, out, sequence)
     target = ref_dir / "pathways.json"
     _maybe_skip(target, sequence, "pathways.json")
@@ -266,7 +266,7 @@ def test_cycle_0_effector_template_from_extract_effector_template_cif(
 def test_cycle_0_kickoff_distances_from_boltz2_negative_steering_py(
     ref, out, path_normalizer, sequence,
 ):
-    """bin/boltz2_negative_steering.py — JSON-MODULO-PATHS.
+    """the negative-steering engine — JSON-MODULO-PATHS.
 
     Plan §2.5 listed this as JSON-DEEP, but inspection of the reference file
     shows ~120 occurrences of workdir paths in candidate-PDB references; a
@@ -284,7 +284,7 @@ def test_cycle_0_kickoff_distances_from_boltz2_negative_steering_py(
 def test_cycle_0_passing_from_boltz2_negative_steering_py(
     ref, out, path_normalizer, sequence,
 ):
-    """bin/boltz2_negative_steering.py — JSON-MODULO-PATHS.
+    """the negative-steering engine — JSON-MODULO-PATHS.
 
     Plan §2.5 listed JSON-DEEP, but reference contains workdir paths in
     candidate references (~94 occurrences). Demoted — judgment call.
@@ -315,7 +315,7 @@ def test_cycle_0_plan_from_boltz2_negative_steering_py(
 def test_cycle_0_prefilter_from_boltz2_negative_steering_py(
     ref, out, path_normalizer, sequence,
 ):
-    """bin/boltz2_negative_steering.py — JSON-MODULO-PATHS.
+    """the negative-steering engine — JSON-MODULO-PATHS.
 
     Plan §2.5 listed JSON-DEEP; reference contains ~84 workdir paths.
     Demoted — judgment call.
@@ -371,7 +371,7 @@ def test_cycle_0_reversion_results_from_reversion_py(
 def test_cycle_0_steered_results_from_boltz2_negative_steering_py(
     ref, out, sequence,
 ):
-    """bin/boltz2_negative_steering.py — CSV-EXACT (steered_results.csv).
+    """the negative-steering engine — CSV-EXACT (steered_results.csv).
 
     Class 1 sequences skip steering; the file exists for them in some
     layouts as a header-only CSV but not in others. ``_maybe_skip``
@@ -389,7 +389,7 @@ def test_cycle_0_steered_results_from_boltz2_negative_steering_py(
 def test_cycle_0_steered_results_aggregate_from_boltz2_negative_steering_py(
     ref, out, sequence,
 ):
-    """bin/boltz2_negative_steering.py — CSV-EXACT (steered_results_aggregate.csv).
+    """the negative-steering engine — CSV-EXACT (steered_results_aggregate.csv).
 
     Class 1 sequences skip steering and produce no aggregate CSV;
     ``_maybe_skip`` handles the absence.
@@ -403,7 +403,7 @@ def test_cycle_0_steered_results_aggregate_from_boltz2_negative_steering_py(
 @pytest.mark.check_test_run
 @pytest.mark.parametrize("sequence", SEQUENCE_COHORT)
 def test_cycle_0_summary_from_boltz2_iterate_steering_py(ref, out, sequence):
-    """bin/boltz2_iterate_steering.py — TEXT-EXACT (cycle_0/summary.txt).
+    """the negative-steering engine — TEXT-EXACT (cycle_0/summary.txt).
 
     Class 1 sequences skip steering and produce no summary.txt;
     ``_maybe_skip`` handles the absence.
