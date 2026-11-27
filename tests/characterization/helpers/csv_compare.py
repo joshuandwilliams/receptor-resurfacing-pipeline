@@ -113,7 +113,7 @@ def compare_csv_exact_modulo_paths(
     JSON-MODULO-PATHS for JSON files.
 
     Numeric columns are unaffected. Column-name normalisation is intentionally
-    not performed; only cell *values* in object-typed columns are rewritten.
+    not performed. Only cell *values* in non-numeric columns are rewritten.
     """
     early = _file_check(reference, actual, _STRATEGY_EXACT_MODULO)
     if early is not None:
@@ -122,7 +122,14 @@ def compare_csv_exact_modulo_paths(
     act_df = pd.read_csv(actual)
     for df in (ref_df, act_df):
         for col in df.columns:
-            if df[col].dtype == object:
+            # Select by "not numeric" rather than by `dtype == object`.  Under
+            # pandas 2 a text column read by read_csv has dtype object, so the
+            # identity test held.  pandas 3 gives it dtype str, so the test is
+            # False and every path cell reached the comparison unnormalised --
+            # two run directories differing only in workdir hash or user home
+            # then failed as a value difference.  `_string_column_set` below
+            # already selects columns this way, so the two agree now.
+            if not pd.api.types.is_numeric_dtype(df[col]):
                 df[col] = df[col].map(
                     lambda v: path_normalizer(v) if isinstance(v, str) else v
                 )
