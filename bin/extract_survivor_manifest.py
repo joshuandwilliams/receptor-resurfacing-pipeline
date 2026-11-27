@@ -46,7 +46,7 @@ def _extract_chain_seq(pdb_path: Path, chain_id: str) -> Optional[str]:
     """
     import sys
     sys.path.insert(0, str(Path(__file__).resolve().parent))
-    from boltz2_negative_steering import get_chain_sequence  # noqa: E402
+    from structure_metrics import get_chain_sequence  # noqa: E402
     try:
         seq = get_chain_sequence(pdb_path, chain_id)
     except (OSError, ValueError):

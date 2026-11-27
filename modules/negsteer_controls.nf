@@ -153,7 +153,7 @@ process NEGSTEER_CONTROLS {
 import sys
 from pathlib import Path
 sys.path.insert(0, "${projectDir}/bin")
-from boltz2_negative_steering import get_chain_sequence
+from structure_metrics import get_chain_sequence
 seq = get_chain_sequence(Path("${input_pdb}"), "${effector_chain}")
 if not seq:
     raise SystemExit("ERROR: effector chain empty in ${input_pdb}")
