@@ -121,8 +121,11 @@ skip_covered = true
 # A ratchet over bin/.  It may only ever go up.  Raise it to whatever a run
 # reports once new tests land, so coverage cannot quietly fall.
 #
-# 10.7 is where the logic tier actually stands under this configuration: 14820
-# statements, 13218 of them missing, 10.81% covered.  It is low for a reason
+# 16.5 is where the logic tier stands now that the five vendored engine
+# modules are gone: 16.58% covered.  It was 10.81% over 14820 statements while
+# this repository still carried 12,996 lines of engine that no test here could
+# reach, which is exactly the 5215 statements at 0% that deleting them
+# removed.  It is low for a reason
 # that is worth writing down rather than hiding.  Most of bin/ is only reached
 # by the check_test_run tier, which needs a finished pipeline run and so cannot
 # contribute here.
@@ -137,4 +140,4 @@ skip_covered = true
 # statements.  It got there by building fixture run trees with known answers
 # rather than by testing against a real cluster directory, which is the route
 # open to this repository too.
-fail_under = 10.7
+fail_under = 16.5
