@@ -283,6 +283,10 @@ PARAM_SPECS: List[ParamSpec] = [
     ParamSpec("negsteer_contact_cutoff","float_range", {"min": 0.0, "max": 20.0},
               "Heavy-atom contact cutoff (Å)"),
     ParamSpec("negsteer_no_kernels","bool", {}),
+    ParamSpec("negsteer_boltz_constraints","bool", {},
+              "Add reference-derived Boltz-2 restraints to the plan stage. "
+              "Needs a known interface, so it cannot be used on a novel "
+              "target."),
 
     # ── Negative steering — post-processing ─────────────────────────
     ParamSpec("negsteer_postprocess_rmsd_threshold","float_range",

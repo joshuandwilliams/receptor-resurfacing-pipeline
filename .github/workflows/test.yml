@@ -1,0 +1,142 @@
+name: Tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+    steps:
+      - uses: actions/checkout@v5
+
+      # 3.11 matches the pytest_runner image, which containers/README.md
+      # records, so CI and the cluster's test container run the same minor
+      # version. requires-python allows 3.10 upward.
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      # The `test` extra is the whole dependency list for the logic tier. A
+      # laptop's conda environment supplies numpy, pandas, Pillow and
+      # scikit-image for free and a runner does not, so anything missing from
+      # that extra fails here rather than passing locally by accident.
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .[test]
+
+      # Only the logic tier. check_test_run asserts against a finished pipeline
+      # run tree and needs RECEPTOR_OUTPUT_ROOT, a GPU and the Singularity
+      # images, none of which a runner has.
+      #
+      # Coverage over bin/ is gated by pyproject as a ratchet, applied through
+      # addopts, so a fall in coverage fails this job.
+      #
+      # Seven tests skip here and that is expected. addopts carries -ra, so the
+      # reasons are printed rather than asserted on.
+      - name: Run the logic tier
+        run: pytest -m logic --cov-report=xml
+
+      # Skipped until the CODECOV_TOKEN secret is added to the repository.
+      - name: Upload coverage to Codecov
+        if: env.CODECOV_TOKEN != ''
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ env.CODECOV_TOKEN }}
+          files: coverage.xml
+
+  # The workflow cannot be run in CI, and it cannot be stub-run either: no
+  # process in modules/ or main.nf declares a `stub:` block, so -stub-run would
+  # still try to execute every real script inside a Singularity image. What CI
+  # can check is that the configuration resolves and that the shipped example
+  # params still satisfy the validator the pipeline runs on them.
+  #
+  # Adding stub blocks to modules/ would make a full DAG stub-run possible, the
+  # way structure-negative-steering does it. That is worth doing and is not
+  # done here.
+  config:
+    runs-on: ubuntu-latest
+    env:
+      # Pinned to the version the cluster runs, which containers/NextFlow.def
+      # installs by URL. CI on a newer Nextflow cannot see a config problem
+      # that is specific to this one: 25.10 replaces a `withLabel:` block when
+      # a profile redefines it and 26.04 merges.
+      NXF_VER: 25.10.4
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      # Nextflow needs a JDK and the runner already ships several. Using the
+      # preinstalled one avoids a download for something already on the
+      # machine.
+      - name: Use the runner's preinstalled JDK
+        run: |
+          echo "JAVA_HOME=$JAVA_HOME_17_X64" >> "$GITHUB_ENV"
+          echo "$JAVA_HOME_17_X64/bin" >> "$GITHUB_PATH"
+
+      - name: Install Nextflow, pinned to the cluster's version
+        run: |
+          curl -s https://get.nextflow.io | bash
+          sudo mv nextflow /usr/local/bin/
+          nextflow -version
+
+      # Catches a syntax error or an unresolvable reference in nextflow.config,
+      # which otherwise surfaces only when a run is submitted.
+      - name: Resolve the Nextflow configuration
+        run: |
+          nextflow config > resolved.config
+          grep -q "manifest" resolved.config
+          echo "nextflow.config resolves"
+
+      # The version is written in two places because Nextflow cannot read
+      # pyproject. This fails if they drift.
+      - name: Assert the two version strings agree
+        run: |
+          py=$(python -c "import tomllib,pathlib;print(tomllib.loads(pathlib.Path('pyproject.toml').read_text())['project']['version'])")
+          # -flat, because the default output is a nested block and the key
+          # only appears in dotted form under -flat.
+          nf=$(nextflow config -flat 2>/dev/null | sed -n "s/^manifest\.version[[:space:]]*=[[:space:]]*'\(.*\)'$/\1/p" | head -1)
+          echo "pyproject=$py nextflow=$nf"
+          test "$py" = "$nf"
+
+      # params_example.yml is what someone copies to start a run, and it failed
+      # its own validator before this workflow existed: project_name carried a
+      # ':' the pattern forbids, and Branch A was selected with an empty
+      # pose_solver_pairs.
+      - name: Validate the example params against the pipeline's own validator
+        run: |
+          pip install PyYAML
+          python - <<'EOF'
+          import json, subprocess, sys, tempfile, os, yaml
+          params = yaml.safe_load(open("params_example.yml"))
+          path = os.path.join(tempfile.mkdtemp(), "params.json")
+          json.dump(params, open(path, "w"))
+          r = subprocess.run([sys.executable, "bin/validate_params.py",
+                              "--params-json", path],
+                             capture_output=True, text=True)
+          print(r.stdout, r.stderr)
+          sys.exit(r.returncode)
+          EOF
+
+  # Every bin/ script is invoked by a Nextflow stage by absolute path, so a
+  # syntax error in one is only found when that stage runs, which can be hours
+  # into a pipeline.
+  compile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Byte-compile every Python file a stage can invoke
+        run: |
+          python -m compileall -q bin tests
+          echo "bin/ and tests/ compile"
