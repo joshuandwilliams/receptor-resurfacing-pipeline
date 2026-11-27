@@ -1,20 +1,35 @@
 # Receptor Resurfacing Pipeline
 
-A Nextflow DSL2 pipeline for *de novo* binder design: takes a docked
-receptor–effector complex, redesigns the receptor surface around the
-effector pose, and outputs candidate binder sequences with predicted
-quality metrics from multiple orthogonal validators.
+[![Tests](https://github.com/joshuandwilliams/receptor-resurfacing-pipeline/actions/workflows/test.yml/badge.svg)](https://github.com/joshuandwilliams/receptor-resurfacing-pipeline/actions/workflows/test.yml)
+[![Lint](https://github.com/joshuandwilliams/receptor-resurfacing-pipeline/actions/workflows/lint.yml/badge.svg)](https://github.com/joshuandwilliams/receptor-resurfacing-pipeline/actions/workflows/lint.yml)
+![python](https://img.shields.io/badge/python-3.11-1e90ff?logo=python)
+![nextflow](https://img.shields.io/badge/nextflow-25.10.4-0dc09d?logo=nextflow)
+
+A Nextflow DSL2 pipeline for *de novo* binder design. It takes a docked
+receptor–effector complex, redesigns the receptor surface around the effector
+pose, and outputs candidate binder sequences with quality metrics from several
+orthogonal validators.
+
+Negative steering of the Boltz-2 predictions is a separate repository,
+[structure-negative-steering](https://github.com/joshuandwilliams/structure-negative-steering),
+installed once per site and called as a tool.
 
 ## Status
 
-This codebase is undergoing structured remediation following
-[`notes/codebase_remediation_plan.md`](notes/codebase_remediation_plan.md).
-Active work happens on the `phase4-impl` branch; `main` is the
-safe-fallback baseline (Phase 4 spec, no implementation code). Start
-every session by reading
-[`notes/SESSION_HANDOFF.md`](notes/SESSION_HANDOFF.md) for orientation;
-[`notes/remediation_state.md`](notes/remediation_state.md) is the
-authoritative session log and branch state.
+Active work is on the `phase4-impl` branch. `main` is the pre-Phase-4
+baseline.
+
+The remediation this codebase is going through is planned in
+[`notes/codebase_remediation_plan.md`](notes/codebase_remediation_plan.md),
+and the work to bring it in line with the engine repository is in
+[`notes/upstream_parity_plan.md`](notes/upstream_parity_plan.md).
+[`notes/things_to_fix.md`](notes/things_to_fix.md) lists the known defects
+that would change results.
+
+`notes/SESSION_HANDOFF.md` and `notes/remediation_state.md` are per-session
+working documents rather than orientation. They were last written in May 2026
+and describe an in-flight run, so read them for history, not for current
+state.
 
 ## What the pipeline does
 
@@ -81,10 +96,27 @@ containers/  Singularity .def recipes; image + JDK symlinks (git-ignored) go her
 notes/       Inventory documents, remediation plan, decisions, glossaries
 scripts/     Repo tooling (sync_to_hpc.sh, check_environment.slurm.sh, …)
 main.nf      Top-level workflow
-nextflow.config   Container paths and per-process SLURM resources
+nextflow.config   Per-process SLURM resources; partitions come from site.conf
 params_example.yml   Annotated parameter starter
 run_pipeline.slurm.sh   SLURM submission wrapper
+site.conf.example   Every site-specific setting; copy to the gitignored site.conf
 ```
+
+## Your cluster
+
+Nothing tracked here names a partition, a checkout path, a reference-data
+location or an email address. Everything that would is in one file:
+
+```bash
+cp site.conf.example site.conf
+$EDITOR site.conf
+```
+
+`scripts/site_conf.sh` loads it, and the launchers source that. A value already
+in the environment beats site.conf, so a one-off override works without
+editing the file. With no site.conf at all the partitions resolve to null and
+jobs go to the cluster default, which is right for the CPU stages and wrong for
+the GPU ones on most sites.
 
 ## Running the pipeline
 
