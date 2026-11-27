@@ -1,6 +1,9 @@
 #!/bin/bash
 #SBATCH --job-name="nf_resample_mpnn"
-#SBATCH -p jic-medium
+# No -p: the partition is site-specific.  tests/run_tests.sh passes
+# RECEPTOR_PARTITION_CPU from site.conf as `sbatch -p`, where it beats both
+# the environment and a header line.  Submitting this script directly takes
+# the cluster's default partition.
 #SBATCH -N 1
 #SBATCH -n 1
 #SBATCH -c 2
@@ -9,7 +12,8 @@
 #SBATCH --output=nextflow_pipeline_%j.out
 #SBATCH --error=nextflow_pipeline_%j.err
 #SBATCH --mail-type=END,FAIL
-#SBATCH --mail-user=jowillia@nbi.ac.uk
+# No --mail-user: sbatch(1) mails the submitting user when only --mail-type
+# is given, so an address here would be site-specific and redundant.
 
 set -euo pipefail
 
@@ -41,7 +45,7 @@ if [ ! -f "${PARAMS_FILE}" ]; then
 fi
 
 # ── Paths ─────────────────────────────────────────────────────────────────
-PIPELINE_DIR="/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline"
+PIPELINE_DIR="${RECEPTOR_PIPELINE_DIR:-$(cd "." && pwd)}"
 NEXTFLOW_IMG="${PIPELINE_DIR}/containers/NextFlow.img"
 RFDIFF_CONTAINER="${PIPELINE_DIR}/containers/HADDOCK_RFDiffusion_ProteinMPNN_MMseqs2.img"
 AF2_DATA_DIR="/nbi/Reference-Data/AlphaFold/db-v2.3.2"

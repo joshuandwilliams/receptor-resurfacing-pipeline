@@ -1,17 +1,20 @@
 #!/bin/bash
 #SBATCH --job-name="cleanup_finished_runs"
-#SBATCH -p jic-medium
+# No -p: the partition is site-specific.  Pass it on the command line, e.g.
+#   sbatch -p "$RECEPTOR_PARTITION_CPU" scripts/clean_all_finished_runs.slurm.sh
 #SBATCH -N 1
 #SBATCH -n 1
 #SBATCH -c 1
 #SBATCH --mem=1G
 #SBATCH --time=06:00:00
-#SBATCH --chdir=/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/scripts
+# No --chdir: the path is site-specific.  sbatch starts the job in the
+# submitting directory, and the script resolves its own location below.
 #SBATCH --output=cleanup_%A_%a.out
 #SBATCH --error=cleanup_%A_%a.err
 #SBATCH --array=0-14
 #SBATCH --mail-type=FAIL
-#SBATCH --mail-user=jowillia@nbi.ac.uk
+# No --mail-user: sbatch(1) mails the submitting user when only
+# --mail-type is given, so an address here is site-specific and redundant.
 #
 # clean_all_finished_runs.slurm.sh — array job that runs
 # clean_finished_run.sh on each eligible campaign run identified by the
@@ -34,7 +37,7 @@ set -euo pipefail
 # executing, so BASH_SOURCE[0] does NOT point to the original location in
 # scripts/. Use SLURM_SUBMIT_DIR (set by SLURM to the directory sbatch was
 # called from) as the pipeline root. Submit from the pipeline root, e.g.:
-#   cd /hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline
+#   cd <your checkout of receptor-resurfacing-pipeline>
 #   sbatch scripts/clean_all_finished_runs.slurm.sh
 PIPELINE_ROOT="${SLURM_SUBMIT_DIR:-$(pwd)}"
 CLEAN="$PIPELINE_ROOT/scripts/clean_finished_run.sh"

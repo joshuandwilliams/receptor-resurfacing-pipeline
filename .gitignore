@@ -22,6 +22,12 @@ tests/*/receptor_resurfacing_results/
 slurm-*.out
 slurm-*.err
 
+# ----- Site settings -----
+# Partitions, container paths, reference-data locations and anything
+# else specific to one cluster or one person.  site.conf.example is
+# tracked and documents every setting.
+site.conf
+
 # ----- Coverage -----
 # Written on every pytest run, because addopts carries --cov.
 .coverage

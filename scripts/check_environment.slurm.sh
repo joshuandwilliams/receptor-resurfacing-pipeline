@@ -54,10 +54,10 @@ PIPELINE_DIR="$(cd "${PIPELINE_DIR}" && pwd)"
 CONTAINERS_DIR="${PIPELINE_DIR}/containers"
 
 # Reference data + AF3 native package (mirror nextflow.config).
-AF2_DATA_DIR="/nbi/Reference-Data/AlphaFold/db-v2.3.2"
-AF3_DB_V3="/nbi/Reference-Data/AlphaFold/db-v3.0.0"
+AF2_DATA_DIR="${RECEPTOR_AF2_DB:-}"
+AF3_DB_V3="${RECEPTOR_AF3_DB:-}"
 AF3_MODEL_DIR="${HOME}/singularity/AlphaFold3"
-AF3_PACKAGE_ID="e8edb411-7374-4342-b9f1-408da41fc197"
+AF3_PACKAGE_ID="${RECEPTOR_AF3_PACKAGE_ID:-}"
 
 # ── Result tallies + helpers ──────────────────────────────────────────────
 PASS=0; FAIL=0; WARN=0

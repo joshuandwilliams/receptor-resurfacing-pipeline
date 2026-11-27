@@ -2,7 +2,7 @@
 # Example parameters — Receptor Resurfacing Pipeline v0.4.0
 # =============================================================================
 # Usage:
-#   sbatch /hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/run_pipeline.slurm.sh ./params.yml
+#   sbatch <checkout>/run_pipeline.slurm.sh ./params.yml
 #
 # There are four input modes. Uncomment ONE of the sections below.
 # =============================================================================

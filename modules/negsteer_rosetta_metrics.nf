@@ -28,7 +28,7 @@
  *
  * Runs inside Rosetta.img.  ~3-6 min per survivor (relax dominates;
  * IA call is ~15 s).  Survivor fan-out is CPU — the queue is
- * jic-medium, not jic-gpu.
+ * the CPU partition, not the GPU one.
  * =============================================================================
  */
 

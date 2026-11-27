@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name="update_examples"
-#SBATCH -p jic-short
+# No -p: the partition is site-specific.  See site.conf.example.
 #SBATCH -N 1
 #SBATCH -n 1
 #SBATCH -c 2
@@ -8,7 +8,7 @@
 #SBATCH --time=00:30:00
 #SBATCH --output=update_examples_%j.out
 #SBATCH --error=update_examples_%j.err
-#SBATCH --chdir=/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests
+# No --chdir: sbatch starts the job in the submitting directory.
 # -----------------------------------------------------------------------------
 # update_example_dataset.slurm.sh
 # -----------------------------------------------------------------------------
