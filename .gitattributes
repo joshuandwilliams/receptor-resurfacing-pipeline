@@ -1,0 +1,25 @@
+# Language statistics.
+#
+# GitHub's linguist counts bytes of tracked files, so this repository reported
+# itself as 89.1% HTML against 7.6% Python. None of that HTML is written by
+# hand or shipped to anyone. It is 26.63 MB in two groups:
+#
+#   5 x pipeline_report.html   14.27 MB  Nextflow's own run report, committed
+#                                        inside tests/*/example_output_files/
+#                                        as part of each module's reference set
+#  15 x <analysis>.html        ~11 MB    Quarto renders of the .qmd documents
+#                                        beside them, plus their _files/libs/
+#                                        JavaScript and CSS
+#
+# Marking them generated keeps them in the repository and in diffs while taking
+# them out of the language bar, which is what they were distorting. It also
+# collapses them by default in pull request diffs, which is right for a 2.9 MB
+# machine-written report.
+tests/**/example_output_files/**/*.html    linguist-generated=true
+tests/**/example_output_files/**/*.txt     linguist-generated=true
+experiments/**/*.html                      linguist-generated=true
+experiments/**/*_files/**                  linguist-generated=true linguist-vendored=true
+
+# Quarto and Nextflow renders pull in bundled copies of third-party JavaScript
+# and CSS. They are someone else's code, so they are vendored rather than ours.
+**/*_files/libs/**                         linguist-vendored=true
