@@ -10,6 +10,83 @@ Where a number appears, the command that produced it is given.
 
 ---
 
+## Decisions taken, 2026-11-27
+
+**The engine does not live here.** `structure-negative-steering` is installed
+per site and called as a tool. The installation is at
+`/jic/scratch/groups/Mark-Banfield/JoshW_Software/negative_steering`, locally
+visible as `/Volumes/Group-Scratch/Mark-Banfield/...`. It holds a checkout at
+`4f70608`, the merge of PR #38, with a built `image/negsteer.img` and its own
+`run_NegativeSteering.slurm.sh`.
+
+That supersedes §4 of this plan. Every one of the six defects §4 lists was
+fixed upstream in PR #16, #18, #22, #28, #30 or #31, all of which are below
+#38, so the installed engine already has them. There is nothing to port. The
+vendored copies get deleted instead.
+
+The engine exposes a versioned tool interface: `negsteer run`, writing
+`negsteer_result.json` at output contract version 1, with five named outputs
+(`negsteer/__init__.py`). `--effector-template` is already opt-in and off by
+default there, which is the §7.3 question answered. Upstream also left a
+62-line replacement Nextflow module in its history, deleted in `5807225` with
+the stated reason that it belongs in this repository. Recover it with
+`git show 5807225^:contrib/negative_steering.nf`.
+
+The installed checkout is **12 commits behind** `origin/main`, which is PRs #39
+to #44. Those are the Docker build fixes, keeping `mols.tar` in the image, the
+container resolver and the single-run assertions. Updating it is a change on
+the cluster and has not been made.
+
+**The shared library modules decouple fully.** `pipeline_thresholds.py` is
+rewritten for this repository's own stages, `contig_utils.py` stays as
+RFDiffusion support, and `compute_metrics.py` folds into
+`compute_interface_metrics.py`. No engine code and no engine imports. The
+coupling to undo is real: `pipeline_thresholds` is imported by 11 files here,
+`contig_utils` by 6 and `compute_metrics` by 5.
+
+**The analyses split into their own repository**, with this one as a submodule.
+This has not been executed, for a reason found after the decision was taken.
+See the blocker below.
+
+## The blocker on the analyses split
+
+The twelve numbered analyses read their inputs from
+`experiments/campaigns/pikp1_avrpikf/runs/crystal_full_test_contig/results/`
+and `.../agroinfiltrations/`. Both are matched by `.gitignore:101` and
+`.gitignore:153` and carry **zero tracked files**. They exist on local disk
+only.
+
+So `git mv` offers them no protection, a new repository would not receive
+them, and nothing in version control would notice if they were lost. They are
+the primary sources behind every figure and number in Chapter 5, and the
+analyses resolve them by relative path, so moving the analyses without them
+breaks every extractor.
+
+What is safe, and what is not:
+
+- The thesis renders **without touching this repository**. Chapter 5's
+  figures resolve to `chapters/05-.../figures/thesis-figures/`, 28 files that
+  physically exist there, and the only mention of this repo in that chapter is
+  a GitHub URL in prose at line 188. Moving tracked files here cannot break a
+  render.
+- 16 of the 118 tracked images under the campaign's analyses are byte-identical
+  to a file in the thesis figure tree. Those are the preserved provenance.
+- Four are not, so the pipeline copy has already drifted from what the thesis
+  shows: `03-mpnn-sequence-design/thesis-figures/loop_depth_composition.png`,
+  `07-design-region-msa/thesis-figures/design_region_msa.png`,
+  `06-.../thesis-figures/constraint_level_and_rank.png` and
+  `09-.../thesis-figures/wt_vs_design5_panel.png`. For the first of those the
+  thesis-matching bytes do survive, under a different name, as
+  `03-mpnn-sequence-design/figure-options/composition_stack_fixed.png`.
+
+## Status, end of 2026-11-27
+
+Done and committed: §1.3, §2, §3, §5, §6.1, §6.2, §6.4, and §8.2's guards.
+Not done: the engine decouple and rewiring, the analyses split, §6.3, §6.5,
+§8.1, §8.3 to §8.6, §9.
+
+---
+
 ## 0. What is already done, so nobody redoes it
 
 Two upstream fixes are already present here. Both were ported by hand at some
