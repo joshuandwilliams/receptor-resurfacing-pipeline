@@ -83,8 +83,8 @@ Produces `<workdir>/per_seed_metrics.csv` and
 `<workdir>/variance_summary.csv`.
 
 ### `submit_boltz2_iterate_steering.sh`
-Internal — used by cycle-N+1 iteration chains.  Not usually called
-directly by the user.
+Internal, used by cycle-N+1 iteration chains.  Users do not normally
+call it directly.
 
 ### `submit_final_validation.sh`
 Post-pipeline tool to re-validate survivors from a completed run
@@ -106,11 +106,11 @@ with `num_seeds >= 3` by default.
 
 When the pipeline code (`boltz2_iterate_steering.py`, `reversion.py`,
 `extract_postprocess.sh`, etc.) has changed, BOTH the Python file AND
-any affected shell scripts need to ship together.  A previous
-deployment confusion happened where `submit_postprocess.sh` was updated
-on the cluster but the Python file wasn't — the old classifier kept
-running.  Diagnostic: the `aggregated_verdict_reason` string in
-`aggregated_results.csv` changes when the classifier changes; if the
+any affected shell scripts must ship together.  One deployment
+confusion came from updating `submit_postprocess.sh` on the cluster
+but not the Python file, so the old classifier kept running.
+Diagnostic: the `aggregated_verdict_reason` string in
+`aggregated_results.csv` changes when the classifier changes.  If the
 new phrasing doesn't appear, the new code didn't run.
 
 MD5-checksum deployed files against local stages if uncertain.
@@ -145,6 +145,6 @@ print(collections.Counter(r.get('aggregated_verdict','') for r in rows))
 ## Non-cluster testing
 
 Any pure-Python phase (`aggregate`, `aggregate-per-sequence`,
-`extract_passing.py`) can be run directly with `python3` outside the
-container — no GPU or singularity required.  Only the Boltz
+`extract_passing.py`) runs directly with `python3` outside the
+container, with no GPU or singularity required.  Only the Boltz
 prediction steps and `compute-final-metrics` need the container.

@@ -845,8 +845,9 @@ workflow MAIN_PIPELINE {
         }
 
     // -- 4e: Compose plan_extra_args string from params --------------
-    // Passed verbatim to boltz2_negative_steering.py plan via the
-    // bin/negative_steering_run_one.sh orchestrator.  Keep the flag
+    // Spliced into the `negsteer run` command line by
+    // modules/negative_steering.nf.  Every flag here is a first-class
+    // option of that command.  Keep the flag
     // values surface-level here so users can see what knobs they are
     // paying for in every run.
     plan_extra_args = [
@@ -884,8 +885,7 @@ workflow MAIN_PIPELINE {
         plan_extra_args,
         params.negsteer_postprocess_rmsd_threshold,
         params.negsteer_postprocess_metric_column,
-        params.negsteer_postprocess_contact_cutoff,
-        Channel.value(file("${projectDir}/bin/negative_steering_run_one.sh"))
+        params.negsteer_postprocess_contact_cutoff
     )
 
     // -- 4f-bis: Negative controls (Task 6 revision — v7) ------------
@@ -960,8 +960,7 @@ workflow MAIN_PIPELINE {
             params.negsteer_postprocess_rmsd_threshold,
             params.negsteer_postprocess_metric_column,
             params.negsteer_postprocess_contact_cutoff,
-            Channel.value(file("${projectDir}/bin/build_control_sequences.py")),
-            Channel.value(file("${projectDir}/bin/negative_steering_run_one.sh"))
+            Channel.value(file("${projectDir}/bin/build_control_sequences.py"))
         )
 
         // Mix steered + control workdirs into one channel feeding the
@@ -1336,8 +1335,7 @@ workflow NEGSTEER_ONLY {
         plan_extra_args,
         params.negsteer_postprocess_rmsd_threshold,
         params.negsteer_postprocess_metric_column,
-        params.negsteer_postprocess_contact_cutoff,
-        Channel.value(file("${projectDir}/bin/negative_steering_run_one.sh"))
+        params.negsteer_postprocess_contact_cutoff
     )
 
     // -- Controls ----------------------------------------------------
@@ -1388,8 +1386,7 @@ workflow NEGSTEER_ONLY {
             params.negsteer_postprocess_rmsd_threshold,
             params.negsteer_postprocess_metric_column,
             params.negsteer_postprocess_contact_cutoff,
-            Channel.value(file("${projectDir}/bin/build_control_sequences.py")),
-            Channel.value(file("${projectDir}/bin/negative_steering_run_one.sh"))
+            Channel.value(file("${projectDir}/bin/build_control_sequences.py"))
         )
 
         all_workdirs_ch = NEGSTEER_RUN_ONE.out.per_sequence_workdir
