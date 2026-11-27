@@ -16,8 +16,9 @@ Input CSV must contain a 'corrected_receptor' column with amino acid sequences.
 Adds a 'gblock_sequence' column with the full gBlock sequence ready to order.
 """
 
-import pandas as pd
 import sys
+
+import pandas as pd
 
 # E. coli K12 most likely codons (highest fraction per amino acid)
 # Source: Kazusa codon usage database via SMS2 rev_trans tool
@@ -77,7 +78,7 @@ def main():
     df = pd.read_csv(input_csv)
 
     if 'corrected_receptor' not in df.columns:
-        print(f"Error: 'corrected_receptor' column not found.")
+        print("Error: 'corrected_receptor' column not found.")
         print(f"Available columns: {list(df.columns)}")
         sys.exit(1)
 

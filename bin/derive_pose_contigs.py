@@ -10,8 +10,10 @@ Usage:
   python derive_contigs.py PDB CHAIN_A CHAIN_B CUTOFF [CUTOFF ...]
 """
 from __future__ import annotations
+
 import sys
 from pathlib import Path
+
 import numpy as np
 
 

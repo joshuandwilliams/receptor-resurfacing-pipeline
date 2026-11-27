@@ -114,7 +114,6 @@ if str(_SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPT_DIR))
 from extract_passing import extract_row as _extract_passing_row
 
-
 # ── Helpers ──────────────────────────────────────────────────────────
 
 def _rewrite_workdir_path_to_published(

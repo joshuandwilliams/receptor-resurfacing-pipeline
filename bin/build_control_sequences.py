@@ -77,7 +77,6 @@ import sys
 from pathlib import Path
 from typing import List
 
-
 # ── Sequence extraction (re-uses the project convention) ────────────
 
 # Sequence extraction: use the canonical helper directly.  The
@@ -85,8 +84,9 @@ from typing import List
 # to boltz2_negative_steering.get_chain_sequence; removed in the
 # Phase 4 free-function consolidation.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from boltz2_negative_steering import get_chain_sequence as _extract_chain_sequence  # noqa: E402,F401
-
+from boltz2_negative_steering import (
+    get_chain_sequence as _extract_chain_sequence,  # noqa: E402,F401
+)
 
 # ── Design-region parsing (matches derive_design_region.py output) ──
 

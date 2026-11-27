@@ -43,7 +43,6 @@ import tempfile
 from pathlib import Path
 from typing import List, Optional, Tuple
 
-
 # ── Binary discovery ─────────────────────────────────────────────────────
 # Rosetta ships several build flavours; try each in priority order.
 # mpi first because it's the most common in HPC singularity images;

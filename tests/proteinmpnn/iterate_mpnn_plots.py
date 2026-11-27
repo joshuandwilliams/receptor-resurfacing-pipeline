@@ -56,14 +56,13 @@ import csv
 from collections import defaultdict
 from pathlib import Path
 
+import matplotlib
 import numpy as np
 
-import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 from matplotlib.ticker import MaxNLocator
-
 
 AA_ORDER = "ACDEFGHIKLMNPQRSTVWY"
 

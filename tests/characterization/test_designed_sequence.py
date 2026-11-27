@@ -10,9 +10,9 @@ import pytest
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_REPO_ROOT / "bin"))
 
-import designed_sequence as ds  # noqa: E402
-import designed_backbone as db  # noqa: E402
 import contig_spec as cs  # noqa: E402
+import designed_backbone as db  # noqa: E402
+import designed_sequence as ds  # noqa: E402
 import protein_structure_prediction as psp  # noqa: E402
 
 

@@ -73,15 +73,14 @@ import csv
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
+import matplotlib
 import numpy as np
 
-import matplotlib
 matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
 import matplotlib.lines as mlines
+import matplotlib.patches as mpatches
+import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
-
 
 # ── Threshold defaults ───────────────────────────────────────────────────
 # Sourced from PipelineInternalThresholds (Phase 4 §2.13).  Falls back to

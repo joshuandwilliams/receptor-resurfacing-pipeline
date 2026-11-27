@@ -90,14 +90,13 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
+import matplotlib
 import numpy as np
 
-import matplotlib
 matplotlib.use("Agg")
-import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
+import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
-
 
 # ── Styling (mirrors cohort script for consistency) ─────────────────────
 COLOUR_TIER = {

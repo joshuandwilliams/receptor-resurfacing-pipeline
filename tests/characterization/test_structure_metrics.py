@@ -13,7 +13,6 @@ sys.path.insert(0, str(_REPO_ROOT / "bin"))
 
 import structure_metrics as sm  # noqa: E402
 
-
 # ── Minimal PDB helpers ─────────────────────────────────────────────
 
 

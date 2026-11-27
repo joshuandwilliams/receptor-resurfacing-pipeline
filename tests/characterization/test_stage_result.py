@@ -18,8 +18,8 @@ import pytest
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_REPO_ROOT / "bin"))
 
-import stage_result as sr  # noqa: E402
 import pipeline_thresholds as pt  # noqa: E402
+import stage_result as sr  # noqa: E402
 from position_set import PositionSet  # noqa: E402
 
 

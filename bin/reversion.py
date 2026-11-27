@@ -74,7 +74,6 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
 
-
 # ───────────────────────────────────────────────────────────────────────
 # Reverted-confidence forwarding — single source of truth
 # ───────────────────────────────────────────────────────────────────────

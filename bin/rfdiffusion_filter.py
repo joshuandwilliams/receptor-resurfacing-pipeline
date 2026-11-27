@@ -44,9 +44,10 @@ _BIN_DIR = os.path.dirname(os.path.abspath(__file__))
 if _BIN_DIR not in sys.path:
     sys.path.insert(0, _BIN_DIR)
 import structure_metrics  # noqa: E402
-
 from contig_utils import (
-    resolve_contigs, get_expected_chain_lengths, parse_design_region,
+    get_expected_chain_lengths,
+    parse_design_region,
+    resolve_contigs,
 )
 
 

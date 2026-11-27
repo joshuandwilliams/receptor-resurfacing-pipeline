@@ -171,9 +171,9 @@ def compute_metrics(pdb_path: Path, chain_a: str, chain_b: str) -> Dict:
     # Recompute SASA after detaching each chain in turn to get free SASA
     # We use temporary structures to avoid mutating the model in place.
     def _chain_only_sasa(target_chain) -> float:
-        from Bio.PDB.Structure import Structure
-        from Bio.PDB.Model import Model
         from Bio.PDB.Chain import Chain
+        from Bio.PDB.Model import Model
+        from Bio.PDB.Structure import Structure
         s = Structure(target_chain.id + "_iso")
         m = Model(0)
         s.add(m)

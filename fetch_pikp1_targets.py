@@ -4,9 +4,10 @@ Fetch Pikp1 target effector structures from RCSB PDB.
 Extracts effector chains and saves as individual PDB files.
 """
 
-import requests
 import sys
 from pathlib import Path
+
+import requests
 
 # Target definitions: (allele_name, pdb_id, chain_id, description)
 TARGETS = [
@@ -60,7 +61,7 @@ def main():
     output_dir = Path(sys.argv[1])
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    print(f"\nFetching Pikp1 target effector structures...")
+    print("\nFetching Pikp1 target effector structures...")
     print(f"Output directory: {output_dir}\n")
 
     success_count = 0

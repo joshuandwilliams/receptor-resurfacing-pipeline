@@ -18,7 +18,6 @@ sys.path.insert(0, str(_REPO_ROOT / "bin"))
 
 import validate_params as vp  # noqa: E402
 
-
 # ── Per-validator kind ──────────────────────────────────────────────
 
 

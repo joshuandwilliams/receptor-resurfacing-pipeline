@@ -44,7 +44,6 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Optional
 
-
 AF3_COLS = [
     "af3_nomsa_best_ra_eff", "af3_nomsa_mean_ra_eff",
     "af3_nomsa_best_iptm", "af3_nomsa_mean_iptm",
