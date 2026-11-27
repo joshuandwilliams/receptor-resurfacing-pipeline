@@ -283,7 +283,7 @@ def _build_design_labels(sorted_designs, global_design_residues):
         lbl = _design_label(d)
         prl = _get_per_region_lengths(d)
         if prl:
-            len_str = "+".join(str(l) for l in prl)
+            len_str = "+".join(str(n) for n in prl)
         else:
             len_str = str(len(_get_per_design_residues(d, global_design_residues)))
         labels.append(f"d{lbl} ({len_str})")
@@ -497,7 +497,7 @@ def _draw_clustering_heatmap_content(ax_heat, ax_dendro, rd, n_regions, r_idx,
         ax_heat.set_yticks([])
 
     ax_heat.set_xticks(range(n))
-    rotate = n > 8 or max((len(l) for l in col_labels), default=0) > 8
+    rotate = n > 8 or max((len(lab) for lab in col_labels), default=0) > 8
     ax_heat.set_xticklabels(col_labels,
                             rotation=45 if rotate else 0,
                             ha="right" if rotate else "center",
@@ -881,7 +881,6 @@ def plot_design_lengths(designs, global_design_residues, fixed_residues, out_pat
     # Each panel is centered horizontally within the figure (not
     # left-anchored), so a one-bar panel sits in the middle rather
     # than at the left with a runaway xlabel.
-    bottom_margin_in = 0.5
     top_margin_in = 0.3
     # Reserve a minimum panel width so the xlabel "Design-region length
     # (residues)" — about 2.6 inches wide — has room to fit.

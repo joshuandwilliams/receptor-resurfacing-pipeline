@@ -22,7 +22,8 @@ import protein_structure_prediction as psp  # noqa: E402
 
 
 def _fake_psp(tmp_path):
-    p = tmp_path / "f.pdb"; p.write_text("")
+    p = tmp_path / "f.pdb"
+    p.write_text("")
     return psp.ProteinStructurePrediction(
         path=p, receptor_chain="A", effector_chain="B")
 

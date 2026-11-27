@@ -162,7 +162,8 @@ def _diff_lists(ref: list, act: list, path: str, abs_tol: float, rel_tol: float,
     if list_orders_significant:
         ref_iter, act_iter = ref, act
     else:
-        key = lambda x: json.dumps(x, sort_keys=True, default=str)
+        def key(x):
+            return json.dumps(x, sort_keys=True, default=str)
         ref_iter = sorted(ref, key=key)
         act_iter = sorted(act, key=key)
     out: list[str] = []

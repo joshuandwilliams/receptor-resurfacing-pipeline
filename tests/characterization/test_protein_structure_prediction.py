@@ -29,26 +29,30 @@ class TestConstruction:
             )
 
     def test_empty_receptor_chain_raises(self, tmp_path):
-        p = tmp_path / "f.pdb"; p.write_text("")
+        p = tmp_path / "f.pdb"
+        p.write_text("")
         with pytest.raises(ValueError, match="receptor_chain"):
             psp.ProteinStructurePrediction(
                 path=p, receptor_chain="", effector_chain="B")
 
     def test_same_chain_raises(self, tmp_path):
-        p = tmp_path / "f.pdb"; p.write_text("")
+        p = tmp_path / "f.pdb"
+        p.write_text("")
         with pytest.raises(ValueError, match="cannot both be"):
             psp.ProteinStructurePrediction(
                 path=p, receptor_chain="A", effector_chain="A")
 
     def test_invalid_predictor_raises(self, tmp_path):
-        p = tmp_path / "f.pdb"; p.write_text("")
+        p = tmp_path / "f.pdb"
+        p.write_text("")
         with pytest.raises(ValueError, match="predictor"):
             psp.ProteinStructurePrediction(
                 path=p, receptor_chain="A", effector_chain="B",
                 predictor="rosettafold")
 
     def test_basic_construction(self, tmp_path):
-        p = tmp_path / "f.pdb"; p.write_text("")
+        p = tmp_path / "f.pdb"
+        p.write_text("")
         x = psp.ProteinStructurePrediction(
             path=p, receptor_chain="A", effector_chain="B")
         assert x.receptor_chain == "A"

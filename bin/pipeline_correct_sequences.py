@@ -424,7 +424,6 @@ def generate_fixed_positions(args):
     """
     segments = parse_contig_segments(args.contigs, args.receptor_chain)
     effector_len = len(args.effector_seq)
-    receptor_len = len(args.receptor_seq)
 
     print(f"Contig segments: {segments}")
     print(f"Expected chain layout: effector ({effector_len}) + receptor (variable)")

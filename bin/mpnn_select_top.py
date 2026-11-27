@@ -50,7 +50,8 @@ def main():
     if selected:
         with open(meta_path, "w", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=selected[0].keys())
-            writer.writeheader(); writer.writerows(selected)
+            writer.writeheader()
+            writer.writerows(selected)
     else:
         with open(meta_path, "w") as f:
             f.write("design,seq,mpnn_score\n")

@@ -762,11 +762,11 @@ def cmd_iterate_plan(args: argparse.Namespace) -> int:
     if eff_override_path:
         try:
             lines = [
-                l.strip()
-                for l in Path(eff_override_path).read_text().splitlines()
-                if l.strip()
+                line.strip()
+                for line in Path(eff_override_path).read_text().splitlines()
+                if line.strip()
             ]
-            eff_seq = "".join(l for l in lines if not l.startswith(">"))
+            eff_seq = "".join(line for line in lines if not line.startswith(">"))
             print(f"  effector seq: OVERRIDE from {eff_override_path} "
                   f"({len(eff_seq)} residues)")
         except Exception as e:
@@ -1772,8 +1772,8 @@ def cmd_iterate_collect_finalize(args: argparse.Namespace) -> int:
                 try:
                     reverted_seq = reverted_fasta.read_text().splitlines()
                     reverted_seq = "".join(
-                        l.strip() for l in reverted_seq
-                        if l.strip() and not l.startswith(">")
+                        line.strip() for line in reverted_seq
+                        if line.strip() and not line.startswith(">")
                     )
                     (design_workdir / "receptor.fasta").write_text(
                         f">receptor_reverted\n{reverted_seq}\n"
@@ -2352,8 +2352,8 @@ def cmd_kickoff_finalize(args: argparse.Namespace) -> int:
                 try:
                     seq_lines = reverted_fasta.read_text().splitlines()
                     reverted_seq = "".join(
-                        l.strip() for l in seq_lines
-                        if l.strip() and not l.startswith(">")
+                        line.strip() for line in seq_lines
+                        if line.strip() and not line.startswith(">")
                     )
                     (design_workdir / "receptor.fasta").write_text(
                         f">receptor_reverted\n{reverted_seq}\n"
