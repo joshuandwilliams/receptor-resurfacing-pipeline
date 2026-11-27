@@ -13,6 +13,17 @@ format:
 jupyter: receptor-analysis
 ---
 
+::: {.callout-important title="NOT the thesis Chapter 5 campaign"}
+This analysis is the **`crystal_full_contig_d26_seqvar`** run: sequence
+variation on the single backbone `design_26`. It is a **different run** from
+the main AVR-PikF campaign written up in thesis Chapter 5.
+
+Every row here is 84 aa with a 19-residue design region 1 and a 280 bp gBlock,
+because this run held the backbone fixed. The thesis ten designs (`d39_s0`,
+`d26_s1`, `d18_s0` and so on) come from nine backbones with design region 1
+lengths of 10 to 19, and are **not** in this directory. See `README.md`.
+:::
+
 Selecting sequences to order as gBlocks.
 
 Source table is `results/orthogonal_metrics/survivors_with_orthogonal_metrics_gblocks.csv`,

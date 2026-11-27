@@ -14,7 +14,10 @@
 # Excludes:
 #   - .git/, Python/IDE caches, macOS metadata, Word lockfiles
 #   - run artefacts in tests/*/ and experiments/campaigns/*/runs/*/
-#     (work/, tmp/, results/, .nextflow*, receptor_resurfacing_results/)
+#     (work/, tmp/, results*/, .nextflow*, receptor_resurfacing_results/).
+#     Note the campaign-run pattern is results*/ , not results/ : arms of a
+#     paired experiment publish to sibling dirs like results_constrained/,
+#     and a bare results/ exclude would leave those exposed to --delete.
 #   - slurm log files in tests/*/ and experiments/campaigns/*/runs/*/
 #   - tests/curation_staging/ -- temporary tarball staging area used
 #     during fixture curation; safe to recreate locally without syncing
@@ -73,7 +76,7 @@ rsync -av --delete $DRY_RUN -e ssh \
     --exclude='tests/full_test_run/work/' \
     --exclude='tests/full_test_run/tmp/' \
     --exclude='tests/full_test_run/.nextflow*' \
-    --exclude='experiments/campaigns/*/runs/*/results/' \
+    --exclude='experiments/campaigns/*/runs/*/results*/' \
     --exclude='experiments/campaigns/*/runs/*/work/' \
     --exclude='experiments/campaigns/*/runs/*/tmp/' \
     --exclude='experiments/campaigns/*/runs/*/.nextflow*' \

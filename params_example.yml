@@ -234,6 +234,37 @@ negsteer_contact_cutoff: 4.5                # Heavy-atom contact cutoff (A) used
 # fallback if kernel dispatch misbehaves on a new GPU/driver combination.
 negsteer_no_kernels: false
 
+# Benchmark-style Boltz-2 constraints: adds the same pocket (<=8A) + dense
+# contact (<=10A, up to 50 pairs) restraints structure-prediction-benchmarking's
+# BOLTZ2_CONSTRAINED process uses, derived once from the ground-truth complex, to
+# EVERY Boltz-2 call in the run (initial, cold-start extra seeds, every steered
+# design, reversion validation). Off by default; worth trying on a real campaign
+# since it took several otherwise-unsolved structure-negative-steering benchmark
+# targets to a correct pose (see that repo's model_choice_comparison.qmd).
+negsteer_boltz_constraints: false
+
+# Re-run ONLY the negative-steering stage against a previous run's published
+# results, skipping RFDiffusion / Rosetta / MPNN. Set to that run's results/
+# directory. Leave unset (null) for a normal full run.
+#
+# Prefer `-resume` when the previous run's work/ directory still exists — it is
+# cheaper and reuses the real Nextflow cache. Use this only once work/ has been
+# cleaned but results/ survives. --outdir must differ from this path.
+#
+#   nextflow run main.nf -params-file params.yml \
+#       --negsteer_rehydrate_from /path/to/old/results \
+#       --outdir /path/to/new/results \
+#       --negsteer_boltz_constraints true
+#
+# negsteer_rehydrate_from: null
+#
+# Where NEGSTEER_ONLY looks for the raw RFDiffusion design_*.pdb ground-truth
+# structures.  Defaults to <negsteer_rehydrate_from>/rfdiffusion.  Set this when
+# rehydrating from a resample_mpnn.nf results tree, which has no rfdiffusion/ dir
+# of its own — point it at that run's source_run_dir/rfdiffusion.
+#
+# negsteer_rehydrate_design_pdb_dir: null
+
 # Post-processing thresholds (forwarded to compute-final-metrics)
 negsteer_postprocess_rmsd_threshold: 5.0    # Rows with steered_ra_eff_vs_truth >= this
                                             # threshold do NOT get confidence metrics populated

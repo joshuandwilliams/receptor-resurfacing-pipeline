@@ -81,8 +81,15 @@ LANE0, LANE_PITCH, N_LANES = 303.1, 57.57, 12
 LANE_X0, LANE_X1 = 278, 1000
 
 # Ladder band rows, detected from the coloured marker strip of blot.jpg.
-LADDER_Y = {180: 369, 130: 396, 100: 448, 70: 491, 55: 554,
-            40: 619, 35: 683, 25: 735, 15: 824, 10: 885}
+# Thermo PageRuler Prestained Protein Ladder (26616). The group's methods
+# specify PageRuler Prestained, and ten bands rule out Plus (26619) at nine.
+# The gel is Merck mPAGE 4-20% Bis-Tris run in MOPS, so the apparent masses are
+# the Bis-Tris ones from the product migration chart, not the Tris-glycine
+# values of 180, 130, 100, 70, 55, 40, 35, 25, 15, 10 that most figures print.
+# RuBisCO large subunit fixes the scale, reading 54.2 kDa here against its true
+# 52.9, where the Tris-glycine chart would put it at 62.0.
+LADDER_Y = {140: 369, 115: 396, 80: 448, 65: 491, 50: 554,
+            40: 619, 30: 683, 25: 735, 15: 824, 10: 885}
 
 # The two originals are framed differently. make_blot_figure.py butts
 # blot.jpg[195:1000] against ponceau.png[276:1084], so that pair fixes the
@@ -97,15 +104,15 @@ PONCEAU_Y0, PONCEAU_Y1 = 850, 965
 # Ponceau.jpeg in the run tree and data/ponceau.png are the same photograph
 # (mean pixel difference 0.05), so these are read off data/ponceau.png. Same
 # PageRuler standard as the blot, detected by hue in the ladder strip at
-# x 295-365: red 70 kDa at 870, with 100 at 830, 55 at 937, 40 at 1002,
-# 35 at 1070 and 15 at 1222. The loading band row sits at about 927, so the
-# blue 55 bar lies immediately beside it and the red 70 bar is the next one up.
+# x 295-365: red 65 kDa at 870, with 80 at 830, 50 at 937, 40 at 1002,
+# 30 at 1070 and 15 at 1222. The loading band row sits at about 927, so the
+# blue 50 bar lies immediately beside it and the red 65 bar is the next one up.
 # Those are the two marks used. 40 at 1002 was tried first and sits well below
 # the bands, far enough to read as unrelated to them.
-PONCEAU_LADDER_Y = {100: 830, 70: 870, 55: 937, 40: 1002, 35: 1070, 15: 1222}
-PONCEAU_MARKS = [70, 55]
+PONCEAU_LADDER_Y = {80: 830, 65: 870, 50: 937, 40: 1002, 30: 1070, 15: 1222}
+PONCEAU_MARKS = [65, 50]
 
-RECEPTOR_CROP = (352, 412)           # spans the 180 and 130 marks
+RECEPTOR_CROP = (352, 412)           # spans the 140 and 115 marks
 # Centred on the control band, whose visible mass sits near row 815, with the
 # 15 kDa mark at 824 falling just below centre. Extended up to row 722 so the
 # 25 kDa mark at 735 is inside the crop as well: one tick alone gives the strip
@@ -293,7 +300,7 @@ def option1_two_strips(img, outdir):
     fig, axes = stack_axes(8.4, [crop_height(RECEPTOR_CROP),
                                  crop_height(EFFECTOR_CROP),
                                  ponceau_panel_height()])
-    draw_strip(axes[0], img, *RECEPTOR_CROP, marks=[180, 130],
+    draw_strip(axes[0], img, *RECEPTOR_CROP, marks=[140, 115],
                label=ANTIBODY, sublabel=DETECTS, grey=True)
     draw_strip(axes[1], img, *EFFECTOR_CROP, marks=[25, 15],
                label=ANTIBODY, sublabel="(control lanes)", grey=True)
@@ -317,7 +324,7 @@ def option2_construct_table(img, outdir):
     # Extra head room for the construct table above the lane names.
     fig, axes = stack_axes(8.4, [crop_height(RECEPTOR_CROP),
                                  ponceau_panel_height()], pad_top=1.55)
-    draw_strip(axes[0], img, *RECEPTOR_CROP, marks=[180, 130],
+    draw_strip(axes[0], img, *RECEPTOR_CROP, marks=[140, 115],
                label=ANTIBODY, sublabel=DETECTS, grey=True)
     axes[1].imshow(ponceau(img), aspect="equal", interpolation="lanczos")
     axes[1].set_xticks([]); axes[1].set_yticks([])
@@ -344,7 +351,7 @@ def option3_receptor_only(img, outdir):
     """The most compact reading: only the band that carries the result."""
     fig, axes = stack_axes(8.4, [crop_height(RECEPTOR_CROP),
                                  ponceau_panel_height()])
-    draw_strip(axes[0], img, *RECEPTOR_CROP, marks=[180, 130],
+    draw_strip(axes[0], img, *RECEPTOR_CROP, marks=[140, 115],
                label=ANTIBODY, sublabel=DETECTS, grey=True)
     axes[1].imshow(ponceau(img), aspect="equal", interpolation="lanczos")
     axes[1].set_xticks([]); axes[1].set_yticks([])
@@ -371,7 +378,7 @@ def option4_full_relabelled(img, outdir):
     fig, axes = stack_axes(8.4, [crop_height(FULL_CROP),
                                  ponceau_panel_height()], gap=0.03)
     draw_strip(axes[0], img, *FULL_CROP,
-               marks=[180, 130, 100, 70, 55, 40, 35, 25, 15, 10],
+               marks=[140, 115, 80, 65, 50, 40, 30, 25, 15, 10],
                label=ANTIBODY, sublabel=DETECTS, grey=True)
     axes[1].imshow(ponceau(img), aspect="equal", interpolation="lanczos")
     axes[1].set_xticks([]); axes[1].set_yticks([])

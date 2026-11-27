@@ -173,6 +173,19 @@ params.negsteer_no_kernels           = false      // Pass --no-kernels to boltz.
                                                   // CUDA triangle-attention kernels for ~20-30%
                                                   // faster inference vs pure PyTorch.  Set true
                                                   // as a fast debugging fallback.
+params.negsteer_boltz_constraints    = false      // Pass --boltz-constraints to plan: adds the
+                                                  // same pocket (<=8A) + dense contact (<=10A,
+                                                  // up to 50 pairs) restraints structure-
+                                                  // prediction-benchmarking's BOLTZ2_CONSTRAINED
+                                                  // uses, derived once from the ground-truth
+                                                  // complex, to EVERY Boltz-2 call in the run
+                                                  // (initial, cold-start extra seeds, every
+                                                  // steered design, reversion validation).
+                                                  // Off by default; on structure-negative-
+                                                  // steering's benchmark it took several
+                                                  // otherwise-unsolved targets to a correct
+                                                  // pose (see that repo's model_choice_
+                                                  // comparison.qmd), so worth trying here.
 
 // ── Post-processing gate ───────────────────────────────────────────────
 // Forwarded to compute-final-metrics.  Rows with
@@ -189,6 +202,22 @@ params.negsteer_postprocess_contact_cutoff = 5.0
 // steering inner loop as a real MPNN sequence.  See
 // modules/negsteer_controls.nf for what each control does and
 // bin/build_control_sequences.py for the construction logic.
+params.negsteer_only_skip_orthogonal = false  // NEGSTEER_ONLY: skip the Step 5
+                                              // orthogonal-metrics chain (AF3 +
+                                              // Rosetta + biophysical). Ignored by
+                                              // MAIN_PIPELINE.
+params.negsteer_rehydrate_from       = null   // Published results/ dir of a previous
+                                              // run. When set, the entry workflow
+                                              // dispatches to NEGSTEER_ONLY instead of
+                                              // MAIN_PIPELINE. See that workflow.
+params.negsteer_rehydrate_design_pdb_dir = null  // NEGSTEER_ONLY: directory holding the
+                                              // raw RFDiffusion design_*.pdb files used
+                                              // as negsteer's ground truth. Defaults to
+                                              // <negsteer_rehydrate_from>/rfdiffusion.
+                                              // Set explicitly when rehydrating from a
+                                              // resample_mpnn.nf run, whose results tree
+                                              // has no rfdiffusion/ dir of its own — point
+                                              // it at that run's source_run_dir/rfdiffusion.
 params.run_negative_controls         = true   // Default ON for production;
                                               // tests flip to false to keep
                                               // wall-clock low.
@@ -306,14 +335,22 @@ params.max_boltz2_parallel = 5
 // Input validation
 // ---------------------------------------------------------------------------
 
-if (!params.pdb_file && !params.receptor_input) {
-    error "Provide either --pdb_file (complex) or --receptor_input + --effector_input"
-}
-if (params.receptor_input && !params.effector_input) {
-    error "If --receptor_input is provided, --effector_input is also required"
-}
-if (!params.contigs) {
-    error "Please provide --contigs (RFDiffusion contig string)"
+// These describe MAIN_PIPELINE's docking/design inputs.  NEGSTEER_ONLY reads
+// none of them — it rehydrates from a published results tree — so gate them on
+// the dispatcher's condition.  Left ungated, a NEGSTEER_ONLY params file has to
+// carry a pdb_file and a contigs string it never uses, and omitting either
+// fails with a misleading "provide --pdb_file" instead of reaching the
+// rehydration checks that would actually say what is wrong.
+if (!params.negsteer_rehydrate_from) {
+    if (!params.pdb_file && !params.receptor_input) {
+        error "Provide either --pdb_file (complex) or --receptor_input + --effector_input"
+    }
+    if (params.receptor_input && !params.effector_input) {
+        error "If --receptor_input is provided, --effector_input is also required"
+    }
+    if (!params.contigs) {
+        error "Please provide --contigs (RFDiffusion contig string)"
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -372,7 +409,18 @@ include { ORTHOG_PLOTS                          } from './modules/negsteer_ortho
 // Workflow
 // ---------------------------------------------------------------------------
 
+// The entry workflow is a dispatcher. Nextflow's strict syntax (default from
+// v25.10) rejects `-entry`, so selecting an alternative pipeline is done with a
+// param instead: setting --negsteer_rehydrate_from routes to NEGSTEER_ONLY.
 workflow {
+    if (params.negsteer_rehydrate_from) {
+        NEGSTEER_ONLY()
+    } else {
+        MAIN_PIPELINE()
+    }
+}
+
+workflow MAIN_PIPELINE {
 
     // ── Parameter validation ─────────────────────────────────────────────
     // Fail fast before any compute is dispatched.  bin/validate_params.py
@@ -813,6 +861,7 @@ workflow {
         "--rmsd-threshold ${params.negsteer_rmsd_threshold}",
         "--contact-cutoff ${params.negsteer_contact_cutoff}",
         params.negsteer_no_kernels ? "--no-kernels" : "",
+        params.negsteer_boltz_constraints ? "--boltz-constraints" : "",
     ].findAll { it }.join(" ")
 
     if (params.negsteer_n_cycles != 1) {
@@ -867,6 +916,7 @@ workflow {
             "--rmsd-threshold ${params.negsteer_rmsd_threshold}",
             "--contact-cutoff ${params.negsteer_contact_cutoff}",
             params.negsteer_no_kernels ? "--no-kernels" : "",
+            params.negsteer_boltz_constraints ? "--boltz-constraints" : "",
         ].findAll { it }.join(" ")
 
         // Derive the input-structure design region + true interface once.
@@ -1118,6 +1168,342 @@ workflow {
     //   ${params.outdir}/orthogonal_metrics/{af3_nomsa,biophysical,rosetta}/<seq_name>/
 
     } // end if (!params.stop_after_rosetta)
+}
+
+// ---------------------------------------------------------------------------
+// Entry: NEGSTEER_ONLY — re-run the negative-steering stage against an
+// existing run's published results, without repeating RFDiffusion, Rosetta
+// or MPNN.
+// ---------------------------------------------------------------------------
+//
+// Why this exists
+// ---------------
+// `-resume` is the better tool when the original `work/` directory still
+// exists: flipping a negsteer param invalidates exactly NEGSTEER_RUN_ONE and
+// downstream, and everything upstream comes back from cache. This entry is for
+// when `work/` has been cleaned (see scripts/clean_finished_run.sh) but
+// `results/` survives, which is the normal state of a finished campaign.
+//
+// It REHYDRATES the negsteer input channels from a published results tree
+// instead of deriving them, then runs the same processes the main workflow
+// does. Rehydration is deliberately limited to this one boundary rather than
+// generalised into a from_stage/to_stage scheme, because each boundary needs
+// its own bespoke input resolution and only this one is currently needed.
+//
+// Usage
+// -----
+//   nextflow run main.nf -params-file params.yml \
+//       --negsteer_rehydrate_from /path/to/old/run/results \
+//       --outdir /path/to/new/run/results \
+//       --negsteer_boltz_constraints true
+//
+// `--outdir` MUST differ from the source run's results directory, or the new
+// per-sequence workdirs will overwrite the old ones and the comparison you
+// were trying to make is gone. This is checked below.
+//
+// Scope: the negsteer stage, controls, cross-sequence aggregation, the two plot
+// processes, and the Step 5 orthogonal-metrics chain (AF3-no-MSA, biophysical,
+// Rosetta on survivors, merged + plotted). Step 5 is the expensive half — set
+// --negsteer_only_skip_orthogonal true for a pose-and-confidence-only pass.
+// Upstream stages (preprocessing, RFDiffusion, Rosetta filtering, MPNN) are
+// never re-run; their outputs are read from --negsteer_rehydrate_from.
+//
+// Rehydrating from a resample_mpnn.nf run
+// ---------------------------------------
+// That workflow's results tree has no rfdiffusion/ dir — it reads its single
+// design PDB from its own source_run_dir.  Point --negsteer_rehydrate_design_pdb_dir
+// at that source run's rfdiffusion/ so the ground truth is byte-identical:
+//
+//   nextflow run main.nf -params-file resample_params.yml \
+//       --negsteer_rehydrate_from /path/to/resample/results \
+//       --negsteer_rehydrate_design_pdb_dir /path/to/source/results/rfdiffusion \
+//       --outdir /path/to/resample/results_constrained \
+//       --negsteer_boltz_constraints true
+//
+// Inputs consumed from --negsteer_rehydrate_from:
+//   rfdiffusion/design_*.pdb                       (the same PDBs the main
+//                                                   workflow joins on, i.e.
+//                                                   RFDIFFUSION.out.design_pdbs;
+//                                                   overridable via
+//                                                   --negsteer_rehydrate_design_pdb_dir)
+//   sequences/{top_fastas,qc_fastas}/*.fasta       (top_ preferred when present,
+//                                                   mirroring mpnn_top_n)
+//   negative_steering/indices/design_*_{design_region,true_interface}.txt
+//   negative_steering/controls_inputs/             (input PDB + its 2 index
+//                                                   files, for the controls)
+//   sequences/scored_metadata.csv                  (for cross-sequence aggregation)
+
+
+workflow NEGSTEER_ONLY {
+
+    // -- Validate ----------------------------------------------------
+    if (!params.negsteer_rehydrate_from) {
+        error "NEGSTEER_ONLY requires --negsteer_rehydrate_from <previous results dir>"
+    }
+    def src = file(params.negsteer_rehydrate_from)
+    if (!src.exists()) {
+        error "negsteer_rehydrate_from does not exist: ${src}"
+    }
+    if (file(params.outdir).toAbsolutePath() == src.toAbsolutePath()) {
+        error "--outdir must differ from --negsteer_rehydrate_from, otherwise " +
+              "this run overwrites the results it is meant to be compared against."
+    }
+
+    // -- Rehydrate (a): FASTA stream [design_stem, seq_name, fasta] --
+    // Prefer top_fastas over qc_fastas so a source run that used
+    // mpnn_top_n is reproduced on the same sequence set.
+    def top_dir = src.resolve("sequences/top_fastas")
+    def qc_dir  = src.resolve("sequences/qc_fastas")
+    def fasta_dir = top_dir.exists() ? top_dir : qc_dir
+    if (!fasta_dir.exists()) {
+        error "No sequences/{top_fastas,qc_fastas}/ under ${src}"
+    }
+    log.info "NEGSTEER_ONLY: rehydrating sequences from ${fasta_dir}"
+
+    fasta_stream_ch = Channel.fromPath("${fasta_dir}/*.fasta")
+        .map { f ->
+            def stem = f.name.replaceAll(/\.fasta$/, '')
+            def m = stem =~ /^(design_\d+)_seq_\d+$/
+            [ m ? m[0][1] : null, stem, f ]
+        }
+        .filter { it[0] != null }
+
+    // -- Rehydrate (b): Design-PDB map [design_stem, pdb] ------------
+    // Top-level rfdiffusion/design_*.pdb, NOT split/ or passing/ — the
+    // main workflow joins on RFDIFFUSION.out.design_pdbs (main.nf step
+    // 4b), so this has to match or the ground truth differs.
+    //
+    // A resample_mpnn.nf results tree has no rfdiffusion/ of its own (that
+    // workflow reads the single design PDB from its source_run_dir), so the
+    // location is overridable.  Checked eagerly: without this, an empty glob
+    // makes the three-way join below produce zero tuples and the whole run
+    // "succeeds" having steered nothing.
+    def design_pdb_dir = params.negsteer_rehydrate_design_pdb_dir
+        ? file(params.negsteer_rehydrate_design_pdb_dir)
+        : src.resolve("rfdiffusion")
+    def design_pdbs = file("${design_pdb_dir}/design_*.pdb")
+    if (!design_pdbs) {
+        error "No design_*.pdb under ${design_pdb_dir}.  These are negsteer's " +
+              "ground-truth structures.  If ${src} came from resample_mpnn.nf, " +
+              "set --negsteer_rehydrate_design_pdb_dir to that run's " +
+              "source_run_dir/rfdiffusion."
+    }
+    log.info "NEGSTEER_ONLY: rehydrating ${design_pdbs.size()} design PDB(s) from ${design_pdb_dir}"
+
+    design_pdb_map_ch = Channel.fromPath("${design_pdb_dir}/design_*.pdb")
+        .map { pdb -> [pdb.baseName, pdb] }
+
+    // -- Rehydrate (c): Indices map [stem, region, true_iface] -------
+    // Pair the two index files per design by their shared stem rather
+    // than globbing them into one channel, so a design missing either
+    // file drops out instead of silently mispairing.
+    region_ch = Channel.fromPath("${src}/negative_steering/indices/design_*_design_region.txt")
+        .map { f -> [f.name.replaceAll(/_design_region\.txt$/, ''), f] }
+    iface_ch = Channel.fromPath("${src}/negative_steering/indices/design_*_true_interface.txt")
+        .map { f -> [f.name.replaceAll(/_true_interface\.txt$/, ''), f] }
+    indices_map_ch = region_ch.join(iface_ch)
+
+    // -- Same three-way join the main workflow does (step 4d) --------
+    run_one_input_ch = fasta_stream_ch
+        .combine(design_pdb_map_ch, by: 0)
+        .combine(indices_map_ch,    by: 0)
+        .map { stem, seq_name, fasta, pdb, region, iface ->
+            tuple(seq_name, stem, fasta, pdb, region, iface)
+        }
+
+    // -- plan_extra_args: identical composition to the main workflow -
+    plan_extra_args = [
+        "--mode ${params.negsteer_mode}",
+        "--max-mutations ${params.negsteer_max_mutations}",
+        "--candidate-pool-size ${params.negsteer_candidate_pool_size}",
+        "--protected-set-source ${params.negsteer_protected_set_source}",
+        "--n-designs ${params.negsteer_n_designs}",
+        "--num-seeds ${params.negsteer_num_seeds}",
+        "--diffusion-samples ${params.negsteer_diffusion_samples}",
+        "--recycling-steps ${params.negsteer_recycling_steps}",
+        "--rmsd-threshold ${params.negsteer_rmsd_threshold}",
+        "--contact-cutoff ${params.negsteer_contact_cutoff}",
+        params.negsteer_no_kernels ? "--no-kernels" : "",
+        params.negsteer_boltz_constraints ? "--boltz-constraints" : "",
+    ].findAll { it }.join(" ")
+
+    log.info "NEGSTEER_ONLY: plan_extra_args = ${plan_extra_args}"
+
+    NEGSTEER_RUN_ONE(
+        run_one_input_ch,
+        params.rfdiff_output_receptor_chain,
+        params.rfdiff_output_effector_chain,
+        plan_extra_args,
+        params.negsteer_postprocess_rmsd_threshold,
+        params.negsteer_postprocess_metric_column,
+        params.negsteer_postprocess_contact_cutoff,
+        Channel.value(file("${projectDir}/bin/negative_steering_run_one.sh"))
+    )
+
+    // -- Controls ----------------------------------------------------
+    // DERIVE_INPUT_INDICES already ran in the source campaign and
+    // published its three artefacts, so rehydrate rather than re-derive.
+    controls_dir = src.resolve("negative_steering/controls_inputs")
+
+    if (params.run_negative_controls && controls_dir.exists()) {
+        input_region_ch = Channel.value(
+            file("${controls_dir}/input_design_region.txt"))
+        input_iface_ch = Channel.value(
+            file("${controls_dir}/input_true_interface.txt"))
+        // The input complex is the only PDB DERIVE_INPUT_INDICES re-emits
+        // into controls_inputs/, so glob rather than hardcode its name.
+        input_pdb_ch = Channel.fromPath("${controls_dir}/*.pdb").first()
+
+        controls_plan_extra_args = [
+            "--mode ${params.negsteer_mode}",
+            "--max-mutations ${params.negsteer_max_mutations}",
+            "--candidate-pool-size ${params.negsteer_candidate_pool_size}",
+            "--protected-set-source ${params.negsteer_protected_set_source}",
+            "--n-designs ${params.negsteer_controls_n_designs}",
+            "--num-seeds ${params.negsteer_num_seeds}",
+            "--diffusion-samples ${params.negsteer_diffusion_samples}",
+            "--recycling-steps ${params.negsteer_recycling_steps}",
+            "--rmsd-threshold ${params.negsteer_rmsd_threshold}",
+            "--contact-cutoff ${params.negsteer_contact_cutoff}",
+            params.negsteer_no_kernels ? "--no-kernels" : "",
+            params.negsteer_boltz_constraints ? "--boltz-constraints" : "",
+        ].findAll { it }.join(" ")
+
+        controls_input_ch = Channel.of(
+                ["input_control_scrambled", "scrambled"],
+                ["input_control_polyA",     "polyA"]
+            )
+            .combine(input_pdb_ch)
+            .combine(input_region_ch)
+            .combine(input_iface_ch)
+            .map { name, type, pdb, region, iface ->
+                tuple(name, type, pdb, region, iface)
+            }
+
+        NEGSTEER_CONTROLS(
+            controls_input_ch,
+            params.receptor_chain,
+            params.effector_chain,
+            controls_plan_extra_args,
+            params.negsteer_postprocess_rmsd_threshold,
+            params.negsteer_postprocess_metric_column,
+            params.negsteer_postprocess_contact_cutoff,
+            Channel.value(file("${projectDir}/bin/build_control_sequences.py")),
+            Channel.value(file("${projectDir}/bin/negative_steering_run_one.sh"))
+        )
+
+        all_workdirs_ch = NEGSTEER_RUN_ONE.out.per_sequence_workdir
+            .mix(NEGSTEER_CONTROLS.out.per_control_workdir)
+    } else {
+        if (params.run_negative_controls) {
+            log.warn "NEGSTEER_ONLY: run_negative_controls is true but " +
+                     "${controls_dir} is absent — skipping controls."
+        }
+        all_workdirs_ch = NEGSTEER_RUN_ONE.out.per_sequence_workdir
+    }
+
+    // -- Cross-sequence aggregation + plots --------------------------
+    per_sequence_workdirs_ch = all_workdirs_ch.collect()
+
+    scored_metadata_ch = Channel.value(
+        file("${src}/sequences/scored_metadata.csv"))
+
+    NEGSTEER_CROSS_SEQUENCE(
+        per_sequence_workdirs_ch,
+        Channel.value(file("${projectDir}/bin")),
+        scored_metadata_ch
+    )
+
+    if (params.run_negative_controls && controls_dir.exists()) {
+        NEGSTEER_PLOTS(
+            NEGSTEER_CROSS_SEQUENCE.out.cross_summary,
+            per_sequence_workdirs_ch,
+            Channel.value(file("${controls_dir}/input_design_region.txt")),
+            Channel.value(file("${projectDir}/bin/negsteer_plots.py"))
+        )
+    }
+    NEGSTEER_WITHIN_SEQUENCE_PLOTS(
+        NEGSTEER_CROSS_SEQUENCE.out.cross_summary,
+        per_sequence_workdirs_ch,
+        Channel.value(file("${projectDir}/bin/negsteer_within_sequence_plots.py"))
+    )
+
+    // -- Step 5: orthogonal metrics ----------------------------------
+    // Identical topology to MAIN_PIPELINE's Step 5. It hangs off exactly
+    // the two channels built above (cross_summary + the collected
+    // per-sequence workdirs), so nothing further needs rehydrating.
+    //
+    // Gated because it is the expensive half: AF3, Rosetta FastRelax and
+    // the biophysical suite all fan out one task per survivor, on top of
+    // the negsteer GPU jobs. Set negsteer_only_skip_orthogonal to true
+    // for a fast pose-and-confidence-only pass.
+    if (!params.negsteer_only_skip_orthogonal) {
+
+        NEGSTEER_INTERFACE_METRICS(
+            NEGSTEER_CROSS_SEQUENCE.out.cross_summary,
+            per_sequence_workdirs_ch,
+            Channel.value(file("${projectDir}/bin/compute_interface_metrics.py"))
+        )
+        extended_csv_ch = NEGSTEER_INTERFACE_METRICS.out.extended_csv
+
+        EXTRACT_SURVIVOR_MANIFEST(
+            extended_csv_ch,
+            per_sequence_workdirs_ch,
+            Channel.value(file("${projectDir}/bin/extract_survivor_manifest.py"))
+        )
+
+        manifest_records_ch = EXTRACT_SURVIVOR_MANIFEST.out.manifest
+            .splitCsv(header: true)
+            .map { r ->
+                [ r.seq_name, r.canonical_pdb_abs, r.ground_truth_abs,
+                  r.effector_template_cif_abs, r.receptor_seq, r.effector_seq ]
+            }
+
+        AF3_SETUP_DB()
+        af3_input_ch = manifest_records_ch.map { rec ->
+            tuple(rec[0], rec[4], rec[5], file(rec[3]), file(rec[2]))
+        }
+        AF3_NOMSA_ON_SURVIVORS(
+            af3_input_ch,
+            AF3_SETUP_DB.out.db_dir,
+            AF3_SETUP_DB.out.ready_flag,
+        )
+        AF3_PARSE_OUTPUT(
+            AF3_NOMSA_ON_SURVIVORS.out.prediction,
+            Channel.value(file("${projectDir}/bin/parse_af3_output.py")),
+        )
+
+        biophysical_input_ch = manifest_records_ch.map { rec ->
+            tuple(rec[0], file(rec[1]), file(rec[2]))
+        }
+        NEGSTEER_BIOPHYSICAL_METRICS(
+            biophysical_input_ch,
+            Channel.value(file("${projectDir}/bin/run_biophysical_metrics.py"))
+        )
+
+        rosetta_input_ch = manifest_records_ch.map { rec ->
+            tuple(rec[0], file(rec[1]))
+        }
+        NEGSTEER_ROSETTA_METRICS(
+            rosetta_input_ch,
+            Channel.value(file("${projectDir}/bin/fastrelax_for_ia.xml")),
+            Channel.value(file("${projectDir}/bin/run_rosetta_metrics.py"))
+        )
+
+        NEGSTEER_ORTHOGONAL_METRICS(
+            extended_csv_ch,
+            AF3_PARSE_OUTPUT.out.summary_csv.collect().ifEmpty([]),
+            NEGSTEER_BIOPHYSICAL_METRICS.out.summary_csv.collect(),
+            NEGSTEER_ROSETTA_METRICS.out.summary_csv.collect(),
+            Channel.value(file("${projectDir}/bin/merge_orthogonal_metrics.py"))
+        )
+
+        ORTHOG_PLOTS(
+            NEGSTEER_ORTHOGONAL_METRICS.out.final_csv,
+            NEGSTEER_CROSS_SEQUENCE.out.cross_summary,
+            Channel.value(file("${projectDir}/bin/orthogonal_metrics_plots.py")),
+        )
+    }
 }
 
 // ---------------------------------------------------------------------------

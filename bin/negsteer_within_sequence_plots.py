@@ -399,14 +399,6 @@ def load_cohort_seeds(
             except (TypeError, ValueError):
                 seed_idx = 0
 
-            # Also capture per-stage values for trajectory plot.
-            cs_ra = _try_float(row.get("steered_ra_eff_vs_truth")) \
-                    if stage == "cold_start" else None
-            st_ra = _try_float(row.get("steered_ra_eff_vs_truth")) \
-                    if stage in ("steering", "reversion") else None
-            rev_ra = _try_float(row.get("reverted_ra_eff_vs_truth")) \
-                     if stage == "reversion" else None
-
             rec = {
                 "seed": seed_idx, "sg": sg,
                 "stage": stage, "outcome": outcome,
@@ -509,6 +501,7 @@ def plot_dispersion_overview(rep_seeds, tiers, out_path):
     plt.tight_layout()
     plt.savefig(out_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
+    return True
 
 
 # ── Plot 1b: per-seed dispersion grid ───────────────────────────────────
@@ -541,7 +534,12 @@ def plot_dispersion_grid(rep_seeds, all_seeds, tiers, composites, out_path):
             if s["ra_final"] is not None: all_ra.append(s["ra_final"])
             if s["tj_final"] is not None: all_tj.append(s["tj_final"])
     if not all_ra:
-        return
+        # No seed carries an ra_eff, so there is nothing to scale the axes to.
+        # Write the placeholder rather than no file at all: Nextflow publishes
+        # a fixed figure list, and a missing path fails the stage with nothing
+        # in the log to explain it.
+        _make_empty_plot("No per-seed RMSD data", out_path)
+        return False
     x_max = max(all_ra) * 1.05
     y_min = min(0.0, min(all_tj) - 0.05) if all_tj else 0.0
     y_max = max(1.0, max(all_tj) * 1.05) if all_tj else 1.0
@@ -632,6 +630,7 @@ def plot_dispersion_grid(rep_seeds, all_seeds, tiers, composites, out_path):
     plt.tight_layout(rect=(0.04, 0.10, 1.0, 0.97))
     plt.savefig(out_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
+    return True
 
 
 # ── Plot 2: per-design stage trajectories ───────────────────────────────
@@ -675,7 +674,12 @@ def plot_stage_trajectories(all_seeds, tiers, cold_baseline, out_path):
                 v = s.get(k)
                 if v is not None: all_ra.append(v)
     if not all_ra:
-        return
+        # No seed carries an ra_eff, so there is nothing to scale the axes to.
+        # Write the placeholder rather than no file at all: Nextflow publishes
+        # a fixed figure list, and a missing path fails the stage with nothing
+        # in the log to explain it.
+        _make_empty_plot("No per-seed RMSD data", out_path)
+        return False
     y_max = max(all_ra) * 1.05
 
     for i, ax in enumerate(axes_flat):
@@ -740,6 +744,7 @@ def plot_stage_trajectories(all_seeds, tiers, cold_baseline, out_path):
     plt.tight_layout(rect=(0.04, 0.04, 1.0, 0.96))
     plt.savefig(out_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
+    return True
 
 
 # ── Plot 3: weighted vs true jaccard ────────────────────────────────────
@@ -791,6 +796,7 @@ def plot_weighted_vs_true_jaccard(rep_seeds, tiers, out_path):
     plt.tight_layout()
     plt.savefig(out_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
+    return True
 
 
 # ── Plot 4: composite vs confidence metrics ─────────────────────────────
@@ -886,6 +892,7 @@ def plot_composite_vs_confidence(rep_seeds, composites, tiers, out_path):
     plt.tight_layout(rect=(0, 0, 1, 0.96))
     plt.savefig(out_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
+    return True
 
 
 
@@ -949,23 +956,23 @@ def main() -> int:
     plots = [
         ("Per-seed dispersion overview (single scatter)",
          "negsteer_per_seed_dispersion_overview.png",
-         lambda p: (plot_dispersion_overview(rep_seeds, tiers, p) or True)),
+         lambda p: (plot_dispersion_overview(rep_seeds, tiers, p))),
         ("Per-seed dispersion grid (panel per MPNN sequence)",
          "negsteer_per_seed_dispersion_grid.png",
          lambda p: (plot_dispersion_grid(
-             rep_seeds, all_seeds, tiers, composites, p) or True)),
+             rep_seeds, all_seeds, tiers, composites, p))),
         ("Per-design stage trajectories",
          "negsteer_per_design_stage_trajectories.png",
          lambda p: (plot_stage_trajectories(
-             all_seeds, tiers, cold_baseline, p) or True)),
+             all_seeds, tiers, cold_baseline, p))),
         ("Weighted vs True Jaccard",
          "negsteer_weighted_vs_true_jaccard.png",
          lambda p: (plot_weighted_vs_true_jaccard(
-             rep_seeds, tiers, p) or True)),
+             rep_seeds, tiers, p))),
         ("Composite vs confidence metrics (multi-panel)",
          "negsteer_composite_vs_confidence.png",
          lambda p: (plot_composite_vs_confidence(
-             rep_seeds, composites, tiers, p) or True)),
+             rep_seeds, composites, tiers, p))),
     ]
 
     for desc, fname, fn in plots:

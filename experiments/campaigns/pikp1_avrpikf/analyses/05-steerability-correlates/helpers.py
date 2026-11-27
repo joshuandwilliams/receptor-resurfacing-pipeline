@@ -14,8 +14,9 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import shap
-from lightgbm import LGBMClassifier, LGBMRegressor
+# shap and lightgbm are imported where they are used, not at module level, so
+# that the data-loading and feature helpers can be imported on a machine
+# without a working libomp. Only the SHAP model functions need them.
 from scipy.stats import pearsonr, pointbiserialr
 from sklearn.model_selection import GroupShuffleSplit, cross_val_score
 from IPython.display import display
@@ -242,6 +243,7 @@ def backbone_cv(model, X: pd.DataFrame, y: pd.Series,
 def fit_and_shap(model, X: pd.DataFrame, y: pd.Series,
                  background_frac: float = 0.4):
     """Fit model, return (explainer, shap_values) using interventional SHAP."""
+    import shap
     model.fit(X, y)
     bg = X.sample(frac=background_frac, random_state=SEED)
     explainer = shap.TreeExplainer(
@@ -257,6 +259,7 @@ def lgbm_classifier(**kwargs):
     defaults = dict(n_estimators=200, max_depth=4, learning_rate=0.05,
                     subsample=0.8, colsample_bytree=0.8,
                     random_state=SEED, n_jobs=1, verbose=-1)
+    from lightgbm import LGBMClassifier
     return LGBMClassifier(**{**defaults, **kwargs})
 
 
@@ -264,6 +267,7 @@ def lgbm_regressor(**kwargs):
     defaults = dict(n_estimators=200, max_depth=4, learning_rate=0.05,
                     subsample=0.8, colsample_bytree=0.8,
                     random_state=SEED, n_jobs=1, verbose=-1)
+    from lightgbm import LGBMRegressor
     return LGBMRegressor(**{**defaults, **kwargs})
 
 
@@ -271,6 +275,7 @@ def lgbm_regressor(**kwargs):
 
 def beeswarm(sv, X: pd.DataFrame, title: str,
              save_name: str = None, max_display: int = 20):
+    import shap
     expl = shap.Explanation(
         values=sv, base_values=np.zeros(len(sv)),
         data=X.values, feature_names=list(X.columns),

@@ -5,11 +5,7 @@ Layout follows Maidment (2019, fig 5.1C) and Stone (2025, fig 4-5): lane
 identities above the membrane, kDa ladder values on the left aligned to the
 detected marker bands, antibody on the right, Ponceau loading control beneath.
 
-THREE THINGS ARE UNCONFIRMED and are drawn as placeholders:
-  * the ladder product. Ten bands with a single red band fourth from the top and
-    a green terminal band match Thermo PageRuler Prestained (26616), but the
-    group's methods list three ladders in use, so this is inference from the band
-    pattern rather than a record.
+TWO THINGS ARE UNCONFIRMED and are drawn as placeholders:
   * the antibody this membrane was probed with.
   * what the two control lanes contained.
 
@@ -33,8 +29,11 @@ DATA = HERE / "data"
 PLOTS = HERE / "plots"
 
 INK = "#222222"
-# Thermo PageRuler Prestained (26616). PROVISIONAL — confirm against the lab record.
-LADDER_KDA = [180, 130, 100, 70, 55, 40, 35, 25, 15, 10]
+# Thermo PageRuler Prestained Protein Ladder (26616), read on the Bis-Tris and
+# MOPS scale because the gel is Merck mPAGE 4-20% Bis-Tris. Ten bands rule out
+# Plus (26619) at nine. The Tris-glycine values of 180, 130, 100, 70, 55, 40,
+# 35, 25, 15, 10 do not apply to this gel chemistry.
+LADDER_KDA = [140, 115, 80, 65, 50, 40, 30, 25, 15, 10]
 
 # Both crops are the ones used on slide 7 of AI_Pikp1_HMA_Prelim_2_JoshW.pptx,
 # converted from its srcRect fractions. Reusing them keeps the blot and the

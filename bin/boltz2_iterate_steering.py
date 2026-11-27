@@ -614,6 +614,11 @@ def cmd_iterate_plan(args: argparse.Namespace) -> int:
         Path(cycle0_plan["effector_template_cif"])
         if cycle0_plan.get("effector_template_cif") else None
     )
+    # Benchmark-style constraints (--boltz-constraints), inherited
+    # verbatim from cycle 0 so every cycle in the pathway steers with
+    # the SAME pocket/contact block — see
+    # boltz2_negative_steering.build_benchmark_style_constraints_block.
+    boltz_constraints_block = cycle0_plan.get("boltz_constraints_block")
 
     # Run heavy-atom contact detection on the parent prediction to
     # find the NEW wrong interface.  expected_rec_seq is the parent's
@@ -712,6 +717,7 @@ def cmd_iterate_plan(args: argparse.Namespace) -> int:
         "candidate_pool_size": pool_size,
         "mode": mode,
         "effector_template_cif": str(eff_template_cif) if eff_template_cif else None,
+        "boltz_constraints_block": boltz_constraints_block,
         "n_designs": n_designs,
         "num_seeds": num_seeds,
         "boltz_container": boltz_container,
@@ -828,6 +834,7 @@ def cmd_iterate_plan(args: argparse.Namespace) -> int:
                 mutated_seq, eff_seq,
                 pred_rec_chain, pred_eff_chain,
                 effector_template_cif=eff_template_cif,
+                constraints_block=boltz_constraints_block,
             )
 
             boltz_seed = plan["seed"] + design_idx + 1
@@ -2624,6 +2631,7 @@ def cmd_plan_reversions(args: argparse.Namespace) -> int:
         "pred_effector_chain": plan.get("pred_effector_chain", "B"),
         "base_seed": int(plan.get("seed", 0)),
         "num_seeds": int(plan.get("num_seeds", 1)),
+        "boltz_constraints_block": plan.get("boltz_constraints_block"),
     }
 
     n = len(contaminated_list)

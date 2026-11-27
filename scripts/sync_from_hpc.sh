@@ -36,7 +36,7 @@ VALID_MODULES=(
     rosetta_filtering
     negative_steering
     orthogonal_metrics
-    haddock
+    pose_solver
 )
 
 DRY_RUN=""
@@ -83,7 +83,7 @@ for m in "${MODULES[@]}"; do
     SRC="${HPC_USER_HOST}:${HPC_BASE}/${REL}/"
     DST="${REPO_ROOT}/${REL}/"
 
-    # Skip silently if the module has never had a fixture (haddock today).
+    # Skip silently if the module has never had a fixture.
     # Probe by listing the remote dir; rsync would also handle missing
     # source but we want a friendly skip message.
     if ! ssh -q -o BatchMode=yes "${HPC_USER_HOST}" \

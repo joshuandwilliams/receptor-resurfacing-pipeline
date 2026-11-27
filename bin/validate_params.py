@@ -295,6 +295,15 @@ PARAM_SPECS: List[ParamSpec] = [
               {"min": 0.0, "max": 20.0}),
 
     # ── Negative controls ───────────────────────────────────────────
+    ParamSpec("negsteer_only_skip_orthogonal","bool", {},
+              "NEGSTEER_ONLY: skip the Step 5 orthogonal-metrics chain"),
+    ParamSpec("negsteer_rehydrate_from","optional_path", {},
+              "Published results/ dir of a previous run; routes the entry "
+              "workflow to NEGSTEER_ONLY"),
+    ParamSpec("negsteer_rehydrate_design_pdb_dir","optional_path", {},
+              "NEGSTEER_ONLY: dir holding the raw RFDiffusion design_*.pdb "
+              "ground-truth structures; defaults to "
+              "<negsteer_rehydrate_from>/rfdiffusion"),
     ParamSpec("run_negative_controls","bool", {}),
     ParamSpec("negsteer_controls_n_designs","int_range", {"min": 1, "max": 50}),
     ParamSpec("controls_warning_ipsae_max","float_range", {"min": 0.0, "max": 1.0}),

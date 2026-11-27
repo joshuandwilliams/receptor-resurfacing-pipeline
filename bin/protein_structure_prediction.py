@@ -70,9 +70,9 @@ class ProteinStructurePrediction:
         if not self._path.is_file():
             raise FileNotFoundError(f"structure file not found: {self._path}")
         if not isinstance(receptor_chain, str) or not receptor_chain:
-            raise ValueError(f"receptor_chain must be non-empty string")
+            raise ValueError("receptor_chain must be non-empty string")
         if not isinstance(effector_chain, str) or not effector_chain:
-            raise ValueError(f"effector_chain must be non-empty string")
+            raise ValueError("effector_chain must be non-empty string")
         if receptor_chain == effector_chain:
             raise ValueError(
                 f"receptor_chain and effector_chain cannot both be "

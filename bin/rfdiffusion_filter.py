@@ -282,6 +282,36 @@ def build_receptor_resnum_map(rec_atoms, contigs, rec_chain):
     Map each receptor Cα atom (by index) to a residue number for
     contact classification (design vs fixed).
 
+    KNOWN BUG, NOT YET FIXED (found 2026-08-29).
+
+    The per-de-novo-segment lengths below are a guess.  Only the *total*
+    de novo budget is known from the design PDB, so the total is split
+    across segments in proportion to max_len.  That guess is exact only
+    when the budget is forced, i.e. when at most one segment has
+    min_len != max_len.  With two or more variable-length segments it is
+    usually wrong, and every residue downstream of the first mis-sized
+    segment is shifted by one or more positions.
+
+    Everything derived from this mapping is then wrong for those runs:
+    motif_rmsd, design_region_com_displacement, per_region_lengths,
+    per_region_coords, and the design-vs-fixed contact classification.
+    Measured on the pikp1_avrpikf campaign, the auto-derived contigs had
+    wrong lengths for 62/64 and 54/64 designs, which inflated the
+    reported motif RMSD to 4.0 Å and 2.6 Å.  Against RFDiffusion's own
+    mapping the true value is 0.22 Å and 0.11 Å, so the retained scaffold
+    had not moved at all.  crystal_full_test_contig has a single variable
+    segment and is unaffected.
+
+    The fix is to stop guessing.  RFDiffusion writes a .trb next to each
+    design holding `sampled_mask` (the realised contig, with every segment
+    at its actual length) and `con_ref_pdb_idx`/`con_hal_pdb_idx` (the
+    exact input-to-output residue correspondence).  The pipeline currently
+    discards the .trb, so it must also be published alongside the PDBs.
+
+    A local correction used by one analysis, and the evidence above, is in
+    experiments/campaigns/pikp1_avrpikf/analyses/design_region_novelty/
+    (trb_metrics.py and motif_rigidity.py).
+
     The total receptor length is known from the design PDB.  The total
     fixed length is known from the contig.  The difference is the total
     de novo length.  We walk the contig segments:

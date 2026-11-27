@@ -2,7 +2,7 @@
 """Distribution of post-steering receptor-aligned effector RMSD.
 
 Every one of the 128 designed sequences, stacked by the route it took to its
-outcome, with the polyA and scrambled sequence controls stacked alongside.
+outcome, with the all-alanine and shuffled sequence controls stacked alongside.
 
 Split out of the campaign metric figures so that it sits with the rest of the
 negative-steering results rather than with the confidence comparison.
@@ -29,6 +29,7 @@ INK, MUTED, GRID = "#222222", "#666666", "#DDDDDD"
 CORRECT, WRONG = "#0072B2", "#BBBBBB"   # incorrect is grey, not a second hue
 THRESHOLD_LINE = "#D55E00"
 CTRL_POLYA, CTRL_SCRAMBLED = "#D62728", "#8E44AD"
+CTRL_LABEL = {"polyA": "all-alanine", "scrambled": "shuffled"}
 INITIAL, STEERED, FAILED = "#7FB3D5", "#0072B2", "#CCCCCC"
 RA_EFF_THRESHOLD = 5.0
 RA_TICKS = [0.5, 1, 2, 5, 10, 20, 40]
@@ -124,7 +125,7 @@ def ra_eff_distribution_by_outcome(outdir):
     for name, v in ctrl.items():
         short = name.replace("input_control_", "")
         series.append(pd.Series([v]))
-        labels.append(f"{short} control")
+        labels.append(f"{CTRL_LABEL[short]} control")
     ax.hist(series, bins=bins, stacked=True,
             color=[colours[k] for k in order]
                   + [ctrl_colour[n.replace("input_control_", "")]

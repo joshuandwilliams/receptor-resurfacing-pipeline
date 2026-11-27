@@ -579,8 +579,9 @@ class NegativeSteeringRun:
         if not self.steered:
             return "cold-start path: no steering ran"
         if not self.reversion:
-            return ("steering ran but no design triggered reversion under "
-                    "the CL-3 majority rule")
+            return ("steering ran but no design had a majority of its "
+                    "correctly-placed seeds contaminated, so no reversion "
+                    "was triggered")
         verdicts = self.per_seed_final_verdicts(thresholds)
         counts = Counter(e["verdict"] for e in verdicts)
         parts = [f"{k}={v}" for k, v in sorted(counts.items())]
