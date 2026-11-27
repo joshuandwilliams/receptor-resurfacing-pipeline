@@ -150,6 +150,15 @@ clean_module() {
 submit_one() {
     local module="$1"
     local mod_dir="${SCRIPT_DIR}/${module}"
+    # --chdir and -p on the command line, because both are site-specific
+    # and neither belongs in a tracked #SBATCH header.  sbatch's own
+    # precedence puts a command-line option above an environment variable
+    # above a header line, so this wins.  The module scripts resolve their
+    # inputs from $PWD, which is what --chdir sets, so it is load-bearing
+    # rather than cosmetic: ${BASH_SOURCE[0]} points into
+    # /var/spool/slurmd under sbatch and cannot be used instead.
+    local _sb=(--parsable --chdir="${mod_dir}")
+    [ -n "${RECEPTOR_PARTITION_CPU:-}" ] && _sb+=(-p "${RECEPTOR_PARTITION_CPU}")
 
     # full_test_run is the end-to-end pipeline run, not a per-module
     # test.  Its launcher lives at the repo root (run_pipeline.slurm.sh)
@@ -175,7 +184,7 @@ submit_one() {
             echo "[${module}]   (dry-run; nothing submitted)"
         else
             local jid
-            jid=$(sbatch --parsable "${pipeline_script}" "${params_file}")
+            jid=$(sbatch "${_sb[@]}" "${pipeline_script}" "${params_file}")
             echo "[${module}]   pipeline job id: ${jid}"
             echo "[${module}]   outdir: ${mod_dir}/results"
             echo "[${module}]   ETA: ~24h+ (subject to GPU queue)"
@@ -204,7 +213,7 @@ submit_one() {
         # sbatch with --parsable emits just the job id on stdout, which
         # makes the dependency wiring below trivial.
         local workflow_jid
-        workflow_jid=$(sbatch --parsable "${workflow_script}")
+        workflow_jid=$(sbatch "${_sb[@]}" "${workflow_script}")
         echo "[${module}]   workflow job id: ${workflow_jid}"
     fi
 
@@ -244,7 +253,7 @@ submit_one() {
             echo "[${module}]   --with-plots: sbatch ${plot_script} (afterok:${workflow_jid})"
             if [ "${DRY_RUN}" != "1" ]; then
                 local plot_jid
-                plot_jid=$(sbatch --parsable \
+                plot_jid=$(sbatch "${_sb[@]}" \
                     --dependency=afterok:"${workflow_jid}" \
                     "${plot_script}")
                 echo "[${module}]   plot job id:     ${plot_jid}"

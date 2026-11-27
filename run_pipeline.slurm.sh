@@ -1,6 +1,5 @@
 #!/bin/bash
 #SBATCH --job-name="nf_receptor_resurfacing"
-#SBATCH -p jic-medium
 #SBATCH -N 1
 #SBATCH -n 1
 #SBATCH -c 2
@@ -8,8 +7,14 @@
 #SBATCH --time=72:00:00
 #SBATCH --output=nextflow_pipeline_%j.out
 #SBATCH --error=nextflow_pipeline_%j.err
+# No --mail-user: sbatch(1) says --mail-type alone mails the submitting user,
+# so naming an address here would be both site-specific and redundant.
 #SBATCH --mail-type=END,FAIL
-#SBATCH --mail-user=jowillia@nbi.ac.uk
+#
+# No -p: the partition is site-specific.  Set RECEPTOR_PARTITION_HEAD in
+# site.conf and submit with scripts/submit.sh, which passes it as `sbatch -p`,
+# where it beats both the environment and a header line.  A plain
+# `sbatch run_pipeline.slurm.sh ...` takes the cluster's default partition.
 
 set -euo pipefail
 
@@ -35,7 +40,12 @@ if [ ! -f "${PARAMS_FILE}" ]; then
 fi
 
 # ── Paths ─────────────────────────────────────────────────────────────────
-PIPELINE_DIR="/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline"
+# Load site settings, then resolve the repository root.  SLURM_SUBMIT_DIR is
+# the directory sbatch was called from, which is the usual case.
+_SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/site_conf.sh
+source "${_SELF_DIR}/scripts/site_conf.sh"
+PIPELINE_DIR="${RECEPTOR_PIPELINE_DIR:-${_SELF_DIR}}"
 NEXTFLOW_IMG="${PIPELINE_DIR}/containers/NextFlow.img"
 # Combined container providing RFDiffusion, ProteinMPNN and MMseqs2.
 # Its filename/recipe still bundle HADDOCK3, but the haddock3 CLI is
@@ -43,7 +53,7 @@ NEXTFLOW_IMG="${PIPELINE_DIR}/containers/NextFlow.img"
 # Variable name kept as RFDIFF_CONTAINER for backwards compatibility with
 # the .nf modules that reference it as params.rfdiff_container.
 RFDIFF_CONTAINER="${PIPELINE_DIR}/containers/HADDOCK_RFDiffusion_ProteinMPNN_MMseqs2.img"
-AF2_DATA_DIR="/nbi/Reference-Data/AlphaFold/db-v2.3.2"
+AF2_DATA_DIR="${RECEPTOR_AF2_DB:-}"
 
 EXPERIMENT_DIR="$(dirname "${PARAMS_FILE}")"
 

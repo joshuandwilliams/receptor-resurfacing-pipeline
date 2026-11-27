@@ -1,0 +1,79 @@
+# Site settings. Copy to site.conf and edit. site.conf is gitignored.
+#
+#   cp site.conf.example site.conf
+#
+# Nothing tracked in this repository is specific to one cluster or one person.
+# Everything that would be lives here, so a clone runs on any SLURM site once
+# this file is filled in.
+#
+# Sourced by scripts/site_conf.sh, which the SLURM launchers load. Plain shell,
+# so a value may reference another. Every setting is optional. An unset one
+# falls back to the neutral default noted beside it, and the stage that needs
+# it says so if it cannot continue.
+
+
+# ── Where the repository lives on the cluster ───────────────────────────────
+# The launchers normally take this from SLURM_SUBMIT_DIR, the directory sbatch
+# was called from. Set it if you submit from somewhere else.
+# Default: SLURM_SUBMIT_DIR, then the directory holding this file.
+#RECEPTOR_PIPELINE_DIR="/home/you/receptor-resurfacing-pipeline"
+
+
+# ── Partitions ──────────────────────────────────────────────────────────────
+# Read by nextflow.config as params.cpu_queue and params.gpu_queue, and passed
+# by the launchers as `sbatch -p`. A command-line option beats an environment
+# variable, which beats a #SBATCH line in the script, so a value here wins
+# whatever the launcher's header says (sbatch(1), INPUT ENVIRONMENT VARIABLES).
+#
+# Leave a value empty and Nextflow omits the -p directive, sending the job to
+# your cluster's default partition. That is fine for the CPU stages and wrong
+# for the GPU ones on most sites.
+#
+# GPU: RFDiffusion, Boltz-2, the negative-steering orchestrator and AlphaFold3.
+#RECEPTOR_PARTITION_GPU="gpu"
+# CPU: everything else, which is most of the 29 stages.
+#RECEPTOR_PARTITION_CPU="short"
+# Head: the Nextflow head process itself. CPU only, and long-lived, because it
+# sits there submitting and polling for the whole run.
+#RECEPTOR_PARTITION_HEAD="long"
+
+# What to ask for to get one GPU. Read by nextflow.config as
+# params.gpu_cluster_options. Default: --gres=gpu:1
+#RECEPTOR_GPU_CLUSTER_OPTIONS="--gres=gpu:1"
+
+# Accounting, if your site requires it. Default: unset, so neither is passed.
+#RECEPTOR_SLURM_ACCOUNT=""
+#RECEPTOR_SLURM_QOS=""
+
+
+# ── Negative steering ───────────────────────────────────────────────────────
+# The engine is a separate repository, structure-negative-steering, installed
+# once per site. This is the directory holding its checkout and its image.
+# On the JIC HPC that is
+#   /jic/scratch/groups/Mark-Banfield/JoshW_Software/negative_steering
+#RECEPTOR_NEGSTEER_DIR="/path/to/negative_steering"
+
+# The engine's Singularity image, built from its containers/negsteer.def.
+#RECEPTOR_NEGSTEER_IMG="${RECEPTOR_NEGSTEER_DIR}/image/negsteer.img"
+
+
+# ── AlphaFold3 ──────────────────────────────────────────────────────────────
+# AF3 is not containerised here. It is loaded with `source package <id>`, which
+# is an NBI mechanism, and it needs its weights and its reference databases.
+# No default is sensible for any of these, so an unset value stays null and the
+# AF3 stage fails naming the setting it wanted.
+#
+# notes/things_to_fix.md records a decision to remove the AF3 stage, which
+# would retire all four of these.
+#RECEPTOR_AF3_PACKAGE_ID="e8edb411-7374-4342-b9f1-408da41fc197"
+# Directory holding af3.bin. Default: $HOME/singularity/AlphaFold3
+#RECEPTOR_AF3_MODEL_DIR="${HOME}/singularity/AlphaFold3"
+#RECEPTOR_AF3_DB="/nbi/Reference-Data/AlphaFold/db-v3.0.0"
+# BFD and MGnify, used for the MSA-based arms.
+#RECEPTOR_AF2_DB="/nbi/Reference-Data/AlphaFold/db-v2.3.2"
+
+
+# ── Test suite ──────────────────────────────────────────────────────────────
+# The check_test_run tier asserts against a finished pipeline run. Point this
+# at one. Without it those 298 tests skip.
+#RECEPTOR_OUTPUT_ROOT="/path/to/a/finished/run"

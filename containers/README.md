@@ -15,23 +15,24 @@ SLURM launchers use `${PIPELINE_DIR}/containers/<name>.img`, and the JDK is
 
 The actual `.img` / `.sif` files (and the JDK) are **not** committed. On a given
 machine, each expected filename is a **symlink** into wherever the real images
-live (on the NBI HPC software node that is
-`/hpc-home/<user>/singularity/...`). These symlinks are git-ignored, so they
-never reach GitHub and never break another user's checkout.
+live. These symlinks are git-ignored, so they never reach GitHub and never
+break another user's checkout.
 
 **To install the pipeline:** drop your own built images (or symlinks to them)
-into this directory using the exact filenames below. For example, on the NBI
-HPC:
+into this directory using the exact filenames below. `$IMAGES` is wherever you
+keep them, so nothing here names one site:
 
 ```bash
 cd containers/
-ln -s /hpc-home/$USER/singularity/NextFlow/NextFlow.img                                       NextFlow.img
-ln -s /hpc-home/$USER/singularity/HADDOCK_RFDiffusion_ProteinMPNN_MMseqs2/HADDOCK_RFDiffusion_ProteinMPNN_MMseqs2.img  HADDOCK_RFDiffusion_ProteinMPNN_MMseqs2.img
-ln -s /hpc-home/$USER/singularity/Rosetta/Rosetta.img                                         Rosetta.img
-ln -s /hpc-home/$USER/singularity/Boltz1_Boltz2_Chai1_ColabFold/boltz2_negsteer.img           boltz2_negsteer.img
-ln -s /hpc-home/$USER/singularity/ColabFold/colabfold.img                                     colabfold.img
-ln -s /hpc-home/$USER/singularity/pytest/pytest_runner.img                                    pytest_runner.img
-ln -s /hpc-home/$USER/singularity/jdk-17.0.2                                                  jdk-17.0.2
+IMAGES=/path/to/your/singularity/images     # e.g. "$HOME/singularity" on many
+                                            # SLURM sites
+ln -s "$IMAGES"/NextFlow/NextFlow.img                                                                   NextFlow.img
+ln -s "$IMAGES"/HADDOCK_RFDiffusion_ProteinMPNN_MMseqs2/HADDOCK_RFDiffusion_ProteinMPNN_MMseqs2.img     HADDOCK_RFDiffusion_ProteinMPNN_MMseqs2.img
+ln -s "$IMAGES"/Rosetta/Rosetta.img                                                                     Rosetta.img
+ln -s "$IMAGES"/Boltz1_Boltz2_Chai1_ColabFold/boltz2_negsteer.img                                       boltz2_negsteer.img
+ln -s "$IMAGES"/ColabFold/colabfold.img                                                                 colabfold.img
+ln -s "$IMAGES"/pytest/pytest_runner.img                                                                pytest_runner.img
+ln -s "$IMAGES"/jdk-17.0.2                                                                              jdk-17.0.2
 ```
 
 Expected filenames (must match exactly):

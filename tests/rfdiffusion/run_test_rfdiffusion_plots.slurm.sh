@@ -1,6 +1,9 @@
 #!/bin/bash
 #SBATCH --job-name="rfdiff_plots_test"
-#SBATCH -p jic-medium
+# No -p: the partition is site-specific.  tests/run_tests.sh passes
+# RECEPTOR_PARTITION_CPU from site.conf as `sbatch -p`, where it beats both
+# the environment and a header line.  Submitting this script directly takes
+# the cluster's default partition.
 #SBATCH -N 1
 #SBATCH -n 1
 #SBATCH -c 2
@@ -9,8 +12,11 @@
 #SBATCH --output=test_plots_%j.out
 #SBATCH --error=test_plots_%j.err
 #SBATCH --mail-type=END,FAIL
-#SBATCH --mail-user=jowillia@nbi.ac.uk
-#SBATCH --chdir=/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/rfdiffusion
+# No --mail-user: sbatch(1) mails the submitting user when only --mail-type
+# is given, so an address here would be site-specific and redundant.
+# No --chdir: the path is site-specific.  tests/run_tests.sh passes it as
+# `sbatch --chdir`, which is what sets the $PWD this script resolves its
+# inputs from.  Submit from this directory if you run it by hand.
 
 # =============================================================================
 # run_test_rfdiffusion_plots_slurm.sh
@@ -40,7 +46,7 @@
 set -euo pipefail
 
 # ── Paths ─────────────────────────────────────────────────────────────────
-PIPELINE_DIR="/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline"
+PIPELINE_DIR="${RECEPTOR_PIPELINE_DIR:-$(cd "../.." && pwd)}"
 TEST_DIR="${PIPELINE_DIR}/tests/rfdiffusion"
 
 # Default metrics location: the canonical test_rfdiffusion output.

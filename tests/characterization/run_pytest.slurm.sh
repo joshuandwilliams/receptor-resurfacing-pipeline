@@ -1,6 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name="pytest_characterisation"
-#SBATCH -p jic-short
+# No -p: the partition is site-specific.  Set RECEPTOR_PARTITION_CPU in
+# site.conf and pass it with `sbatch -p "$RECEPTOR_PARTITION_CPU"`.
 #SBATCH -N 1
 #SBATCH -n 1
 #SBATCH -c 4
@@ -9,8 +10,9 @@
 #SBATCH --output=slurm_%j.out
 #SBATCH --error=slurm_%j.err
 #SBATCH --mail-type=END,FAIL
-#SBATCH --mail-user=jowillia@nbi.ac.uk
-#SBATCH --chdir=/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline/tests/characterization
+# No --mail-user: sbatch(1) mails the submitting user when only
+# --mail-type is given, so an address here is site-specific and redundant.
+# No --chdir: sbatch starts the job in the submitting directory.
 
 # =============================================================================
 # run_pytest.slurm.sh
@@ -38,7 +40,7 @@
 set -euo pipefail
 
 # ── Paths ─────────────────────────────────────────────────────────────────
-PIPELINE_DIR="/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline"
+PIPELINE_DIR="${RECEPTOR_PIPELINE_DIR:-$(cd "../.." && pwd)}"
 PYTEST_IMG="${PIPELINE_DIR}/containers/pytest_runner.img"
 
 TEST_DIR="${PIPELINE_DIR}/tests/characterization"
