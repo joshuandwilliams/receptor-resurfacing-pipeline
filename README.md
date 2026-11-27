@@ -2,6 +2,7 @@
 
 [![Tests](https://github.com/joshuandwilliams/receptor-resurfacing-pipeline/actions/workflows/test.yml/badge.svg)](https://github.com/joshuandwilliams/receptor-resurfacing-pipeline/actions/workflows/test.yml)
 [![Lint](https://github.com/joshuandwilliams/receptor-resurfacing-pipeline/actions/workflows/lint.yml/badge.svg)](https://github.com/joshuandwilliams/receptor-resurfacing-pipeline/actions/workflows/lint.yml)
+[![Codecov test coverage](https://codecov.io/gh/joshuandwilliams/receptor-resurfacing-pipeline/graph/badge.svg)](https://app.codecov.io/gh/joshuandwilliams/receptor-resurfacing-pipeline)
 ![python](https://img.shields.io/badge/python-3.11-1e90ff?logo=python)
 ![nextflow](https://img.shields.io/badge/nextflow-25.10.4-0dc09d?logo=nextflow)
 
@@ -15,6 +16,12 @@ Negative steering of the Boltz-2 predictions is a separate repository,
 installed once per site and called as a tool.
 
 ## Status
+
+Test coverage over `bin/` is **10.81%**, gated as a ratchet in `pyproject.toml`
+so it can only go up. That is low, and the reason is that most of `bin/` is
+reached only by the `check_test_run` tier, which needs a finished pipeline run
+and so cannot contribute to a laptop or CI figure. Raising it is tracked in
+[`notes/upstream_parity_plan.md`](notes/upstream_parity_plan.md).
 
 Active work is on the `phase4-impl` branch. `main` is the pre-Phase-4
 baseline.
