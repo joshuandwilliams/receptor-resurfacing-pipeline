@@ -1,0 +1,28 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "receptor-resurfacing-pipeline: de novo resurfacing of plant immune receptor binding sites"
+abstract: >-
+  A Nextflow workflow that redesigns the binding surface of a plant immune
+  receptor so it recognises a chosen effector. It takes a docked
+  receptor-effector complex, or two monomers it places with a
+  constraint-driven pose solver, rebuilds the receptor surface around the
+  effector pose with RFdiffusion, assigns sequence with ProteinMPNN, and
+  scores the candidates with Rosetta, Boltz-2 and AlphaFold3. Negative
+  steering of the Boltz-2 predictions is delegated to
+  structure-negative-steering. Applied to the integrated HMA decoy domain of
+  the rice NLR Pikp-1 against the Magnaporthe oryzae MAX effectors AVR-PikF,
+  AVR-Pia, PWT3 and PWT7.
+authors:
+  - family-names: Williams
+    given-names: Joshua
+    email: joshuandwilliams@outlook.com
+license: MIT
+repository-code: "https://github.com/joshuandwilliams/receptor-resurfacing-pipeline"
+keywords:
+  - de novo protein design
+  - RFdiffusion
+  - ProteinMPNN
+  - plant immunity
+  - NLR
+  - MAX effector
+  - Nextflow
