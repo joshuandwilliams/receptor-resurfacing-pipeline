@@ -9,7 +9,8 @@
 
 
 # ── Project ───────────────────────────────────────────────────────────
-project_name: "Sr50_3BI_LRR:AVR-PikD"
+project_name: "Sr50_3BI_LRR_AVR-PikD"   # no ":" — the validator
+                                        # pattern is [A-Za-z0-9_.-]+
 outdir: "./results"
 
 # ── Execution ─────────────────────────────────────────────────────────
@@ -108,9 +109,11 @@ rfdiff_rog_min_dist: 5             # monomer_ROG minimum Rg floor (Å) — Rg va
 # underconstrains, >4 over-constrains.  Format:
 #   "RECCHAIN+RESNUM-EFFCHAIN+RESNUM ..."        (uses default window)
 #   "RECCHAIN+RES-EFFCHAIN+RES@DIST ..."         (per-pair max override)
-pose_solver_pairs: ""
-# Examples:
-#   pose_solver_pairs: "A73-B31 A71-B33 A8-B22"
+# These residue numbers are the Pikp-1 HMA / AVR-Pik pairs, carried here so
+# this file passes validation as shipped.  They are NOT right for Sr50.
+# Replace them with contacts from your own complex before running.
+pose_solver_pairs: "A73-B31 A71-B33 A8-B22"
+# Per-pair maximum distance override, if a pair needs a wider window:
 #   pose_solver_pairs: "A73-B48@4.5 A71-B50 A8-B39"
 
 # Optional repulsive exclusions — pairs that must stay APART by at

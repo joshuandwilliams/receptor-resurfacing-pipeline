@@ -26,6 +26,21 @@ test = [
     "numpy>=1.24",
     "Pillow>=10.0",
     "scikit-image>=0.21",
+    # gemmi was missing and the omission was invisible on a laptop, where
+    # conda supplies it.  In a clean venv the seven structure tests in
+    # test_protein_structure_prediction.py skip with "gemmi not installed"
+    # instead of running, so CI reported a pass for tests it never executed.
+    "gemmi>=0.6",
+    # biopython is imported by bin/ and by the campaign extractors for
+    # sequence-aligned residue pairing.  No logic-tier test reaches it today,
+    # so it is here to keep the extra a true statement of what the code needs
+    # rather than to fix a skip.
+    "biopython>=1.80",
+    # matplotlib and scipy are imported by the plot modules and the pose
+    # solver.  The figure tests go through tests/characterization/helpers,
+    # which needs them present to compare a rendered PNG.
+    "matplotlib>=3.7",
+    "scipy>=1.10",
 ]
 # The pinned linter, so CI and a local run apply the same rule set.  An
 # unpinned ruff picks up new default rules on release and fails CI on code
