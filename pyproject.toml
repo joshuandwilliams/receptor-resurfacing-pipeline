@@ -143,4 +143,4 @@ skip_covered = true
 # 35.0 is where it stands with the two negative-steering plot modules covered
 # (bin/negsteer_plots.py 0 → 98%, bin/negsteer_within_sequence_plots.py
 # 0 → 97%), which took the logic tier from 20.79% to 35.09%.
-fail_under = 35.0
+fail_under = 41.3
