@@ -1,0 +1,35 @@
+# Codecov found no config file and fell back to its defaults, which set the
+# project target to the previous commit's coverage. That is a second,
+# independent ratchet competing with the one in pyproject.toml, and the two
+# disagree on a merge commit. This file makes pyproject the only gate and
+# leaves Codecov reporting the number.
+
+coverage:
+  status:
+    # pyproject's fail_under already fails the Tests job on a drop, so a
+    # second blocking check adds nothing but a red cross on a passing run.
+    project:
+      default:
+        informational: true
+    # A patch target punishes a commit that touches a module it is not
+    # covering, which is how the remaining uncovered modules get picked up one
+    # branch at a time.
+    patch:
+      default:
+        informational: true
+
+  # Only bin/ is measured. The test tree is not under test.
+  precision: 2
+  round: down
+  range: "70...100"
+
+# tests/ carries fixture builders and on-disk stubs that the suite imports but
+# coverage does not measure, since [tool.coverage.run] source is bin/.
+ignore:
+  - "tests/**"
+  - "analyses/**"
+
+comment:
+  layout: "reach, diff, flags, files"
+  behavior: default
+  require_changes: true
