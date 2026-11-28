@@ -23,9 +23,7 @@ for _p in (str(BIN), str(HERE)):
         sys.path.insert(0, _p)
 
 import build_contigs as bc  # noqa: E402
-
 from fixtures_runtree import complex_pdb  # noqa: E402
-
 
 # ── Receptor references in a contig ──────────────────────────────────
 
