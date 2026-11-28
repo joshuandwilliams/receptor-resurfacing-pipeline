@@ -14,16 +14,13 @@ metrics live on `BoltzConfidenceMetrics` / `AF3ConfidenceAggregate`).
 
 This type consolidates many existing implementations:
 
-| What                    | Existing copies                              |
+| What                    | Where it lives now                           |
 |-------------------------|----------------------------------------------|
-| chain sequence          | boltz2_negative_steering, build_control_     |
-|                         | sequences, extract_survivor_manifest,        |
-|                         | pipeline_correct_sequences                   |
-| Cα reading              | boltz2_negative_steering, rfdiffusion_filter,|
-|                         | parse_af3_output, reversion                  |
-| Heavy-atom contacts     | boltz2_negative_steering, compute_metrics    |
-| Jaccard / weighted      | boltz2_negative_steering, compute_metrics,   |
-|                         | compute_interface_metrics                    |
+| chain sequence          | structure_metrics.get_chain_sequence         |
+| Cα reading              | structure_metrics, rfdiffusion_filter,       |
+|                         | parse_af3_output                             |
+| Heavy-atom contacts     | structure_metrics.find_contact_residues_heavy|
+| Jaccard / weighted      | compute_interface_metrics                    |
 | Receptor-aligned effector RMSD | parse_af3_output, binding_rmsds       |
 """
 

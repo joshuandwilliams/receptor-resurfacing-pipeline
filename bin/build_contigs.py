@@ -155,7 +155,8 @@ def update_contigs(user_contigs, rec_chain, eff_chain, eff_len, rec_len, rec_off
     new_blocks = []
 
     for block in blocks:
-        # Bare effector chain reference
+        # Any block starting with the effector chain letter, bare or
+        # with a range.  Both are replaced by the real PDB length.
         if block.strip().upper() == eff_chain.upper() or (
             len(block) > 1 and block[0].upper() == eff_chain.upper()
         ):

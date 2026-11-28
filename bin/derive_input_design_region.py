@@ -193,7 +193,8 @@ def _compute_true_interface_0b(
     Re-uses find_contact_residues_heavy from compute_metrics.py to
     match the per-design path's contact-detection semantics exactly.
     """
-    # Use the same import pattern as boltz2_negative_steering.py line 2249
+    # Imported here rather than at module scope, so this script still runs
+    # when structure_metrics' optional numpy dependency is absent.
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     from structure_metrics import find_contact_residues_heavy  # noqa: E402
 

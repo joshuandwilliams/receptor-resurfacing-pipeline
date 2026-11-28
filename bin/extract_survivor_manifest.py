@@ -28,18 +28,16 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Optional
 
-# _AA3TO1 dict removed in Phase 4 free-function consolidation —
-# extract_chain_seq below now delegates to the canonical
-# boltz2_negative_steering.get_chain_sequence (which uses the
-# THREE_TO_ONE map in contig_utils.py).
+# The local _AA3TO1 dict is gone. _extract_chain_seq below delegates to
+# structure_metrics.get_chain_sequence, which reads THREE_TO_ONE from
+# contig_utils.py, so there is one three-to-one mapping in the repository.
 
 
 def _extract_chain_seq(pdb_path: Path, chain_id: str) -> Optional[str]:
     """Read Cα sequence for a chain from a PDB file.
 
-    Thin wrapper around the canonical
-    ``boltz2_negative_steering.get_chain_sequence`` (Phase 4
-    free-function consolidation).  Preserves the previous behaviour of
+    Thin wrapper around ``structure_metrics.get_chain_sequence``.
+    Preserves the previous behaviour of
     returning ``None`` on read failure or on a missing chain (callers
     depend on the Optional return; the canonical helper raises on
     missing chain).

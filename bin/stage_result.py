@@ -3,18 +3,20 @@ stage_result.py
 ---------------
 StageResult — one stage's worth of predictions for one configuration.
 
-Per Phase 4 spec §2.8.  Tier 4 type — depends on
-ProteinStructurePrediction, BoltzConfidenceMetrics, PositionSet,
-PipelineInternalThresholds.
+Imports ProteinStructurePrediction, BoltzConfidenceMetrics and
+PositionSet.  Thresholds are not imported, they arrive as a method
+argument.
 
 A stage is `cold_start`, `steered`, or `reversion`.  A configuration is
 the receptor sequence being predicted in this stage.  Each stage runs
 `num_seeds` predictions for the configuration.  The collective verdict
 drives whether the *next* stage runs (see ``triggers_next_stage``).
 
-**CL-3 lands here**: for ``stage_type='steered'`` the gating rule is the
-new majority-of-correctly-placed-contaminated rule, NOT the per-(design,
-seed) gate currently in ``cmd_build_contaminated``.
+Reversion gating lives in this module.  For ``stage_type='steered'`` the
+rule is per design.  Reversion runs when a majority of the correctly
+placed seeds are contaminated.  The rule this replaced fired per
+(design, seed), so a single contaminated seed could trigger reversion
+for the whole design.
 """
 
 from __future__ import annotations
@@ -45,10 +47,10 @@ class StageResult:
     and reversion stages; should be None for cold_start (which has no
     mutations).
 
-    `applies_to_designs` is reversion-only: the steered design_ids
-    whose contamination produced this unique reverted sequence (the
-    dedup-by-reverted-sequence mapping; per Step 4.3 of the architecture
-    spec).  None for cold_start and steered.
+    `applies_to_designs` is reversion-only.  It holds the steered
+    design_ids whose contamination produced this one reverted sequence,
+    because reversions are deduplicated by reverted sequence.  None for
+    cold_start and steered.
     """
     stage_type: str
     config_id: str
@@ -170,9 +172,9 @@ class StageResult:
                        .intersection(contamination_positions)
             )
         except Exception:
-            # Frame mismatch is the only realistic failure here; treat
-            # as data unavailability for a single seed rather than
-            # raising and bringing down the whole stage.
+            # Frame mismatch is the only realistic failure here.  Treat
+            # it as missing data for this one seed rather than raising
+            # and bringing down the whole stage.
             return "no_data"
         has_contamination = not triple_intersection.is_empty()
         if self.stage_type == "steered":
@@ -231,10 +233,9 @@ class StageResult:
           - steered: 'clean_steered'
           - reversion: 'pose_holds'
 
-        NOTE: at the NegativeSteeringRun (Tier 5) level, the cross-stage
-        per-seed verdict aggregation overrides a seed's steered verdict
-        with its reversion verdict if reversion ran for that design.
-        This method gives the per-stage count only.
+        NegativeSteeringRun aggregates across stages and overrides a
+        seed's steered verdict with its reversion verdict when reversion
+        ran for that design.  This method counts one stage only.
         """
         verdicts = self.per_seed_verdicts(thresholds, truth, contamination_positions)
         passing = {
@@ -244,7 +245,7 @@ class StageResult:
         }[self.stage_type]
         return sum(1 for v in verdicts if v in passing)
 
-    # ── Stage-level gating (CL-3 lives here) ─────────────────────────
+    # ── Stage-level gating ───────────────────────────────────────────
 
     def triggers_next_stage(
         self,
@@ -254,13 +255,12 @@ class StageResult:
     ) -> bool:
         """Apply the stage-specific gating rule:
 
-        - cold_start: True if fewer than majority of seeds were clean
-          (i.e. steering should run).  Existing rule.
-        - steered: True if n_correctly_placed > 0 AND n_contaminated >=
-          ceil(n_correctly_placed / 2).  **NEW rule from CL-3** —
-          replaces the per-(design, seed) gate currently in
-          cmd_build_contaminated.
-        - reversion: False always (no next stage).
+        - cold_start: True when fewer than a majority of seeds were
+          clean, meaning steering should run.
+        - steered: True when n_correctly_placed > 0 and n_contaminated
+          >= ceil(n_correctly_placed / 2).  The rule this replaced fired
+          per (design, seed).
+        - reversion: always False, there is no next stage.
         """
         if self.stage_type == "reversion":
             return False
@@ -269,7 +269,7 @@ class StageResult:
             n_clean = sum(1 for v in verdicts if v == "clean")
             majority = math.ceil(self.num_seeds / 2)
             return n_clean < majority
-        # steered — CL-3
+        # steered — majority of the correctly placed seeds contaminated
         if contamination_positions is None:
             raise ValueError(
                 "steered.triggers_next_stage requires contamination_positions"
@@ -288,9 +288,10 @@ class StageResult:
         truth: ProteinStructurePrediction,
         contamination_positions: Optional[PositionSet] = None,
     ) -> ProteinStructurePrediction:
-        """Return the best-by-ra_eff prediction (pass-equivalent seeds
-        preferred over non-passing).  Used by NegativeSteeringRun /
-        DesignCohort for the per-stage representative."""
+        """Return the best-by-ra_eff prediction, preferring
+        pass-equivalent seeds over non-passing ones.  This is the
+        per-stage representative.  No caller in this repository uses it
+        yet."""
         verdicts = self.per_seed_verdicts(thresholds, truth, contamination_positions)
         passing_idx: List[int] = []
         all_with_ra: List[Tuple[float, int]] = []

@@ -2,31 +2,29 @@
 """
 run_rosetta_metrics.py
 ----------------------
-P0-31 · Rosetta orthogonal metrics on one survivor.
+The Rosetta arm of the orthogonal-metrics streams, run on one cohort
+survivor.  Two stages:
 
-Two-stage flow:
-
-  1. FastRelax (1 repeat, ramped repulsive) on the bound complex.
-     Removes clashes from the predicted (Boltz) structure and brings
-     it onto Rosetta's energy surface.  Run via RosettaScripts with
-     a pinned XML at bin/fastrelax_for_ia.xml.
+  1. FastRelax (1 repeat, Cartesian, ref2015_cart) on the bound
+     complex.  Removes clashes from the predicted (Boltz) structure
+     and brings it onto Rosetta's energy surface.  Run through
+     RosettaScripts with the pinned XML at bin/fastrelax_for_ia.xml.
 
   2. InterfaceAnalyzer on the relaxed PDB.  Computes Lawrence-Colman
      shape complementarity (Sc) and the separated ΔG (rosetta_ddg)
      with sidechain repacking on the bound and unbound states.
 
-The relax step is the standard pre-treatment for ΔΔG scoring of
-predicted structures: without it, ΔΔG values are inflated 10-20 REU
-by clashes and idealised-bond-geometry artefacts that Rosetta
-penalises but a real folded complex would not have.  Using 1 repeat
-matches Bennett et al. 2023's de novo binder calibration so the
-threshold (rosetta_ddg ≤ −30 REU) is directly comparable.
+Relax is the standard pre-treatment for ΔΔG scoring of predicted
+structures.  Without it, ΔΔG is inflated 10-20 REU by clashes and
+idealised-bond-geometry artefacts that Rosetta penalises but a real
+folded complex would not have.  1 repeat matches Bennett et al. 2023's
+de novo binder calibration, so the −30 REU threshold
+(pipeline_thresholds.orthogonal_ddg_max) is directly comparable.
 
-Emits one-row CSV with columns: seq_name, sc, rosetta_ddg,
+Emits a one-row CSV with columns seq_name, sc, rosetta_ddg,
 rosetta_failures.
 
-Runtime: ~3-6 min per survivor (relax dominates; IA call is ~15 s).
-Per-survivor SLURM fan-out is unchanged from the prior implementation.
+Runtime: ~3-6 min per survivor.  Relax dominates, the IA call is ~15 s.
 
 Assumes Rosetta.img has both `rosetta_scripts.{flavour}.linuxgccrelease`
 and `InterfaceAnalyzer.{flavour}.linuxgccrelease` on PATH.
@@ -44,9 +42,8 @@ from pathlib import Path
 from typing import List, Optional, Tuple
 
 # ── Binary discovery ─────────────────────────────────────────────────────
-# Rosetta ships several build flavours; try each in priority order.
-# mpi first because it's the most common in HPC singularity images;
-# fall back through the other variants.
+# Rosetta ships several build flavours.  Try each in priority order,
+# mpi first because it is the most common in HPC singularity images.
 ROSETTA_FLAVOURS = ("mpi", "default", "static", "linuxgccrelease")
 
 
@@ -72,18 +69,17 @@ def _find_rosetta_binary(stem: str) -> Optional[str]:
 def _parse_ia_scorefile(
     score_path: Path,
 ) -> Tuple[Optional[float], Optional[float], Optional[str]]:
-    """Parse Rosetta's score.sc file produced by InterfaceAnalyzer.
+    """Parse the score.sc file InterfaceAnalyzer produces.
 
-    The file format begins with one or more SEQUENCE lines, then a
-    SCORE: header line containing the column names, then one or more
-    SCORE: rows of values.  We extract:
+    The file starts with SEQUENCE lines, then a SCORE: header line of
+    column names, then SCORE: rows of values.  Two columns are read:
 
       sc_value      → Lawrence-Colman shape complementarity
       dG_separated  → ΔG on chain separation (our rosetta_ddg)
 
     Returns (sc, ddg, error_string).  error_string is None on full
-    success, or a comma-separated list of token-style failure reasons
-    (e.g. 'sc_column_missing,ddg_not_numeric').
+    success, otherwise a comma-separated list of token-style failure
+    reasons such as 'sc_column_missing,ddg_not_numeric'.
     """
     try:
         with open(score_path) as f:
@@ -149,21 +145,22 @@ def _run_fast_relax(
     """Run RosettaScripts FastRelax on `input_pdb`, write the relaxed
     PDB into `workdir`, and return its path (or None on failure).
 
-    The XML at `xml_path` defines a single FastRelax mover with
-    default_repeats=1 — one ramped-repulsive cycle of repack +
-    minimisation.  Bennett 2023's de novo binder calibration used the
-    same setting, so the resulting ΔΔG values are directly comparable
-    to its −30 REU threshold.
+    The XML at `xml_path` defines one Cartesian FastRelax mover scored
+    with ref2015_cart.  The repeat count is NOT in the XML — this build
+    rejects `default_repeats` as an attribute, so it is passed below as
+    the `-relax:default_repeats 1` command-line option.  1 repeat
+    matches Bennett 2023's de novo binder calibration, keeping the ΔΔG
+    values comparable to its −30 REU threshold.
 
-    Failures (binary missing, non-zero exit, no output PDB, timeout)
-    are returned as a list of token-style strings the caller appends
-    to `rosetta_failures` in the emitted CSV.
+    Failures (non-zero exit, no output PDB, timeout) come back as a
+    list of token-style strings the caller appends to
+    `rosetta_failures` in the emitted CSV.
     """
     failures: List[str] = []
 
-    # rosetta_scripts emits a PDB named after the input with a numeric
-    # suffix per nstruct.  -out:no_nstruct_label suppresses the suffix
-    # so we get a deterministic output filename.
+    # rosetta_scripts appends a per-nstruct numeric suffix by default.
+    # -out:no_nstruct_label suppresses that and -out:suffix adds a fixed
+    # _0001, so the output filename is deterministic.
     out_pdb = workdir / f"{input_pdb.stem}_0001.pdb"
     cmd = [
         rosetta_scripts_bin,
@@ -175,21 +172,17 @@ def _run_fast_relax(
         "-out:no_nstruct_label",
         "-nstruct", "1",
         "-ignore_unrecognized_res",
-        # FastRelax repeat count.  In Rosetta 2025.37 the FastRelax
-        # XML mover does NOT accept `default_repeats` as an attribute
-        # (the schema rejects it); the canonical place to set the
-        # repeat count is here as a top-level option.  1 repeat
-        # matches Bennett 2023's de novo binder calibration so the
-        # resulting ΔΔG values are directly comparable to that
-        # paper's −30 REU threshold.
+        # FastRelax repeat count.  Rosetta 2025.37's schema rejects
+        # `default_repeats` as an XML mover attribute, so the only
+        # place to set it is here as a top-level option.
         "-relax:default_repeats", "1",
         "-mute", "all",
     ]
 
     try:
-        # Generous timeout: 1-repeat FastRelax on a ~150-residue
-        # complex is typically 2-4 min, but cold-start CPU contention
-        # on the cluster can push it past 10.
+        # 1-repeat FastRelax on a ~150-residue complex takes 2-4 min.
+        # Cold-start CPU contention on the cluster can push it past 10,
+        # hence the generous 15-minute cap.
         result = subprocess.run(
             cmd, capture_output=True, text=True, timeout=900,
         )
@@ -198,13 +191,11 @@ def _run_fast_relax(
         return None, failures
 
     if result.returncode != 0:
-        # Rosetta writes its diagnostic messages to STDOUT, not stderr
-        # — even -mute all leaves the [ ERROR ] block on stdout.  When
-        # we lose stderr we lose nothing useful; when we lose stdout
-        # (which is what the v9 instrumentation did) we lose the entire
-        # error message and have to dig through ROSETTA_CRASH.log.
-        # Echo BOTH stream's last lines so future failures are
-        # diagnosable from .command.err alone.
+        # Rosetta writes diagnostics to STDOUT, not stderr.  Even
+        # -mute all leaves the [ ERROR ] block on stdout.  An earlier
+        # version echoed stderr only, lost the whole error message, and
+        # left ROSETTA_CRASH.log as the only clue.  Echo the tail of
+        # both streams so failures are diagnosable from .command.err.
         for ln in (result.stdout or "").splitlines()[-25:]:
             print(f"[relax-stdout] {ln}", file=sys.stderr)
         for ln in (result.stderr or "").splitlines()[-10:]:
@@ -239,12 +230,11 @@ def _run_interface_analyzer(
     """Run InterfaceAnalyzer on the relaxed PDB and return
     (sc, rosetta_ddg, failures).
 
-    The relaxed input means the bound-state geometry is already on
-    Rosetta's energy surface, so the bound-state score is meaningful.
-    `pack_separated` and `pack_input` ensure the unbound and bound
-    sidechains are packed before scoring (defensive: should be no-op
-    on the relaxed PDB but prevents drift if the input ever bypassed
-    relax).
+    The relaxed input is already on Rosetta's energy surface, so the
+    bound-state score is meaningful.  `pack_separated` and
+    `pack_input` pack the unbound and bound sidechains before scoring.
+    Both are defensive.  They should be no-ops on a relaxed PDB, but
+    they stop the numbers drifting if an input ever bypasses relax.
     """
     failures: List[str] = []
     score_path = workdir / "score.sc"

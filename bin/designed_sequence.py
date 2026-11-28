@@ -4,8 +4,7 @@ designed_sequence.py
 DesignedSequence — one MPNN-designed sequence overlaid on one
 DesignedBackbone.
 
-Per Phase 4 spec §2.7.  Tier 4 type — depends on DesignedBackbone
-(Tier 3) and PositionSet (Tier 1).
+Imports DesignedBackbone and PositionSet.
 """
 
 from __future__ import annotations
@@ -53,10 +52,10 @@ class DesignedSequence:
             raise TypeError("designed_residues must be a string")
         if not isinstance(self.native_residues, str):
             raise TypeError("native_residues must be a string")
-        # Length sanity check: corrected_receptor should be at least
-        # as long as the contig's receptor length.  Doesn't have to
-        # match exactly because the corrected receptor may include
-        # trailing native residues outside the contig region.
+        # Length sanity check.  corrected_receptor must be at least as
+        # long as the contig's receptor length.  It need not match
+        # exactly because the corrected receptor may include trailing
+        # native residues outside the contig region.
         expected_min = self.backbone.receptor_length()
         if len(self.corrected_receptor) < expected_min:
             raise ValueError(
@@ -89,15 +88,15 @@ class DesignedSequence:
         for positions where the designed residue differs from the
         native residue.
 
-        Operates on the design-region slice only; positions outside
+        Operates on the design-region slice only.  Positions outside
         the design region are by construction equal to native.
-        Position numbers are in the `designed` frame (1-based along
-        the corrected receptor) of the de novo segment(s).
+        Position numbers are 1-based in the `designed` frame along the
+        corrected receptor.
         """
         out: List[Tuple[int, str, str]] = []
         dr_positions = self.design_region().as_sorted_list()
         # Walk the parallel slices.  Pipe-joined inputs are flattened
-        # to single strings for the per-position comparison.
+        # to single strings before the per-position comparison.
         designed = self.designed_residues.replace("|", "")
         native = self.native_residues.replace("|", "")
         n = min(len(designed), len(native), len(dr_positions))

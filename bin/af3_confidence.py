@@ -4,26 +4,24 @@ af3_confidence.py
 AF3ConfidenceAggregate — the aggregated structural + confidence summary
 from ONE AF3-no-MSA call.
 
-Unlike Boltz (one prediction → one PDB), AF3 emits multiple per
-seed × diffusion sample.  This type wraps the aggregate across that
-set: best / mean ra_eff vs ground truth, best / mean iptm, and the
-diagnostic count of predictions whose interface placement passes the
+Boltz gives one prediction per PDB.  AF3 instead emits one per
+seed × diffusion sample, so this type aggregates across that set.  It
+reports best and mean ra_eff against ground truth, best and mean iptm,
+and the count of predictions whose interface placement passes the
 threshold.
 
-The logic is lifted verbatim from `bin/parse_af3_output.py` (the
-existing CLI that this type supersedes at higher migration tiers).
-Helpers (`_chain_ca_coords`, `_receptor_aligned_effector_rmsd`,
-`_read_confidence`) move here as private module-level functions; the
-existing CLI keeps working unchanged until a later tier migrates it.
+`bin/parse_af3_output.py` is the CLI over this type.  It imports
+AF3ConfidenceAggregate and adds the one column this class does not
+produce, `af3_nomsa_n_correct_interface`, which needs a thresholds
+object the class takes only as a method argument.
 
-Tier 0 scope limitation (intentional, per Phase 4 spec §2.5):
-- `best_prediction() -> ProteinStructurePrediction` and
-  `all_predictions() -> list[ProteinStructurePrediction]` are deferred
-  to Tier 2+ when ProteinStructurePrediction exists.  This type can
-  give you the aggregate numbers; not yet the structures themselves.
+Scope limitation: this class exposes aggregate numbers, not the
+structures behind them.  `ProteinStructurePrediction` exists in
+`bin/protein_structure_prediction.py`, but no `best_prediction()` or
+`all_predictions()` accessor was ever added here.  Use the `cif_paths`
+property to reach the underlying files.
 
-Tier 0 type — uses gemmi (already a pipeline dependency) but no
-upstream dependencies on other Phase 4 types.
+Imports numpy and gemmi, and no other module in bin/.
 """
 
 from __future__ import annotations
@@ -36,19 +34,18 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 
 # ═════════════════════════════════════════════════════════════════════════
-# Private helpers — lifted from bin/parse_af3_output.py
+# Private helpers
 # ═════════════════════════════════════════════════════════════════════════
 
 
 def _chain_ca_coords(structure, chain_id: str) -> List[np.ndarray]:
-    """Return an ordered list of Cα (x, y, z) coords for the given
-    chain, in the order they appear in the structure.
+    """Return Cα (x, y, z) coords for the given chain, in the order they
+    appear in the structure.
 
-    Position-paired (not residue-number-paired) because different
-    sources use different numbering schemes — see the docstring of the
-    original `parse_af3_output._chain_ca_coords` for the full
-    rationale (AF3 emits per-chain 1-based; RFDiffusion / Boltz / our
-    cleaned ground-truth PDBs use continuous numbering across chains).
+    Callers pair these by position, not by residue number, because the
+    sources number residues differently.  AF3 emits per-chain 1-based
+    numbering.  RFDiffusion, Boltz and the cleaned ground-truth PDBs
+    number continuously across chains.
     """
     coords: List[np.ndarray] = []
     for model in structure:
@@ -148,12 +145,12 @@ def _read_confidence(cif_path: Path) -> Tuple[Optional[float], Optional[str]]:
 class AF3ConfidenceAggregate:
     """The aggregated AF3-no-MSA summary for one survivor.
 
-    Walks the AF3 output tree, computes ra_eff against the supplied
+    Walks the AF3 output tree and computes ra_eff against the supplied
     ground-truth PDB for every (seed × diffusion-sample) prediction,
-    aggregates to best / mean / count-passing.
+    then aggregates to best, mean and count-passing.
 
-    Lazy: the walk + per-prediction computation happens on first
-    access to any aggregate property.  Subsequent accesses use cache.
+    The walk happens on first access to any aggregate property, and
+    the result is cached for later accesses.
 
     Construction:
         AF3ConfidenceAggregate.from_output_dir(
@@ -163,8 +160,8 @@ class AF3ConfidenceAggregate:
             effector_chain="B",
         )
 
-    Direct construction with the parsed values is also supported (for
-    tests, and for cases where the values are already cached on disk).
+    `__init__` takes the same arguments.  Tests populate the private
+    caches directly to supply parsed values.
     """
 
     def __init__(
@@ -178,7 +175,7 @@ class AF3ConfidenceAggregate:
         self._ground_truth = Path(ground_truth)
         self._receptor_chain = receptor_chain
         self._effector_chain = effector_chain
-        # Lazy cache populated by _ensure_parsed.
+        # Caches populated by _ensure_parsed.
         self._parsed = False
         self._ra_effs: List[float] = []
         self._iptms: List[float] = []
@@ -217,16 +214,17 @@ class AF3ConfidenceAggregate:
 
     @property
     def failures(self) -> List[str]:
-        """Comma-separated-style failure tags from parsing, e.g.
-        ['no_cif_files_found', 'per_prediction_rmsd_errors:2']."""
+        """Failure tags from parsing, e.g.
+        ['no_cif_files_found', 'per_prediction_rmsd_errors:2'].
+        `to_summary_row` joins them with commas for the CSV."""
         self._ensure_parsed()
         return list(self._failures)
 
     @property
     def cif_paths(self) -> List[Path]:
-        """All CIF paths that yielded a usable ra_eff (parallel to
-        ra_effs).  Used by best_prediction() and all_predictions() at
-        Tier 2+ to construct ProteinStructurePrediction instances."""
+        """All CIF paths that yielded a usable ra_eff, in the same order
+        as the ra_eff values.  This is the only route from the
+        aggregate back to the individual predictions."""
         self._ensure_parsed()
         return list(self._cif_paths)
 
@@ -240,8 +238,10 @@ class AF3ConfidenceAggregate:
         return sum(1 for r in self._ra_effs if r < cutoff)
 
     def af3_disagrees(self, thresholds) -> bool:
-        """True iff best_ra_eff is at or above the disagreement
-        threshold.  Diagnostic; AF3 is NOT in the orthogonal gate."""
+        """True iff best_ra_eff is at or above
+        thresholds.orthogonal_af3_ra_max.  Returns False when there is
+        no data.  Diagnostic only.  AF3 is NOT in the orthogonal gate,
+        which is Sc + BSA + ΔΔG."""
         br = self.best_ra_eff
         if br is None:
             return False  # no data → no disagreement signal
@@ -250,8 +250,11 @@ class AF3ConfidenceAggregate:
     # ── Output shape ─────────────────────────────────────────────────
 
     def to_summary_row(self, seq_name: str) -> Dict[str, str]:
-        """Match the schema produced by bin/parse_af3_output.py today,
-        for drop-in compatibility with downstream CSV consumers."""
+        """The six `af3_nomsa_*` columns this class can fill on its own.
+
+        bin/parse_af3_output.py writes these plus
+        `af3_nomsa_n_correct_interface`, which it adds itself because
+        that count needs a thresholds object."""
         return {
             "seq_name": seq_name,
             "af3_nomsa_best_ra_eff":
@@ -289,9 +292,9 @@ class AF3ConfidenceAggregate:
             self._failures.append(f"af3_output_dir_missing:{self._af3_output_dir}")
             return
 
-        # Canonical AF3-v2 layout: seed-N_sample-M/model.cif.  Fall back
-        # to a broader glob for older layouts, excluding the top-level
-        # <name>_model.cif duplicate.
+        # Canonical AF3-v2 layout is seed-N_sample-M/model.cif.  Older
+        # layouts fall back to a broader glob, which excludes the
+        # top-level <name>_model.cif duplicate.
         cifs = sorted(
             self._af3_output_dir.rglob("seed-*_sample-*/model.cif")
         )

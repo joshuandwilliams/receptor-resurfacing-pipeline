@@ -5,7 +5,7 @@ derive_design_region.py
 Extract the ProteinMPNN-designed residue positions for a given
 RFDiffusion design from `rfdiffusion_metrics.json`, in the 1-based
 positional-index coordinate system used by
-`boltz2_iterate_steering.py compute-final-metrics
+`the negative-steering engine's compute-final-metrics stage
 --design-region-positions-file`.
 
 Background

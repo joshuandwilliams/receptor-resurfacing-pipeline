@@ -7,21 +7,21 @@ Render the five diagnostic plots from a completed POSE_SOLVE run:
   1. pose_loss_breakdown.png       — per-term loss contributions at the
                                      final pose (validity, dist_upper,
                                      dist_lower, excl, interp,
-                                     pair_sc_clash) with weight
-                                     constants annotated.
-  2. pose_pair_distances.png       — one whisker row per pair constraint
-                                     showing [min, max] window + achieved
-                                     distance.
-  3. pose_interface_dashboard.png  — 4-panel interface metrics summary
-                                     (BSA, contact-distance histogram,
+                                     pair_sc_clash), each bar annotated
+                                     with its weight constant.
+  2. pose_pair_distances.png       — one row per pair constraint, showing
+                                     the [min_d, max_d] window and the
+                                     achieved distance.
+  3. pose_interface_dashboard.png  — 4-panel interface summary (BSA,
+                                     contact-distance histogram,
                                      gap-index, residue composition).
-  4. pose_restart_loss_curve.png   — per-restart loss + best-so-far
-                                     trajectory; convergence diagnostic.
-  5. pose_contig_comparison.png    — three contig options (gap-0, gap-1,
-                                     gap-2) shown as residue bars so the
-                                     user can pick the right join_gap.
+  4. pose_restart_loss_curve.png   — per-restart loss plus best-so-far.
+                                     Convergence diagnostic.
+  5. pose_contig_comparison.png    — the three join-gap contig options
+                                     (0, 1, 2) as residue bars, so the
+                                     user can pick a join_gap.
 
-Sized for sparse data: 2-4 pairs, single solved pose.
+Sized for sparse data: 2-4 pairs, one solved pose.
 """
 from __future__ import annotations
 
@@ -66,8 +66,9 @@ PALETTE = {
 # ── Plot 1: loss breakdown ──────────────────────────────────────────────────
 
 def plot_loss_breakdown(results: Dict, out_path: Path) -> None:
-    """Six horizontal bars (one per penalty term) with the weight
-    constant annotated at the end of each bar.  Drops the 'total' key.
+    """One horizontal bar per penalty term present in `loss_breakdown`,
+    annotated with that term's weight constant.  'total' goes in the
+    title rather than becoming a bar.
     """
     breakdown = results.get("loss_breakdown") or {}
     weights = results.get("loss_weights") or {}
@@ -104,7 +105,6 @@ def plot_loss_breakdown(results: Dict, out_path: Path) -> None:
     else:
         ax.set_xlim(0, max(values) * 1.25)
 
-    # Annotate value + weight on each bar.
     for yi, term, v in zip(y, terms, values):
         wk = weight_key.get(term, "?")
         wv = weights.get(wk, "?")
@@ -127,7 +127,6 @@ def plot_pair_distances(results: Dict, binder_chain: str, target_chain: str,
         _empty(out_path, "No pair results to plot.")
         return
 
-    # Tight rows but readable.
     fig_h = max(2.0, 0.6 * len(pairs) + 1.2)
     fig, ax = plt.subplots(figsize=(6.5, fig_h))
 
@@ -141,10 +140,8 @@ def plot_pair_distances(results: Dict, binder_chain: str, target_chain: str,
         achieved = pr["achieved_d"]
         satisfied = pr.get("satisfied", lo <= achieved <= hi)
 
-        # Shaded allowed window
         ax.barh(i, hi - lo, left=lo, height=0.55,
                 color=PALETTE["window"], edgecolor="#3B82F6", linewidth=0.7)
-        # Achieved marker
         ax.scatter(achieved, i, marker="D", s=80,
                    color=PALETTE["satisfied"] if satisfied else PALETTE["unsatisfied"],
                    edgecolors="black", linewidths=0.6, zorder=5)
@@ -155,16 +152,15 @@ def plot_pair_distances(results: Dict, binder_chain: str, target_chain: str,
     ax.invert_yaxis()
     ax.grid(axis="x", alpha=0.3, linestyle=":")
 
-    # Reference line at typical β-strand CA–CA (~5 Å) — annotate via
-    # the x-axis transform so the label sits at the bottom of the axes
-    # regardless of how many rows are stacked above it.
+    # Reference line at typical β-strand CA–CA (~5 Å).  The label uses
+    # the x-axis transform so it stays at the bottom of the axes however
+    # many rows stack above it.
     ax.axvline(5.0, color=PALETTE["reference"], linestyle="--",
                linewidth=0.8, alpha=0.7)
     ax.text(5.05, 0.02, "β-strand ~5 Å",
             transform=ax.get_xaxis_transform(),
             fontsize=7, color=PALETTE["reference"], va="bottom")
 
-    # Legend
     legend = [
         mpatches.Patch(facecolor=PALETTE["window"], edgecolor="#3B82F6",
                        label="Allowed window"),
@@ -188,9 +184,9 @@ def plot_pair_distances(results: Dict, binder_chain: str, target_chain: str,
 def plot_interface_dashboard(metrics_list: List[Dict],
                              binder_chain: str, target_chain: str,
                              out_path: Path) -> None:
-    """Single-pose 4-panel summary.  metrics_list is biopython-shaped:
-    a list with one entry per PDB (pose_interface_metrics.py emits a
-    list).  We render the first entry.
+    """Single-pose 4-panel summary.  `metrics_list` is the JSON list
+    pose_interface_metrics.py emits, one entry per input PDB.  Only the
+    first entry is rendered.
     """
     if not metrics_list:
         _empty(out_path, "No interface metrics to plot.")
@@ -216,12 +212,11 @@ def plot_interface_dashboard(metrics_list: List[Dict],
     ax.set_ylabel("BSA (Å²)", fontsize=9)
     ax.set_title("(a) Buried surface area", fontsize=9.5)
     ax.grid(axis="y", alpha=0.3, linestyle=":")
-    # Annotate values above each bar.
     for xi, v in zip(x, vals):
         ax.text(xi, v + max(vals, default=1) * 0.02, f"{v:.0f}",
                 ha="center", va="bottom", fontsize=8.5)
-    # Reference dashed line — typical native interface BSA (~2700 Å² for the
-    # validated AvrPikF pose, per pipeline_notes16 §3.1).
+    # Reference dashed line at the validated AvrPikF pose's interface BSA
+    # (~2700 Å², notes/pipeline_notes/pipeline_notes16.md).
     ax.axhline(2700, color=PALETTE["reference"], linestyle="--",
                linewidth=0.8, alpha=0.7)
     ax.text(len(bars) - 0.4, 2700, "  native ≈2700 Å²",
@@ -264,7 +259,8 @@ def plot_interface_dashboard(metrics_list: List[Dict],
     ax = axes[1, 0]
     gi = m.get("shape_complementarity_proxy", {}).get("gap_index_mean_A")
     gi = float(gi) if gi is not None and not np.isnan(gi) else None
-    # Reference: AF3-native PikF gap-index = 3.41 Å (pipeline_notes16 §3.1).
+    # Reference: AF3-native PikF gap-index = 3.41 Å
+    # (notes/pipeline_notes/pipeline_notes16.md).
     native = 3.41
     if gi is not None:
         ax.barh([0], [gi], height=0.35,
@@ -337,7 +333,8 @@ def plot_restart_loss_curve(csv_path: Path, out_path: Path) -> None:
 
     fig, ax = plt.subplots(figsize=(8, 3.8))
     if len(restarts) == 1:
-        # Single point (DE path) — just show the value.
+        # One row means the differential-evolution path ran.  Show the
+        # single value rather than a curve.
         ax.scatter(restarts, losses, s=80, color="#2563EB",
                    edgecolors="black", linewidths=0.5, label="DE final loss")
         ax.set_xlim(-0.5, 0.5)
@@ -373,16 +370,15 @@ def plot_restart_loss_curve(csv_path: Path, out_path: Path) -> None:
 
 def plot_contig_comparison(results: Dict, posed_pdb: Path,
                            binder_chain: str, out_path: Path) -> None:
-    """Three stacked rows showing the three contig options (no joining,
-    gap ≤ 1, gap ≤ 2) as residue bars over the binder sequence.  Fixed
-    residues grey, design-region residues orange.
+    """One row per contig option in `results["contigs"]` — pose_solver.py
+    emits join-gap 0, 1 and 2.  Each row is a residue bar over the binder
+    sequence, fixed residues grey and design-region residues orange.
     """
     contigs = results.get("contigs") or {}
     if not contigs:
         _empty(out_path, "No contig options to compare.")
         return
 
-    # Get the full binder residue list from the posed PDB.
     binder_resnums = sorted({
         int(line[22:26])
         for line in posed_pdb.read_text().splitlines()
@@ -392,8 +388,7 @@ def plot_contig_comparison(results: Dict, posed_pdb: Path,
         _empty(out_path, f"No chain {binder_chain} residues in {posed_pdb.name}.")
         return
 
-    # Parse the design region for each label.  The contig key stores a
-    # `design_region` field like "33-49, 69-78".
+    # Each contig entry stores a `design_region` field like "33-49, 69-78".
     rows = []
     for label, info in contigs.items():
         dr_str = info.get("design_region", "")
@@ -411,7 +406,6 @@ def plot_contig_comparison(results: Dict, posed_pdb: Path,
 
     fig, ax = plt.subplots(figsize=(8, max(2.5, 0.55 * len(rows) + 1.2)))
     n_res = len(binder_resnums)
-    # Draw each row as a series of unit-width coloured cells.
     for i, (label, dr, n_design) in enumerate(rows):
         for j, rn in enumerate(binder_resnums):
             colour = PALETTE["design"] if rn in dr else PALETTE["fixed"]
@@ -427,7 +421,7 @@ def plot_contig_comparison(results: Dict, posed_pdb: Path,
     ax.set_yticklabels([r[0] for r in rows], fontsize=9)
     ax.invert_yaxis()
 
-    # X-ticks: every 10th residue.
+    # Roughly 12 x-ticks whatever the binder length.
     step = max(1, n_res // 12)
     ticks = list(range(0, n_res, step))
     if ticks[-1] != n_res - 1:

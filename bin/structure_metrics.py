@@ -3,37 +3,40 @@ structure_metrics.py
 --------------------
 Geometric / structural primitives shared across the pipeline.
 
-Consolidates inline centre-of-mass + clash-counting code that previously
-lived only in ``rfdiffusion_filter.py`` so other consumers can reuse
-the same primitives without duplication.
+Holds the centre-of-mass and clash-counting code that used to live
+inline in ``rfdiffusion_filter.py``, which now imports it from here.
 
 Contract
 ========
-- All functions are pure (no globals, no I/O side effects beyond reading
-  the path passed in).
+- All functions are pure.  No globals, and no I/O beyond reading the
+  path passed in.
 - Functions that take a PDB read the first model only and consider ATOM
-  records exclusively (HETATMs ignored).
-- Insertion codes are NOT distinguished — two residues with the same
-  resseq but different icodes collapse into one CA pick.  This matches
-  rfdiffusion_filter's pre-existing behaviour; refine here if a future
-  consumer needs icode-aware logic.
+  records exclusively, so HETATMs are ignored.
+- The coordinate readers key residues on resseq alone, so two residues
+  sharing a resseq with different insertion codes collapse into one
+  pick.  This matches rfdiffusion_filter's pre-existing behaviour.
+  ``get_chain_sequence`` is the exception and keys on (resnum, icode).
 
 Public API
 ==========
-- ``centroid(coords)`` — numpy.mean along axis 0 with NaN handling.
+- ``centroid(coords)`` — mean along axis 0.  Raises ValueError on empty
+  input or on any non-finite coordinate, rather than returning NaN.
 - ``centroid_distance(c1, c2)`` — Euclidean distance between two centroids.
 - ``read_chain_ca_coords(pdb_path, chain_id)`` — Nx3 numpy array of CA
   coordinates for one chain, in residue order.
-- ``chain_centre_of_mass(pdb_path, chain_id)`` — convenience composing the
-  above two.  Returns ``None`` if the chain has no CAs.
-- ``chain_com_distance(pdb_path, chain_a, chain_b)`` — convenience composing
-  the above.
+- ``chain_centre_of_mass(pdb_path, chain_id)`` — composes the above two.
+  Returns ``None`` if the chain has no CAs.
+- ``chain_com_distance(pdb_path, chain_a, chain_b)`` — composes the above.
 - ``read_chain_heavy_atoms(pdb_path, chain_id)`` — list of
   ``(resnum, atom_name, x, y, z)`` for all non-hydrogen ATOM records.
-- ``clash_count(pdb_path, chain_a, chain_b, design_region, cutoff=2.0)`` —
-  returns ``(in_design, outside_design)`` heavy-atom pair counts under the
-  cutoff.  ``design_region`` is a set of receptor residue numbers; a pair
-  counts as "in design" iff EITHER atom belongs to a residue in that set.
+- ``clash_count(pdb_path, chain_a, chain_b, design_region_residues_a,
+  cutoff=2.0)`` — ``(in_design, outside_design)`` heavy-atom pair counts
+  under the cutoff.  A pair counts as "in design" when its chain_a
+  residue number is in ``design_region_residues_a``.
+- ``get_chain_sequence(pdb_path, chain_id)`` — one-letter sequence.
+- ``find_contact_residues_heavy(pdb_path, receptor_chain,
+  effector_chain, cutoff=5.0)`` — 0-based positional indices of
+  receptor residues contacting the effector.
 """
 
 from __future__ import annotations
@@ -49,8 +52,8 @@ import numpy as np
 def centroid(coords: np.ndarray) -> np.ndarray:
     """Return ``coords.mean(axis=0)`` as a 1D length-3 array.
 
-    Empty coords or coords containing NaN raise ValueError so callers
-    don't silently get NaN centroids and propagate them.
+    Empty coords, or coords containing NaN or Inf, raise ValueError.
+    Otherwise callers would silently propagate a NaN centroid.
     """
     if coords.size == 0:
         raise ValueError("centroid: empty coordinate array")
@@ -70,8 +73,8 @@ def centroid_distance(c1: np.ndarray, c2: np.ndarray) -> float:
 def _iter_atom_lines(pdb_path: Path) -> Iterable[str]:
     """Yield ATOM lines from the first model in the PDB.
 
-    Stops at ENDMDL so multi-model PDBs (e.g. NMR ensembles, docking
-    cluster outputs) only emit the first model.
+    Stops at ENDMDL, so multi-model files such as NMR ensembles or
+    docking cluster outputs emit only the first model.
     """
     with open(pdb_path) as fh:
         for line in fh:
@@ -116,9 +119,9 @@ def chain_centre_of_mass(
     """Centre of mass (CA-only) for one chain.  Returns ``None`` if the
     chain has no CAs in the PDB.
 
-    Note: this is geometric centroid of CAs, not mass-weighted COM.  For
-    the use cases here (compare two domains, distance between chains)
-    the distinction doesn't matter and CA-only is robust to side-chain
+    This is the geometric centroid of the CAs, not a mass-weighted COM.
+    For comparing two domains or measuring the distance between chains
+    the difference does not matter, and CA-only is robust to side-chain
     differences across redesigns.
     """
     coords = read_chain_ca_coords(Path(pdb_path), chain_id)
@@ -176,20 +179,20 @@ def clash_count(
     design_region_residues_a: Set[int],
     cutoff: float = 2.0,
 ) -> Tuple[int, int]:
-    """Count heavy-atom pairs (one atom from chain_a, one from chain_b)
-    within ``cutoff`` Å of each other.  Splits the count by whether the
-    chain_a residue is in the design region.
+    """Count heavy-atom pairs within ``cutoff`` Å, one atom from chain_a
+    and one from chain_b.  Splits the count by whether the chain_a
+    residue is in the design region.
 
     Returns ``(clashes_in_design_region, clashes_outside_design_region)``.
 
     A pair counts as "in design region" iff the chain_a (receptor)
     residue number is in ``design_region_residues_a``.  Chain B atoms
-    don't have a notion of design region at this stage.
+    have no notion of design region at this stage.
 
-    Note: this uses a naive O(N*M) loop.  For typical 2-chain interface
-    PDBs (one receptor ~100 residues × one effector ~100 residues)
-    that's ~10^4 atom pairs per chain pair — fast enough.  If a future
-    consumer has much larger inputs, swap in a KDTree.
+    Uses a naive O(N*M) loop.  Typical 2-chain interface PDBs are one
+    ~100-residue receptor against one ~100-residue effector, so ~10^4
+    atom pairs, which is fast enough.  Swap in a KDTree if a future
+    consumer has much larger inputs.
     """
     atoms_a = read_chain_heavy_atoms(Path(pdb_path), chain_a)
     atoms_b = read_chain_heavy_atoms(Path(pdb_path), chain_b)
@@ -214,26 +217,29 @@ def clash_count(
 
 
 # ── Sequence and interface contacts ──────────────────────────────────
-# Both functions below were this repository's only reason to import from
-# bin/boltz2_negative_steering.py and bin/compute_metrics.py, which belong to
-# the negative-steering engine and are installed separately.  They are
-# reimplemented here on this module's own PDB reader rather than copied, so
-# nothing in this repository depends on engine internals.
+# Both functions below were this repository's only reason to reach into the
+# negative-steering engine, which is a separate repository installed
+# separately.  They are reimplemented here on this module's own PDB reader
+# rather than copied across, so nothing in this repository depends on engine
+# internals.
 #
-# tests/characterization/test_structure_metrics_ported.py checks both against
-# the engine's originals on every reference PDB in the test fixtures.
+# tests/characterization/test_structure_metrics_ported.py asserts the
+# properties the pipeline depends on, on the tracked reference structures.  The
+# engine's own copies were compared directly before they were deleted.  80 of
+# 80 chain sequences and 120 of 120 contact sets agreed, the latter over three
+# cutoffs on 40 structures.
 
 def get_chain_sequence(pdb_path: Path, chain_id: str) -> str:
     """One-letter sequence of `chain_id`, in the order the file lists it.
 
     One residue per (resnum, icode), taken from the first ATOM record of each,
-    so an altloc does not duplicate a position.  A residue whose three-letter
-    name is not standard becomes 'X', which keeps the sequence the same length
-    as the residue list and so keeps every positional index downstream valid.
+    so an altloc does not duplicate a position.  A non-standard three-letter
+    name becomes 'X', keeping the sequence the same length as the residue list
+    and so keeping every downstream positional index valid.
 
     Raises ValueError when the chain is absent, naming the chains that are
-    present, because the alternative is a silent empty string that reads as an
-    empty chain.
+    present.  The alternative is a silent empty string that reads as an empty
+    chain.
     """
     from contig_utils import THREE_TO_ONE
 
@@ -269,14 +275,15 @@ def find_contact_residues_heavy(
     """0-based positional indices of receptor residues contacting the effector.
 
     A contact is any heavy atom of the residue within `cutoff` angstroms of any
-    heavy atom of the effector chain.  Hydrogens are excluded by
-    read_chain_heavy_atoms, which is why the cutoff can be as tight as 5 A.
+    heavy atom of the effector chain.  read_chain_heavy_atoms drops hydrogens,
+    so 5 Å is a heavy-atom-to-heavy-atom distance.
 
-    The index is positional within the receptor chain, counted over
-    (resnum, icode) in file order, so it lines up with get_chain_sequence above
-    and with the design-region and true-interface files, which are also
-    positional.  Returning residue numbers instead would break on any structure
-    that does not start at 1.
+    The index is positional within the receptor chain, counted over distinct
+    resnums in file order.  That matches the design-region and true-interface
+    files, which are also positional.  Returning residue numbers instead would
+    break on any structure that does not start at 1.  Note that this walk
+    ignores insertion codes, whereas get_chain_sequence above keys on
+    (resnum, icode), so the two agree only on structures without icodes.
     """
     import numpy as _np
 

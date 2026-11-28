@@ -57,7 +57,7 @@ def parse_args():
 
 def parse_rosetta_scorefile(path):
     """
-    Parse a Rosetta score file into a list of dicts.
+    Parse a Rosetta score file into (header_fields, [row_dict, ...]).
 
     Rosetta score files have the format:
         SEQUENCE: ...
@@ -76,7 +76,8 @@ def parse_rosetta_scorefile(path):
                 continue
             if line.startswith("SCORE:") and header is not None:
                 fields = line.split()[1:]
-                # Rosetta sometimes has fewer fields than headers; zip handles it
+                # Rosetta sometimes writes fewer fields than headers.
+                # zip stops at the shorter of the two, which is what we want.
                 data = dict(zip(header, fields))
                 results.append(data)
     return header, results
@@ -148,7 +149,6 @@ def main():
         # InterfaceAnalyzer with -out:no_nstruct_label produces one row
         row = results[0]
 
-        # Extract metrics
         metrics = {}
         for key in metric_keys:
             metrics[key] = safe_float(row.get(key))

@@ -8,10 +8,14 @@ driven by pair CA-CA contact constraints.
 Objective (strict priority):
   a) Pair validity  : pair residues must not be inside the opposite protein.
                       Violation → astronomically large penalty (pose is invalid).
-  b) Pair distances : all pair CA-CA distances must be < max_pair_distance.
+  b) Pair distances : all pair CA-CA distances must fall in
+                      [min_pair_distance, max_pair_distance].
                       Violation → very large quadratic penalty.
-  c) Interpenetration: minimise depth of ALL CA atoms inside the opposite hull.
-                      Small coefficient; only meaningful once a+b are satisfied.
+  c) Exclusions, and heavy-atom clashes between paired sidechains.
+                      Also large quadratic penalties.
+  d) Interpenetration: minimise hull depth of the pair residues' CA atoms,
+                      or of every CA atom with --global-interp.
+                      Small coefficient. Only meaningful once a-c hold.
 
 Surface detection uses the convex hull of each protein's CA positions.
 
@@ -43,11 +47,11 @@ from scipy.spatial.transform import Rotation
 
 # ── Objective weights ─────────────────────────────────────────────────────────
 W_VALIDITY = 1e6   # pair residue buried deep inside opposite hull → invalid pose
-VALID_TOL  = -1.0  # Å — pair residue must be this far OUTSIDE the opposite hull (negative = outside)
+VALID_TOL  = -1.0  # Å — pair residue must be |VALID_TOL| Å OUTSIDE the opposite hull (negative = outside)
 W_DIST     = 1e4   # penalty for pair CA-CA > max_pair_distance
 W_LOWER    = 1e4   # penalty for pair CA-CA < min_pair_distance (too close to be realistic)
 W_EXCL     = 1e4   # penalty for exclusion pair CA-CA < min_excl_distance (too close)
-W_INTERP   = 10.0  # overall CA interpenetration depth — overridden by --interp-weight
+W_INTERP   = 10.0  # CA interpenetration depth. Documents the default; --interp-weight is what _obj uses
 W_PAIR_SC_CLASH = 1e4  # heavy-atom clash between sidechains of paired residues
 PAIR_SC_CLASH_TOL = 2.0  # Å — paired sidechain heavy atoms within this distance count as a clash
 
@@ -232,7 +236,7 @@ def hull_depths(points: np.ndarray, hull_equations: np.ndarray) -> np.ndarray:
 
 def hull_signed_depths(points: np.ndarray, hull_equations: np.ndarray) -> np.ndarray:
     """Signed depth: negative = outside (how far), positive = inside (how deep).
-    Used for validity check — negative values are good, positive are bad."""
+    Used for the validity check, where negative is good."""
     scores = points @ hull_equations[:, :3].T + hull_equations[:, 3]
     return -scores.max(axis=1)
 
@@ -270,9 +274,10 @@ def _obj(params: np.ndarray,
     # checking R^T(binder[i]-t) inside the original target hull.
     b_in_t_frame = (R.T @ (b_arr - t).T).T
 
-    # Pair validity: penalise unless pair residue is at least |VALID_TOL| Å OUTSIDE opposite hull.
-    # Signed depth: negative = outside (good), positive = inside (bad).
-    # Penalty triggers when signed_depth > VALID_TOL (e.g. VALID_TOL=-2 means must be 2 Å outside).
+    # Pair validity: penalise unless the pair residue is at least
+    # |VALID_TOL| Å OUTSIDE the opposite hull.  Signed depth is negative
+    # outside (good) and positive inside (bad), so the penalty triggers
+    # when signed_depth > VALID_TOL.
     sdepth_b = hull_signed_depths(b_in_t_frame[pair_b_idx], t_hull_eq)
     sdepth_t = hull_signed_depths(target_t[pair_t_idx], b_hull_eq)
     validity_loss = W_VALIDITY * float(
@@ -414,9 +419,9 @@ def solve(binder_ca: dict, target_ca: dict,
                 excl_b_idx, excl_t_idx, excl_min_d, global_interp, interp_weight,
                 b_pair_sc_arr, t_pair_sc_arr, pair_sc_offsets, pair_sc_clash_cutoff)
 
-    # Smart initialisation: for every restart, start with the target's pair
-    # residue centroid placed near the binder's pair residue centroid.
-    # This seeds the optimiser in the right neighbourhood regardless of rotation.
+    # Every restart places the target's pair-residue centroid within
+    # ~30 Å of the binder's.  That seeds the optimiser in the right
+    # neighbourhood whatever the rotation.
     pair_b_centroid = b_arr[pb].mean(0)
     pair_t_centroid = t_arr[pt].mean(0)
 
@@ -424,10 +429,9 @@ def solve(binder_ca: dict, target_ca: dict,
     outward = pair_b_centroid - b_arr.mean(0)
     outward /= np.linalg.norm(outward) + 1e-12
 
-    # Kabsch alignment: finds the rotation/translation that minimises the sum
-    # of squared distances between all pair residues simultaneously.
-    # Used as restart 0 — places all pairs at distance ~0, giving the
-    # optimiser the best possible starting point.
+    # Kabsch alignment: the rotation/translation minimising the sum of
+    # squared distances over all pair residues at once.  It seeds
+    # restarts 0-19, each offset 30 Å from the Kabsch pose.
     def kabsch(A: np.ndarray, B: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         cA, cB = A.mean(0), B.mean(0)
         H = (B - cB).T @ (A - cA)
@@ -462,9 +466,9 @@ def solve(binder_ca: dict, target_ca: dict,
         for rb, rt, reason in pair_sc_skipped:
             print(f"    skipped {rb}-{rt}: {reason}")
 
-    # Per-restart loss history.  Recorded so POSE_SOLVER_PLOTS can render
-    # the restart-loss convergence curve.  In the DE path we get one
-    # final value (no restart-level history); a single-row CSV is fine.
+    # Per-restart loss history, so POSE_SOLVER_PLOTS can render the
+    # restart-loss convergence curve.  The DE path yields one final value
+    # and no restart-level history, so a single-row CSV is fine.
     restart_history: list[tuple[int, float, float]] = []
 
     if use_de:
@@ -538,8 +542,8 @@ def solve(binder_ca: dict, target_ca: dict,
             'satisfied': min_pair_dist - 0.01 <= achieved <= max_pair_dist + 0.01,
         })
 
-    # Per-term loss breakdown at the final pose (one extra _obj() call;
-    # negligible overhead compared to optimisation).
+    # Per-term loss breakdown at the final pose.  One extra _obj() call,
+    # negligible next to the optimisation itself.
     loss_breakdown = _obj(best_x, *obj_args, return_components=True)
 
     return R, t, best_loss, pair_results, restart_history, loss_breakdown
@@ -829,9 +833,9 @@ def main() -> None:
               f"achieved {pr['achieved_d']:.3f} Å  (max {pr['max_d']:.1f} Å)  {flag}")
     print()
 
-    # Per-term loss breakdown (per project memory feedback_loss_breakdown:
-    # report unprompted after every run so the user can judge which term
-    # dominates and whether weights need rebalancing).
+    # Per-term loss breakdown, printed unprompted after every run.  It
+    # shows which term dominates and whether the weights need
+    # rebalancing.
     print("Loss breakdown:")
     for term, val in loss_breakdown.items():
         if term == 'total':

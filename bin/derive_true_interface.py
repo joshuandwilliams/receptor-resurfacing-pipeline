@@ -3,37 +3,31 @@
 derive_true_interface.py
 ------------------------
 Extract the receptor residues that contact the effector in an
-RFDiffusion design, in the 0-based positional-index coordinate system
-used by ``boltz2_negative_steering.py``'s
-``--true-interface-indices-file`` flag.
+RFDiffusion design, as 0-based positional indices on the receptor
+chain.  That is the coordinate system the negative-steering engine's
+``--true-interface`` input expects.
 
 Why this script exists
 ======================
-``boltz2_negative_steering.py plan`` normally finds the "true
-interface" by running its own heavy-atom contact detection on the
-ground-truth PDB.  That does not work for RFDiffusion designs: the
-designed receptor chain is Cα-only, so heavy-atom contacts cannot be
-computed.  For those inputs, the contact set has to be pre-computed
-and passed in via ``--true-interface-indices-file``.
+The engine normally derives the "true interface" itself, by heavy-atom
+contact detection on the ground-truth PDB.  RFDiffusion designs have a
+Cα-only receptor chain, so heavy-atom contacts cannot be computed for
+them.  The contact set has to be pre-computed and passed in instead.
 
-``RFDIFFUSION_FILTER`` already did the contact detection (using Cα-Cα
-distances with a tunable cutoff) and wrote every design's contact
-residues into ``rfdiffusion_metrics.json`` under
-``receptor_contact_residues``, alongside the
-``receptor_position_order`` list that ``derive_design_region.py``
-uses as its index key.  This script intersects the two in exactly the
-same way — producing a text file consumable by
-``boltz2_negative_steering.py`` — so the two protected sets stay in a
-consistent coordinate system.
+``RFDIFFUSION_FILTER`` has already done that detection with Cα-Cα
+distances under ``--rfdiff-contact-cutoff`` (default 8.0 Å).  It writes
+each design's contact residues into ``rfdiffusion_metrics.json`` under
+``receptor_contact_residues``, beside the ``receptor_position_order``
+list that ``derive_design_region.py`` uses as its index key.  This
+script intersects the two the same way, so the design region and the
+true interface stay in one coordinate system.
 
 Output format
 =============
-One integer per line (0-based positional index on the receptor chain,
-matching prediction PDB sequence order).  The
-``boltz2_negative_steering.py`` parser also accepts comma- or
-whitespace-separated values and ``#`` line comments, but one-per-line
-is the most diffable.  A provenance header is prepended as
-``#``-prefixed comment lines.
+One integer per line, each a 0-based positional index on the receptor
+chain, matching prediction PDB sequence order.  One per line is the
+most diffable form.  A provenance header is prepended as ``#``-prefixed
+comment lines.
 
 Usage
 =====
@@ -44,12 +38,11 @@ Usage
 
 Cross-check
 ===========
-Optionally pass ``--cross-check-design-region <file>`` to verify that
-the derived interface is a subset of the previously-computed
-design-region file (should hold for receptor-resurfacing designs
-where the true binding site is engineered inside the de novo region).
-Advisory only — prints a warning on mismatch, does not change the
-output.
+``--cross-check-design-region <file>`` checks that the derived
+interface is a subset of the design-region file.  That should hold for
+receptor-resurfacing designs, where the binding site is engineered
+inside the de novo region.  Advisory only — it warns on mismatch and
+leaves the output unchanged.
 """
 
 import argparse
@@ -59,8 +52,8 @@ from pathlib import Path
 
 
 def normalise_design_id(raw):
-    """Accept 'design_3', 'design_3.pdb', or '3'; return both
-    canonical forms so we can match against whatever key
+    """Accept 'design_3', 'design_3.pdb', or '3'.  Returns both
+    canonical forms, so the caller can match whichever key
     rfdiffusion_metrics.json happens to use."""
     raw = str(raw).strip()
     if raw.endswith(".pdb"):
@@ -102,13 +95,12 @@ def find_design_entry(metrics, design_id):
 
 def derive_positional_indices(entry):
     """Intersect ``receptor_contact_residues`` with
-    ``receptor_position_order``; return 0-based positional indices
+    ``receptor_position_order``.  Returns 0-based positional indices,
     sorted ascending.
 
-    This mirrors the transform in ``derive_design_region.py`` exactly,
-    the only difference being the source field
-    (``receptor_contact_residues`` here,
-    ``per_design_design_residues`` there).
+    ``derive_design_region.py`` runs the same intersection against
+    ``per_design_design_residues`` instead, and converts the result to
+    1-based.
     """
     contact_residues = entry.get("receptor_contact_residues")
     position_order = entry.get("receptor_position_order")
@@ -137,10 +129,10 @@ def derive_positional_indices(entry):
         i for i, rn in enumerate(position_order) if rn in contact_set
     ]
 
-    # Sanity: every resnum in receptor_contact_residues should be
-    # present in receptor_position_order.  If any are missing, the
-    # two lists describe different atom walks and the derivation is
-    # suspect — fail loudly.
+    # Every resnum in receptor_contact_residues should appear in
+    # receptor_position_order.  Any that are missing mean the two lists
+    # describe different atom walks, so fail loudly instead of emitting
+    # a silently short index list.
     found_resnums = {position_order[i] for i in indices}
     missing = contact_set - found_resnums
     if missing:
@@ -157,14 +149,14 @@ def derive_positional_indices(entry):
 
 
 def cross_check_design_region(design_region_path, interface_indices_0based):
-    """Verify that the derived true interface is a subset of the
-    design region file (RFDiffusion + MPNN resurfacing pattern:
-    binding site is inside the de novo block).
+    """Check that the derived true interface is a subset of the
+    design-region file.  In the RFDiffusion + MPNN resurfacing pattern
+    the binding site sits inside the de novo block.
 
-    Reads any line not starting with ``#`` and treats ``,``-separated
-    integers and ``start-end`` ranges as 1-based positions (the
-    convention ``derive_design_region.py`` writes).  Advisory only:
-    prints a warning on mismatch, does not raise.
+    Reads every line not starting with ``#``.  ``,``-separated integers
+    and ``start-end`` ranges are read as 1-based positions, the
+    convention ``derive_design_region.py`` writes.  Advisory only, so it
+    warns on mismatch rather than raising.
     """
     path = Path(design_region_path)
     if not path.exists():
@@ -207,8 +199,8 @@ def cross_check_design_region(design_region_path, interface_indices_0based):
               f"parseable positions; skipping", file=sys.stderr)
         return True
 
-    # Interface indices here are 0-based; design-region file is
-    # 1-based.  Bring interface into 1-based for comparison.
+    # Interface indices here are 0-based and the design-region file is
+    # 1-based, so shift the interface up for the comparison.
     interface_1based = {i + 1 for i in interface_indices_0based}
     outside = sorted(interface_1based - region_1based)
     inside = sorted(interface_1based & region_1based)

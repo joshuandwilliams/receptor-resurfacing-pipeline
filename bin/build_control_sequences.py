@@ -2,71 +2,56 @@
 """
 build_control_sequences.py
 --------------------------
-Task 6 (P0-6) · Synthesise scrambled and polyA negative-control receptor
-sequences for a given RFDiffusion design.
+Synthesise scrambled and polyA negative-control receptor sequences for a
+given RFDiffusion design.
 
 For each parent design we generate two control sequences:
 
   control_scrambled
       Deterministic seeded permutation of residues at design-region
-      positions, preserving length and amino-acid composition (counts of
-      each AA stay the same; only their order is shuffled).  Residues
-      OUTSIDE the design region are held in place verbatim.  This isolates
-      "what does Boltz do when the design region's chemistry is the same
-      bag of amino acids in a random order?" — controls the predictor's
-      bias toward sequence-pattern matching independent of geometric
-      design intent.
+      positions.  Length and amino-acid composition are preserved, so
+      only the order changes.  This asks what Boltz does when the
+      design region holds the same bag of amino acids in a random
+      order.  It controls for the predictor matching sequence patterns
+      independently of geometric design intent.
 
   control_polyA
-      Substitute every design-region position with alanine (A), EXCEPT
-      where the source receptor already carries glycine (G) at that
-      position — those stay G.  This isolates "what does Boltz do with
-      a backbone whose design region has minimal side-chain chemistry?"
-      — controls the predictor's reliance on the designable surface for
-      its binding-site call.  The glycine carve-out is deliberate:
-      replacing native G with A would force phi/psi into non-G regions
-      and confound the geometric signal we want to test, whereas leaving
-      native G alone keeps the backbone freedom intact.
+      Substitute every design-region position with alanine (A), except
+      where the source receptor already carries glycine (G).  Those
+      stay G.  This asks what Boltz does with a design region that has
+      minimal side-chain chemistry.  It controls for the predictor
+      relying on the designable surface to make its binding-site call.
+      The glycine carve-out is deliberate.  Replacing native G with A
+      would force phi/psi out of the glycine region and confound the
+      geometric signal under test.
 
 Residues OUTSIDE the design region are held verbatim in BOTH controls.
-The effector chain is passed through unchanged in both — controls test
-the receptor binding face, not the effector.
+The effector chain is passed through unchanged in both, because the
+controls test the receptor binding face and not the effector.
 
 Inputs
 ------
---source-pdb         RFDiffusion design PDB.  Receptor sequence is
-                     extracted from the chain matching --receptor-chain.
---design-region-file Text file emitted by derive_design_region.py.  One
-                     line of comma-separated 1-based positional indices
-                     on the receptor chain (comments starting with '#'
-                     are skipped).
---effector-fasta     Effector FASTA (single record).  Concatenated into
-                     the output as the >effector chain unchanged.
---receptor-chain     Chain ID for receptor in source-pdb (default 'A').
---effector-chain     Chain ID for effector in source-pdb (default 'B';
-                     accepted only for symmetry — not actually read.)
---output-dir         Directory to write control_scrambled.fasta and
-                     control_polyA.fasta into.
---seed               Seed for the scrambled permutation.  Default is a
-                     deterministic hash of the source PDB stem so re-
-                     runs of the same design produce identical scrambled
-                     sequences (essential for cohort reproducibility).
+See ``--help`` for the flag list.  Two notes the help text does not
+carry.  ``--design-region-file`` is the one-line comma-separated
+1-based index file that derive_design_region.py writes, and its ``#``
+comment lines are skipped.  ``--effector-chain`` is accepted for
+symmetry and never read, because the effector comes from the FASTA.
 
 Output format
 -------------
-Three single-record FASTAs are written to ``--output-dir``, matching
-the receptor.fasta / effector.fasta layout that
-``negative_steering_run_one.sh`` expects via its
-``--receptor-fasta`` / ``--effector-fasta`` flags:
+Three single-record FASTAs are written to ``--output-dir``:
 
     control_scrambled_receptor.fasta   — >receptor + scrambled sequence
     control_polyA_receptor.fasta       — >receptor + polyA sequence
     effector.fasta                     — >effector + original effector seq
 
-The control_type ("scrambled" or "polyA") is intentionally NOT encoded
-inside the FASTA — it is carried alongside the FASTA at the NextFlow
-channel level and stamped into the per-control workdir as
-``row_type.txt`` so cross_sequence_summary.py can mark each row.
+That layout matches the ``--receptor-fasta`` / ``--effector-fasta``
+flags the negative-steering orchestrator takes.
+
+The control_type ("scrambled" or "polyA") is deliberately absent from
+the FASTA.  It travels alongside at the Nextflow channel level, and
+``modules/negsteer_controls.nf`` stamps it into the per-control workdir
+as ``row_type.txt`` so cross_sequence_summary.py can mark each row.
 """
 from __future__ import annotations
 
@@ -77,12 +62,10 @@ import sys
 from pathlib import Path
 from typing import List
 
-# ── Sequence extraction (re-uses the project convention) ────────────
+# ── Sequence extraction ─────────────────────────────────────────────
 
-# Sequence extraction: use the canonical helper directly.  The
-# previous _extract_chain_sequence wrapper was a one-line passthrough
-# to boltz2_negative_steering.get_chain_sequence; removed in the
-# Phase 4 free-function consolidation.
+# structure_metrics.get_chain_sequence is the canonical helper, aliased
+# here under the name this module's callers already use.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from structure_metrics import (
     get_chain_sequence as _extract_chain_sequence,  # noqa: E402,F401
@@ -93,8 +76,8 @@ from structure_metrics import (
 def _load_design_region_indices_1b(design_region_file: Path) -> List[int]:
     """
     Read the design-region file and return the 1-based positional
-    indices on the receptor chain.  Format: comment lines starting
-    with '#' are skipped, then a single line of comma-separated ints.
+    indices on the receptor chain.  Lines starting with '#' are
+    skipped, then a single line of comma-separated ints is parsed.
     """
     raw = design_region_file.read_text()
     payload = [
@@ -105,8 +88,8 @@ def _load_design_region_indices_1b(design_region_file: Path) -> List[int]:
         raise ValueError(
             f"{design_region_file}: no non-comment content found"
         )
-    # Tolerate the indices being split across multiple lines, although
-    # derive_design_region.py writes them on one.
+    # derive_design_region.py writes the indices on one line, but
+    # accept them split across several.
     parts: List[str] = []
     for ln in payload:
         parts.extend(p.strip() for p in ln.split(",") if p.strip())
@@ -149,20 +132,19 @@ def _build_scrambled_receptor(
     n = len(receptor_seq)
     chars = list(receptor_seq)
 
-    # Convert 1-based positional indices to 0-based.  Filter any that
-    # fall outside the receptor chain — defensive against any upstream
-    # off-by-one (shouldn't happen but cheap to guard).
+    # Convert 1-based positional indices to 0-based, dropping any that
+    # fall outside the receptor chain.  That guards against an upstream
+    # off-by-one.
     design_idx_0b = sorted(
         i - 1 for i in design_region_idx_1b if 1 <= i <= n
     )
     if not design_idx_0b:
-        # Nothing to scramble — return the receptor unchanged.  Caller
-        # is responsible for deciding whether this is an error.
+        # Nothing to scramble.  The caller decides whether an empty
+        # design region is an error.
         return receptor_seq
 
-    # Pull out the residues at the designated positions, shuffle them
-    # under a deterministic Random(seed), put them back in the same
-    # positions in the new order.
+    # Shuffle the residues at the designated positions under a
+    # deterministic Random(seed) and write them back in the new order.
     rng = random.Random(seed)
     pool = [chars[i] for i in design_idx_0b]
     shuffled = pool[:]
@@ -178,10 +160,10 @@ def _build_polyA_receptor(
 ) -> str:
     """
     Substitute every design-region position with 'A', keeping native
-    glycines as 'G' (per the v6 spec — alanine in a glycine-required
-    backbone region would force phi/psi out of the only ramachandran
-    well that fits, confounding the geometric signal we want to test).
-    Residues outside the design region are unchanged.
+    glycines as 'G'.  Alanine in a glycine-required backbone region
+    would force phi/psi out of the only Ramachandran well that fits,
+    confounding the geometric signal under test.  Residues outside the
+    design region are unchanged.
     """
     n = len(receptor_seq)
     chars = list(receptor_seq)

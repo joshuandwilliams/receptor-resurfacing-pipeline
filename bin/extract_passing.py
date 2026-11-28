@@ -14,37 +14,33 @@ num_seeds Boltz predictions of that sequence.
 Output
 ------
 passing_summary.csv: one row per passing unique sequence, ranked by
-composite score = true_jaccard − 0.05 · ra_eff_vs_truth (P0.3).
+composite score = true_jaccard − 0.05 · ra_eff_vs_truth.
 
 Filter chain (a row must pass ALL):
-  - outcome in {"" / "no_reversion" / "pose_holds"}
-    (i.e. the sequence is either clean steered or a passing
-    pose_holds)
-  - rank_by_composite_score is populated (i.e. the sequence has both
-    a usable ra_eff and a usable true_jaccard)
+  - outcome in {"" / "no_reversion" / "pose_holds"}, i.e. the sequence
+    is either clean steered or a passing pose_holds
+  - rank_by_composite_score is populated, i.e. the sequence has both a
+    usable ra_eff and a usable true_jaccard
 
-Schema notes (P0 audit — multi-seed):
-  - All numeric columns are MEDIANS across seeds.  The full per-seed
-    distribution is available in raw_per_seed_results.csv.
-  - For the two ranking-driver metrics (ra_eff_vs_truth and
-    true_jaccard) we surface median + MAD, since spread on those
-    directly affects how trustworthy the rank is.
-  - For confidence metrics we surface only median; MAD is in
-    aggregated_results.csv if needed.
-  - canonical_pdb is the seed-of-median PDB; for even-N degraded
-    cases (some seeds failed) it's the worse of the two middle
-    seeds (see canonical_seed_choice_warning).
+Schema notes
+------------
+  - Every numeric column is a MEDIAN across seeds.  No MAD column is
+    written here.  The spread lives in aggregated_results.csv and the
+    full per-seed distribution in raw_per_seed_results.csv.
+  - canonical_pdb is the seed-of-median PDB.  For even-N degraded cases
+    (some seeds failed) it is the worse of the two middle seeds (see
+    canonical_seed_choice_warning).
   - n_pass = number of seeds that passed structural+contamination
     filters (pose_holds + clean_steered).  Tiered against n_seeds:
     A = all pass, B = some pass, C = one, none = zero.  n_pass is
-    path-agnostic and authoritative — outcome=='no_reversion' with
+    path-agnostic and authoritative, so outcome=='no_reversion' with
     n_pass<n_seeds correctly lands in a lower tier.
-  - Cold-start binders (notes12 / patch b): when ALL N cold-start
-    seeds pass the rmsd_threshold + intact filters, plan() skips
-    negative steering entirely and writes one row per seed under
+  - Cold-start binders: when ALL N cold-start seeds pass the
+    rmsd_threshold + intact filters, the engine's plan stage skips
+    negative steering and writes one row per seed under
     sequence_group=0.  These aggregate as a single
     outcome="no_reversion" row with n_pass=n_seeds, get a composite
-    rank, and appear in passing_summary as tier-A candidates.
+    rank, and appear here as tier-A candidates.
 
 Usage
 -----
@@ -67,10 +63,10 @@ from typing import Dict, List, Tuple
 
 # ── Output schema ────────────────────────────────────────────────────
 #
-# Median values throughout (those are the sortable / thresholdable
-# numbers).  MAD only on the two ranking-driver metrics where spread
-# materially affects how much we trust the rank.  Per-seed verdict
-# counts surfaced for tie-breaking.
+# Median values throughout, since those are the sortable and
+# thresholdable numbers.  No MAD columns.  Spread is left in
+# aggregated_results.csv.  Per-seed verdict counts are surfaced for
+# tie-breaking.
 
 OUTPUT_FIELDS = [
     # Identification
@@ -89,19 +85,19 @@ OUTPUT_FIELDS = [
     "n_pass",
     "outcome",
 
-    # Mutations on the sequence (median is meaningless here — the
-    # mutation set is identical across seeds of one sequence; we just
-    # surface the median as a proxy for "the value")
+    # Mutations on the sequence.  A median is meaningless here, because
+    # the mutation set is identical across seeds of one sequence.  The
+    # median just stands in for "the value".
     "total_mutations_median",
 
-    # Mutations as a chain selection.  "steered" = full set of
-    # steering mutations in the sequence going into Boltz; "reverted
-    # majority" = positions remaining (i.e. NOT reverted) in a
-    # majority of the seeds' reverted predictions; "reverted all" =
-    # union of remaining positions across all seeds (worst case for
-    # what the construct will retain).  For the wet-lab construct
-    # itself, NONE of these mutations are present — these describe
-    # the sequence Boltz was scored on, not the wet-lab construct.
+    # Mutations as a chain selection.  "steered" is the full set of
+    # steering mutations in the sequence going into Boltz.  "reverted
+    # majority" is the positions remaining (i.e. NOT reverted) in a
+    # majority of the seeds' reverted predictions.  "reverted all" is
+    # the union of remaining positions across all seeds, the worst case
+    # for what the construct will retain.  NONE of these mutations are
+    # present in the wet-lab construct itself.  They describe the
+    # sequence Boltz was scored on.
     "steered_mutations_chimerax",
     "steered_mutations_aa",
     "reverted_mutations_majority_chimerax",
@@ -110,18 +106,18 @@ OUTPUT_FIELDS = [
     "reverted_mutations_all_aa",
     "reverted_mutations_seeds_identical",
 
-    # Structural RMSDs vs ground truth — primary triage metric.
-    # Spread (MAD / n_used) and intact-majority columns deliberately
-    # omitted: MAD is available in aggregated_results.csv, intact-
-    # majority is tautologically 1 for any row that reaches this file.
+    # Structural RMSDs vs ground truth — the primary triage metric.
+    # Spread (MAD / n_used) and the whole-chain intact-majority column
+    # are deliberately omitted.  MAD is in aggregated_results.csv, and
+    # intact-majority is 1 for any row that reaches this file.
     "ra_eff_vs_truth_median",
     "independent_receptor_rmsd_median",
     "independent_effector_rmsd_median",
 
-    # Interface similarity (always sourced from steered side — the
+    # Interface similarity, always sourced from the steered side.  The
     # designed interface is a sequence property, not a pose property,
-    # and reverted predictions don't recompute jaccard).  Spread
-    # omitted — look it up in aggregated_results.csv if needed.
+    # and reverted predictions don't recompute jaccard.  Spread is in
+    # aggregated_results.csv.
     "wrong_jaccard_median",
     "true_jaccard_median",
     "n_shared_true_median",
@@ -132,7 +128,7 @@ OUTPUT_FIELDS = [
     "contact_residues_majority",
     "mutated_contact_positions_majority",
 
-    # Confidence metrics — medians only.  Full spread in
+    # Confidence metrics, medians only.  Full spread in
     # aggregated_results.csv.
     "iptm_median",
     "ptm_median",
@@ -143,14 +139,15 @@ OUTPUT_FIELDS = [
     "pae_mean_median",
     "pae_pass_frac_median",
     "ipsae_min_median",
-    # 15Å iPSAE median — same machinery, more permissive PAE cutoff.
+    # 15 Å iPSAE median — same machinery, more permissive PAE cutoff.
     "ipsae_ab_15_median",
     "ipsae_ba_15_median",
     "ipsae_min_15_median",
 
-    # Per-prediction interface metrics (P0-29 / P0-38) — moved from
-    # the post-hoc orthogonal-metrics pass so they aggregate alongside
-    # the other Boltz-derived metrics.
+    # Interface-restricted metrics and the distance-weighted contact
+    # overlap, computed per prediction rather than in the post-hoc
+    # orthogonal-metrics pass, so they aggregate alongside the other
+    # Boltz-derived metrics.
     "interface_plddt_median",
     "weighted_jaccard_median",
     "intact_core_majority",
@@ -158,15 +155,14 @@ OUTPUT_FIELDS = [
     # Confidence flag (computed from medians)
     "confidence_flag",
 
-    # Run-level diagnostics (runtime instrumentation).  Cumulative
-    # wall-clock seconds for this MPNN sequence's
-    # negative_steering_run_one.sh invocation, covering plan +
+    # Run-level diagnostics.  Cumulative wall-clock seconds for this
+    # MPNN sequence's `negsteer run` invocation, covering plan +
     # predict-one + collect + reversion + harvest + finalize +
     # aggregate + compute-final-metrics + aggregate-per-sequence.
-    # Sourced from run_one_runtime_sec.txt in the input dir.  Same
-    # value is repeated on every row of passing_summary.csv for this
-    # sequence (one run_one invocation covers one sequence).  Blank
-    # if the sidecar file was missing.
+    # Sourced from run_one_runtime_sec.txt in the input dir.  One
+    # invocation covers one sequence, so the same value is repeated on
+    # every row of this sequence's passing_summary.csv.  Blank when the
+    # sidecar file is missing.
     "run_one_runtime_sec",
 ]
 
@@ -189,15 +185,17 @@ def _compute_confidence_flag(
     ipae_max=None,
 ):
     """Compute confidence_flag from the median metrics in `out`.
-    Operates on median values: a sequence is flagged if its TYPICAL
-    prediction fails the confidence filter, ignoring single rogue seeds.
 
-    Thresholds default to PipelineInternalThresholds.default()
-    (Phase 4 caller migration — was hard-coded 0.10/0.30/0.70/15.0
-    literals).  Callers can still pass explicit values to override."""
+    Operating on medians means a sequence is flagged only if its
+    TYPICAL prediction fails the confidence filter.  Single rogue seeds
+    are ignored.
+
+    Thresholds default to PipelineInternalThresholds.default(), which
+    replaced hard-coded 0.10/0.30/0.70/15.0 literals.  Callers can pass
+    explicit values to override."""
     if pass_frac_min is None or iptm_min is None or complex_plddt_min is None or ipae_max is None:
-        # Lazy import — keep extract_passing.py importable in environments
-        # that don't have the pipeline_thresholds module available.
+        # Lazy import keeps this module importable where
+        # pipeline_thresholds is not on the path.
         try:
             import sys
             sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -212,8 +210,8 @@ def _compute_confidence_flag(
             if ipae_max is None:
                 ipae_max = _t.ipae_max
         except ImportError:
-            # Fallback to the historical hard-coded values if the new
-            # module isn't on the path (e.g. older standalone invocations).
+            # Fall back to the historical hard-coded values when that
+            # module is absent, as in older standalone invocations.
             pass_frac_min = pass_frac_min if pass_frac_min is not None else 0.10
             iptm_min = iptm_min if iptm_min is not None else 0.30
             complex_plddt_min = complex_plddt_min if complex_plddt_min is not None else 0.70
@@ -256,17 +254,20 @@ def _summarize_mutations_across_seeds(
 
     Returns (majority_chimerax, all_chimerax, identical_flag) where:
       - majority_chimerax: ChimeraX selection of positions present in
-        STRICTLY MORE than `threshold_majority_frac` of seeds (default
-        > 50% — for n=3 that means "in 2 or more seeds").
+        at least (n // 2) + 1 seeds, i.e. a strict majority.  For n=3
+        that means "in 2 or more seeds".
       - all_chimerax: ChimeraX selection of every position that
-        appears in ANY seed (the union — worst case for "what
-        mutations might end up in the construct").
+        appears in ANY seed.  The union is the worst case for what
+        mutations might end up in the construct.
       - identical_flag: "1" if every seed reverted to the same set,
         "0" if seeds differ, "" if there is only one or zero seeds
         with non-empty data.
 
-    `column` should be one of `steered_mutations_chimerax` or
-    `reverted_mutations_chimerax`.  Empty values are skipped.
+    `threshold_majority_frac` is accepted but has no effect.  The body
+    recomputes the threshold as (n // 2) + 1 unconditionally.
+
+    `column` is `reverted_mutations_chimerax` at every current call
+    site.  Empty values are skipped.
     """
     # Each seed's selection string parses to a set of int positions.
     sets: List[set] = []
@@ -297,8 +298,9 @@ def _summarize_mutations_across_seeds(
                     if n * threshold_majority_frac
                     == int(n * threshold_majority_frac)
                     else int(n * threshold_majority_frac) + 1)
-    # Above is "strictly greater than half" — for n=3, threshold=2;
-    # for n=2, threshold=2; for n=1, threshold=1.  Equivalently:
+    # The line above is a longhand "strictly greater than half".  The
+    # closed form is the same for every n, so it overwrites the result.
+    # n=3 → 2, n=2 → 2, n=1 → 1.
     threshold = (n // 2) + 1
 
     majority = sorted(p for p, c in counter.items() if c >= threshold)
@@ -328,18 +330,17 @@ def _muts_aa_for_positions(
     positions: List[int],
 ) -> str:
     """Return an AA mutation string (e.g. 'K5E V7D M22R') restricted
-    to the given positions.  Looks across ALL seeds for each
-    position's AA identity — a single seed's reverted_mutations_aa
-    only covers the positions THAT seed retained, so positions
-    retained only in other seeds need to be looked up there.
+    to the given positions.
 
-    The AA identities are sequence-determined (the same sequence_group
-    has the same residue at each position) so any seed that mentions a
-    position can supply its AA code.
+    Looks across ALL seeds for each position's AA identity.  A single
+    seed's reverted_mutations_aa covers only the positions THAT seed
+    retained, so positions retained in other seeds must be looked up
+    there.  AA identities are sequence-determined, since one
+    sequence_group has the same residue at each position, so any seed
+    that mentions a position can supply its code.
 
-    Falls back to looking up identities in steered_mutations_aa, which
-    always contains every mutated position, if reverted columns can't
-    cover all requested positions.
+    Positions the requested column cannot cover fall back to
+    steered_mutations_aa, which always contains every mutated position.
     """
     if not positions:
         return ""
@@ -436,7 +437,8 @@ def extract_row(r, per_seed_rows=None):
     outcome = r.get("outcome") or ""
     # Reversion was attempted iff the outcome is one the reversion
     # classifier produces.  See _classify_outcome in
-    # boltz2_iterate_steering.py for the canonical list.
+    # The negative-steering engine owns the canonical list. It is a
+    # separate repository, invoked as `negsteer run`.
     reversion_attempted = outcome in (
         "pose_holds",
         "pose_collapses",

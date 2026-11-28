@@ -9,7 +9,8 @@ For each design PDB:
   - Split single-chain output into receptor/effector at the Cα chain break
   - Map receptor residues to original contig numbering
   - Find receptor–effector Cα contacts within a distance cutoff
-  - Compute design-region RMSD relative to the input PDB
+  - Compute motif RMSD over the fixed segments, plus per-region endpoint
+    distances and centre-of-mass displacement against the input PDB
   - Compute fraction of contacts inside vs outside the design region
 
 Outputs:
@@ -19,12 +20,12 @@ Outputs:
     split/design_*.pdb        - two-chain PDBs (receptor=A, effector=B)
 
 NUMBERING CONVENTIONS — TWO DIFFERENT SPACES IN PLAY:
-  - rfdiffusion_metrics.json uses "contig-space" residue numbers — these
+  - rfdiffusion_metrics.json uses contig-space residue numbers.  These
     match the input PDB's original numbering (e.g. B187-262 receptor,
     C33-113 effector).  De novo positions get synthetic numbers
     >= max_fixed_resnum + 1000 to avoid collisions.
-  - split/design_*.pdb uses "1-based output space" — every chain is
-    renumbered from 1, regardless of the input PDB.  This matches what
+  - split/design_*.pdb uses 1-based output space.  Every chain is
+    renumbered from 1 regardless of the input PDB, matching what
     RFDiffusion's run_inference.py emits.
   Downstream code that joins metrics-JSON values to split-PDB residues
   must translate between the two spaces.
@@ -73,11 +74,9 @@ def parse_args():
 def read_ca_atoms(pdb_path, chain=None):
     """Extract Cα atoms as list of dicts: [{chain, resnum, x, y, z}, ...].
 
-    See also ``boltz2_negative_steering.read_ca_atoms`` — same name,
-    different shape: that one returns ``List[CAEntry]`` with numpy xyz
-    plus per-chain seq_index and is altloc/icode aware.  This one is
-    a plain coord-dict reader optimised for RFDiffusion output PDBs
-    (clean, no altlocs, no insertion codes).
+    A plain coord-dict reader, deliberately simpler than an altloc- and
+    insertion-code-aware one.  RFDiffusion output PDBs are clean, with no
+    altlocs and no insertion codes.
     """
     atoms = []
     with open(pdb_path) as f:
@@ -153,7 +152,8 @@ def split_at_chain_break(ca_atoms):
 def identify_segments(seg1_atoms, seg2_atoms, expected_rec_len, expected_eff_len):
     """
     Determine which segment is receptor vs effector by matching to expected
-    lengths. Effector length is always fixed, so match against that.
+    lengths.  The effector block of the contig is entirely fixed, so its
+    expected length is exact.  Match against that one.
     Returns (rec_atoms, eff_atoms, rec_is_seg1).
     """
     s1, s2 = len(seg1_atoms), len(seg2_atoms)
@@ -241,10 +241,10 @@ def _parse_receptor_segments(contigs, rec_chain):
     blocks = contigs.split()
     rec_block = None
     for block in blocks:
-        # Match by checking whether any segment in this block starts with
-        # the receptor chain letter, rather than substring matching the
-        # whole block (which gives false positives for multi-letter chain
-        # IDs or chain letters that happen to appear elsewhere).
+        # Check whether any segment in this block starts with the
+        # receptor chain letter.  Substring matching the whole block was
+        # rejected because it gives false positives for multi-letter
+        # chain IDs, or for chain letters appearing elsewhere.
         for seg in block.split("/"):
             seg = seg.strip()
             if seg and seg[0].upper() == rec_chain.upper():
@@ -286,12 +286,11 @@ def build_receptor_resnum_map(rec_atoms, contigs, rec_chain):
     KNOWN BUG, NOT YET FIXED (found 2026-08-29).
 
     The per-de-novo-segment lengths below are a guess.  Only the *total*
-    de novo budget is known from the design PDB, so the total is split
-    across segments in proportion to max_len.  That guess is exact only
-    when the budget is forced, i.e. when at most one segment has
-    min_len != max_len.  With two or more variable-length segments it is
-    usually wrong, and every residue downstream of the first mis-sized
-    segment is shifted by one or more positions.
+    de novo budget is known from the design PDB, so the total has to be
+    split across segments.  That guess is exact only when the budget is
+    forced, i.e. when at most one segment has min_len != max_len.  With
+    two or more variable-length segments it is usually wrong, and every
+    residue downstream of the first mis-sized segment is shifted.
 
     Everything derived from this mapping is then wrong for those runs:
     motif_rmsd, design_region_com_displacement, per_region_lengths,
@@ -310,21 +309,15 @@ def build_receptor_resnum_map(rec_atoms, contigs, rec_chain):
     discards the .trb, so it must also be published alongside the PDBs.
 
     A local correction used by one analysis, and the evidence above, is in
-    experiments/campaigns/pikp1_avrpikf/analyses/design_region_novelty/
+    experiments/campaigns/pikp1_avrpikf/analyses/02-design-region-novelty/
     (trb_metrics.py and motif_rigidity.py).
 
-    The total receptor length is known from the design PDB.  The total
-    fixed length is known from the contig.  The difference is the total
-    de novo length.  We walk the contig segments:
-
-      - Fixed segments: consume exactly (end - start + 1) atoms and
-        assign original PDB residue numbers.
-      - De novo segments: we know the total de novo atom budget
-        (n_atoms - total_fixed).  For multiple de novo segments, the
-        last one gets the remainder after earlier ones are allocated
-        proportionally by max_len.  Atoms are assigned unique residue
-        numbers that don't collide with any fixed residue, starting
-        from a synthetic base above all fixed residue numbers.
+    How the guess is made.  Total receptor length comes from the design
+    PDB and total fixed length from the contig, so the difference is the
+    de novo budget.  Walking the contig, fixed segments consume exactly
+    (end - start + 1) atoms and take their original PDB residue numbers.
+    De novo segments split the budget and get synthetic residue numbers
+    above every fixed residue number, so they cannot collide.
 
     Returns (mapping, segment_info) where:
       mapping: {positional_index: residue_number}
@@ -333,10 +326,7 @@ def build_receptor_resnum_map(rec_atoms, contigs, rec_chain):
         - per_region_atom_ranges: [(start_idx, end_idx), ...] atom index
           ranges for each de novo region (inclusive start, exclusive end)
         - receptor_position_order: [resnum, ...] all receptor resnums in
-          contig segment walk order (correct positional ordering)
-
-    Design atoms get numbers >= synthetic_base (guaranteed not in any
-    fixed segment).
+          contig segment walk order
     """
     seg_descs = _parse_receptor_segments(contigs, rec_chain)
     if not seg_descs:
@@ -347,26 +337,23 @@ def build_receptor_resnum_map(rec_atoms, contigs, rec_chain):
     total_fixed = sum(d[2] - d[1] + 1 for d in seg_descs if d[0] == "fixed")
     total_denovo = max(0, n_atoms - total_fixed)
 
-    # Synthetic base for de novo residue numbers: above all fixed residues
-    # so they never collide.  These numbers will be in the design_residues set.
+    # Synthetic base for de novo residue numbers, above all fixed residues
+    # so they never collide.  Downstream classification calls a residue
+    # "design" when it is absent from fixed_residues, which these are.
     max_fixed_resnum = max(
         (d[2] for d in seg_descs if d[0] == "fixed"), default=0
     )
     synthetic_base = max_fixed_resnum + 1000  # large gap to avoid any overlap
 
-    # Compute actual length for each de novo segment.
+    # Compute actual length for each de novo segment.  A segment with
+    # min_len == max_len gets exactly that.  The remaining
+    # variable-length segments share the leftover budget, distributed
+    # proportionally by max_len, clamped per segment to [min, max], with
+    # the final segment absorbing any rounding remainder.
     #
-    # Strategy: any segment with min_len == max_len has a known fixed
-    # length and gets exactly that.  All remaining (variable-length)
-    # segments share the leftover budget.  If there are multiple
-    # variable-length segments, the leftover is distributed proportionally
-    # by max_len, with min/max clamping per segment and the final segment
-    # absorbing any rounding remainder.
-    #
-    # This is more correct than the previous purely-proportional approach
-    # because it can't violate fixed-length constraints (e.g. "6-6" must
-    # be exactly 6), and it respects the user's contig spec instead of
-    # imposing a heuristic split.
+    # The earlier purely-proportional split was rejected.  It could
+    # violate a fixed-length constraint (e.g. "6-6" must be exactly 6)
+    # and imposed a heuristic over the user's contig spec.
     denovo_segs = [(i, d) for i, d in enumerate(seg_descs) if d[0] == "denovo"]
     denovo_actual_lens = {}
 
@@ -503,43 +490,37 @@ def calc_motif_and_region_metrics(
     """
     Compute motif and per-region structural change metrics for one design.
 
-    Uses **resnum-keyed correspondence**: each design atom is matched to its
-    input atom via resnum_map (which records, per design positional index,
-    the input PDB residue number assigned by build_receptor_resnum_map).
-    Positional indexing across input and design lists is unsafe — RFDiffusion
-    can change atom counts in the design region, which shifts every fixed
-    atom that follows the gap by an unpredictable offset.  Looking atoms up
-    by resnum sidesteps that entirely.
+    Correspondence is resnum-keyed.  Each design atom is matched to its
+    input atom via resnum_map, which records the input PDB residue number
+    assigned per design positional index by build_receptor_resnum_map.
+    Positional indexing across the two lists is unsafe.  RFDiffusion can
+    change atom counts in the design region, which shifts every following
+    fixed atom by an unpredictable offset.
 
     Metrics returned (all in Å):
 
       motif_rmsd: float
         RMSD over the fixed-segment (motif) Cα atoms after Kabsch
-        superposition on those same atoms.  Sanity check on RFDiffusion's
-        faithfulness to the contig — should be small (typically <1 Å) for
-        a well-behaved design where the motif residues were genuinely held
-        in place.
+        superposition on those same atoms.  A sanity check on
+        RFDiffusion's faithfulness to the contig.  It should be small,
+        typically <1 Å, when the motif residues were genuinely held.
 
       per_region_endpoint_distance_input: list[float]
       per_region_endpoint_distance_design: list[float]
-        For each design region, the Cα–Cα distance between the first and
-        last residue OF THAT REGION, measured in the input PDB (over the
-        input gap residues between the flanking fixed segments) and in the
-        design (over RFDiffusion's built region) respectively.  Different
-        lengths are fine — only the endpoints matter.  Comparing these
-        tells you whether RFDiffusion built something that spans the same
-        physical reach as the original gap, or pulled the geometry tighter
-        / stretched it further.  The input-side value is NaN whenever the
-        design region is one-sided (terminal extension at the N or C end
-        of the receptor): you cannot define a span without two anchors,
-        even if there are input residues to compare to for COM purposes.
+        Per design region, the Cα–Cα distance between that region's first
+        and last residue.  The input value spans the gap residues between
+        the flanking fixed segments.  The design value spans
+        RFDiffusion's built region.  Different lengths are fine, only the
+        endpoints matter.  Comparing them shows whether the built region
+        covers the same physical reach as the original gap.  The input
+        value is NaN for a one-sided region (terminal extension at the
+        receptor's N or C end), because a span needs two anchors.
 
       per_region_com_displacement: list[float]
-        For each design region, the distance between the centroid of the
-        design region's Cα atoms and the centroid of the corresponding
-        input residues, measured in the scaffold-aligned frame (post-
-        Kabsch).  "Corresponding input residues" depends on the contig
-        anchoring of the design region:
+        Per design region, the distance between the centroid of the
+        region's design Cα atoms and the centroid of the corresponding
+        input residues, in the scaffold-aligned (post-Kabsch) frame.
+        Which input residues correspond depends on the contig anchoring:
 
           * Both anchors present (most common): all input residues in
             the inclusive gap between the flanking fixed segments.
@@ -550,12 +531,11 @@ def calc_motif_and_region_metrics(
             residues immediately before the following fixed segment.
           * Neither anchor (free-floating chain, very rare): NaN.
 
-        Length-independent: works for fixed and variable-length contigs.
-        A value of 0 means RFDiffusion built something occupying the same
-        average position as the corresponding input residues; large
-        values mean the new region's centre of mass is somewhere
-        different in space.  NaN only when there are no corresponding
-        input residues at all.
+        Length-independent, so it works for fixed and variable-length
+        contigs.  0 means the built region occupies the same average
+        position as the input residues.  Large values mean its centre of
+        mass sits somewhere else.  NaN only when no corresponding input
+        residues exist at all.
 
     Returns NaN motif_rmsd (and empty per-region lists) if there are
     no fixed residues to align on at all.
@@ -578,9 +558,10 @@ def calc_motif_and_region_metrics(
         if rn is None or rn not in fixed_residues:
             continue
         if rn not in input_by_resnum:
-            # Fixed residue from contig spec not found in input PDB —
-            # contig and PDB are inconsistent.  Skip silently; the caller
-            # already reports such mismatches elsewhere.
+            # Fixed residue from the contig spec is absent from the input
+            # PDB, so contig and PDB disagree.  Skip it, which drops it
+            # from the Kabsch fit and from motif_rmsd.  Nothing warns
+            # here.  resolve_contigs only warns about a missing chain.
             continue
         matched_design_idx.append(i)
         matched_input_coords.append(input_by_resnum[rn])
@@ -612,20 +593,11 @@ def calc_motif_and_region_metrics(
     motif_rmsd = float(np.sqrt(np.mean(np.sum(motif_diffs ** 2, axis=1))))
 
     # ── Per-region endpoint distances and COM displacement ──────────────
-    # For each design region we identify two pieces of input information:
-    #
-    #   * The flanking fixed segment anchors (prev_end_resnum,
-    #     next_start_resnum), either of which may be None when the design
-    #     region is at the N or C terminus of the receptor.
-    #
-    #   * The set of input residues this design region "replaces" for
-    #     the purpose of COM comparison.  See the per-region loop for
-    #     the per-anchor-case rules.
-    #
-    # Endpoint-distance and COM-displacement use these differently:
-    # endpoint distance needs both anchors (you can't span without two
-    # ends); COM displacement only needs *some* corresponding input
-    # residues, which is well-defined even with a one-sided anchor.
+    # Each design region needs its flanking fixed-segment anchors
+    # (prev_end, next_start), either of which is None at a receptor
+    # terminus.  Endpoint distance needs both anchors.  COM displacement
+    # needs only *some* corresponding input residues, so it still works
+    # with a one-sided anchor.  The per-anchor-case rules are in the loop.
 
     denovo_anchors = []  # list of (prev_end, next_start) per denovo segment
     for s_idx, desc in enumerate(seg_descs):
@@ -690,10 +662,9 @@ def calc_motif_and_region_metrics(
         input_gap_coords = [input_by_resnum[r] for r in gap_resnums
                             if r in input_by_resnum]
 
-        # Endpoint distance (input): only meaningful when both anchors
-        # exist AND the gap actually has ≥2 residues in the input PDB.
-        # A leading- or trailing-only anchor can't define an endpoint
-        # span, even if we picked some residues for the COM comparison.
+        # Endpoint distance (input) needs both anchors AND ≥2 gap
+        # residues in the input PDB.  A one-sided anchor cannot define a
+        # span, even though it still supplies COM-comparison residues.
         if (prev_end is not None and next_start is not None
                 and len(input_gap_coords) >= 2):
             input_gap_arr = np.array(input_gap_coords)
@@ -800,14 +771,13 @@ def main():
         all_atoms = read_ca_atoms(dpdb)
 
         # Always use chain-break-split + length-based identify_segments,
-        # regardless of how many chains the design PDB has.  RFDiffusion
-        # renumbers output chains alphabetically (A, B, ...) in the order
-        # they appear in the contig — these letters do NOT match the
-        # user's input chain letters (e.g. receptor_chain="B" in the
-        # input PDB becomes chain "A" in RFDiffusion output if it's the
-        # first chain in the contig).  The previous chain-ID lookup
-        # silently produced wrong results when input chain letters
-        # weren't already A/B in the right order.
+        # whatever the design PDB's chain count.  RFDiffusion renumbers
+        # output chains alphabetically (A, B, ...) in contig order, so
+        # the letters do NOT match the user's input chain letters.  A
+        # receptor on input chain B becomes chain A if it comes first in
+        # the contig.  The previous chain-ID lookup silently produced
+        # wrong results when input chain letters were not already A/B in
+        # the right order.
         seg1, seg2, break_dist = split_at_chain_break(all_atoms)
         rec_atoms, eff_atoms, _ = identify_segments(
             seg1, seg2, expected_rec_len, expected_eff_len
@@ -932,14 +902,13 @@ def main():
               f"frac={frac_in:.2f}) motif_rmsd={motif_str}Å "
               f"com_disp=[{com_summary}]Å [{status}]")
 
-    # Write outputs.  Note: per-design design residues live inside each
-    # entry of `designs` (as `per_design_design_residues`, computed via
-    # build_receptor_resnum_map) and are the authoritative source.  The
-    # old top-level `design_residues` field — gap arithmetic from
-    # parse_design_region on the input PDB — was misleading because it
-    # only matched reality for fixed-length contigs and didn't reflect
-    # what RFDiffusion actually produced.  Removed; consumers should
-    # use the per-design field.
+    # Write outputs.  The authoritative design residues are per-design,
+    # in each `designs` entry as `per_design_design_residues` from
+    # build_receptor_resnum_map.  The old top-level `design_residues`
+    # field came from parse_design_region's gap arithmetic on the input
+    # PDB.  It only matched reality for fixed-length contigs and did not
+    # reflect what RFDiffusion produced, so it is no longer written.
+    # Consumers should use the per-design field.
     with open("rfdiffusion_metrics.json", "w") as f:
         json.dump({
             "designs": metrics,

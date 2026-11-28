@@ -2,9 +2,9 @@
 """
 merge_orthogonal_metrics.py
 ---------------------------
-P0-31 · Merge the three per-survivor orthogonal-metrics streams
-(AF3-no-MSA, biophysical, Rosetta) back onto the P0-29 extended CSV,
-and apply the filter cascade.
+Merge the three per-survivor orthogonal-metrics streams (AF3-no-MSA,
+biophysical, Rosetta) back onto the interface-restricted-metrics CSV,
+then apply the filter cascade.  The streams run on cohort survivors.
 
 Inputs (all CSV):
   --input-csv                       cross_sequence_summary_with_interface_metrics.csv
@@ -16,12 +16,17 @@ Filter thresholds:
   --filter-af3-ra-max     AF3-no-MSA best ra_eff (< threshold passes).
                           INFORMATIONAL — flag emitted but does NOT gate
                           passes_orthogonal_filters (demoted 2026-04-28).
-  --filter-sc-min         Rosetta Sc (>= passes).  Flag only, not a hard drop.
-  --filter-bsa-min        FreeSASA BSA (Å², >= passes).  Flag only.
-  --filter-plddt-min      Interface pLDDT (>= passes).  Flag only.
+  --filter-sc-min         Rosetta Sc (>= passes).  Gating.
+  --filter-bsa-min        FreeSASA BSA (Å², >= passes).  Gating.
+  --filter-plddt-min      Required but ignored.  No flag is emitted and
+                          passes_orthogonal_filters is unaffected.
+
+No row is ever dropped.  Every input row is written out, and
+passes_orthogonal_filters = 1 iff every NON-AF3 flag is absent.  The
+AF3 flags are af3_nomsa_missing and af3_nomsa_ra_eff_too_high.
 
 Output: survivors_with_orthogonal_metrics.csv with columns:
-  <all original columns from P0-29>,
+  <all original input columns>,
   af3_nomsa_best_ra_eff, af3_nomsa_mean_ra_eff,
   af3_nomsa_best_iptm, af3_nomsa_mean_iptm,
   af3_nomsa_n_correct_interface, af3_nomsa_total_predictions,
@@ -29,10 +34,6 @@ Output: survivors_with_orthogonal_metrics.csv with columns:
   bsa, interface_hbonds, biophysical_failures,
   sc, rosetta_ddg, rosetta_failures,
   orthogonal_flags, passes_orthogonal_filters
-
-passes_orthogonal_filters = 1 iff every NON-AF3 flag is absent.
-AF3 flags (af3_nomsa_missing, af3_nomsa_ra_eff_too_high) are
-informational only.
 """
 
 from __future__ import annotations
@@ -89,56 +90,53 @@ def _apply_filters(
     Orthogonal metrics are those INDEPENDENT of Boltz-2:
       - Rosetta Sc and ΔΔG (physics-based, separate software)
       - FreeSASA BSA (solvent-accessible surface, separate software)
-      - AF3-no-MSA ra_eff (separate structure predictor, INFORMATIONAL only)
+      - AF3-no-MSA ra_eff (separate structure predictor)
+
+    Only Sc and BSA are checked here.  ΔΔG is carried through to the
+    output CSV, but no threshold is applied to it.
+
+    AF3 is informational.  Its flag is emitted so plots can report
+    cross-model disagreement, but it does not gate
+    passes_orthogonal_filters.  Negative steering optimises against
+    Boltz, so AF3 disagreement is a sanity-check warning rather than a
+    kill criterion.
 
     Boltz-2 confidence metrics (interface_plddt, ipSAE, iPTM) are NOT
-    orthogonal — they come from the same model as the negsteer predictions.
-    They are displayed in the cohort summary under the Boltz confidence
-    column group but do NOT gate passes_orthogonal_filters.
-
-    AF3 is INFORMATIONAL — its flag is emitted (so plots can report
-    cross-model disagreement) but it does NOT gate
-    passes_orthogonal_filters.  Negative steering optimises against
-    Boltz; AF3 is a useful sanity check but disagreement is not by
-    itself a kill criterion.
+    orthogonal.  They come from the same model as the negsteer
+    predictions.  The cohort summary shows them under the Boltz
+    confidence column group, and they never gate
+    passes_orthogonal_filters.
     """
     flags: List[str] = []
 
-    # AF3 — INFORMATIONAL flag only (was previously gating; demoted
-    # 2026-04-28 so AF3 disagreement is a warning rather than a hard
-    # drop).  The flag is still emitted so the plot's filter cascade
-    # can show how many survivors AF3 disputes.
+    # AF3 — informational flag only.  It was gating until 2026-04-28.
     af3_ra = _as_float(row.get("af3_nomsa_best_ra_eff", ""))
     if af3_ra is None:
         flags.append("af3_nomsa_missing")
     elif af3_ra >= af3_ra_max:
         flags.append(f"af3_nomsa_ra_eff_too_high:{af3_ra:.2f}")
 
-    # Sc — flag only.
+    # Sc — gating.
     sc_val = _as_float(row.get("sc", ""))
     if sc_val is None:
         flags.append("sc_missing")
     elif sc_val < sc_min:
         flags.append(f"sc_too_low:{sc_val:.3f}")
 
-    # BSA — flag only.
+    # BSA — gating.
     bsa_val = _as_float(row.get("bsa", ""))
     if bsa_val is None:
         flags.append("bsa_missing")
     elif bsa_val < bsa_min:
         flags.append(f"bsa_too_low:{bsa_val:.0f}")
 
-    # NOTE: interface_plddt is intentionally NOT included here.
-    # It is a Boltz-2 confidence metric (pLDDT over interface residues),
-    # not an orthogonal metric.  It is displayed in the cohort summary
-    # under the Boltz confidence column group alongside iPTM and ipSAE.
-    # The --filter-plddt-min argument is accepted for backward compat
-    # but has no effect on the filter.
+    # interface_plddt is intentionally NOT checked.  It is a Boltz-2
+    # confidence metric (pLDDT over interface residues), not an
+    # orthogonal one.  --filter-plddt-min stays required by the CLI so
+    # the Nextflow caller need not change, but it has no effect.
 
     row["orthogonal_flags"] = ",".join(flags)
-    # Pass requires: every NON-AF3 flag absent.  AF3 flags
-    # (af3_nomsa_missing, af3_nomsa_ra_eff_too_high) are informational
-    # only and do not gate passing.
+    # Pass requires every non-AF3 flag to be absent.
     gating_flags = [f for f in flags if not f.startswith("af3_nomsa")]
     passes = 1 if not gating_flags else 0
     row["passes_orthogonal_filters"] = str(passes)

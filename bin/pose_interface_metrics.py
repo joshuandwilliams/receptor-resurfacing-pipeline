@@ -1,22 +1,25 @@
 """
-interface_metrics.py
+pose_interface_metrics.py
 
 Compute interface metrics for a two-chain protein complex.
 
 Metrics produced:
   - CA-CA contact pairs at <=8 A (count + distance distribution stats)
-  - Minimum heavy-atom contact pairs at <=5 A (count + distance distribution)
-  - Heavy-atom clash counts at thresholds 2.0, 2.5, 3.0 A
+  - Heavy-atom contact pairs at <=5 A (count + distance distribution)
+  - Heavy-atom clash counts at thresholds 2.0, 2.5, 3.0, 3.5 A
   - Buried surface area (BSA) via Shrake-Rupley SASA difference (complex vs separated)
   - Interface residue count per chain (any heavy atom within 5 A of other chain)
-  - Interface composition: hydrophobic / polar / charged / aromatic fractions per chain
+  - Interface composition: hydrophobic / polar / charged / aromatic fractions per chain.
+      The four classes overlap, so the fractions do not sum to 1.  His counts as
+      polar and aromatic; Phe, Tyr and Trp count as hydrophobic and aromatic.
   - Gap-index proxy for shape complementarity:
       mean nearest-other-chain distance over interface heavy atoms (lower = tighter packing)
   - Hydrogen-bond candidate count (donor->acceptor heavy-atom distance <=3.5 A)
 
+Every PDB is processed in one invocation.  There is no separate batch mode.
+
 CLI:
-  python interface_metrics.py <pdb> [--chain-a A] [--chain-b B] [--json-out OUT.json]
-  python interface_metrics.py --batch <pdb1> <pdb2> ...  [--chains A:B A:C ...]
+  python pose_interface_metrics.py <pdb> [<pdb> ...] [--chains A:B A:C ...] [--json-out OUT.json]
 """
 
 from __future__ import annotations
@@ -168,8 +171,8 @@ def compute_metrics(pdb_path: Path, chain_a: str, chain_b: str) -> Dict:
     sasa_complex_a = sum(a.sasa for a in heavy_a)
     sasa_complex_b = sum(a.sasa for a in heavy_b)
 
-    # Recompute SASA after detaching each chain in turn to get free SASA
-    # We use temporary structures to avoid mutating the model in place.
+    # Free SASA per chain.  Copy each chain into a throwaway Structure
+    # rather than detaching it, so the shared model is never mutated.
     def _chain_only_sasa(target_chain) -> float:
         from Bio.PDB.Chain import Chain
         from Bio.PDB.Model import Model
@@ -192,9 +195,8 @@ def compute_metrics(pdb_path: Path, chain_a: str, chain_b: str) -> Dict:
     bsa_total = bsa_a + bsa_b
 
     # --- shape-complementarity proxy --------------------------------------
-    # For each interface heavy atom in A, distance to nearest heavy atom in B.
-    # Lower mean = tighter packing; very low minima paired with low mean ->
-    # well-mated interface.
+    # Mean over interface heavy atoms of the distance to the nearest
+    # heavy atom on the other chain.  Lower means tighter packing.
     interface_atom_mask_a = (d_heavy <= 5.0).any(axis=1)
     interface_atom_mask_b = (d_heavy <= 5.0).any(axis=0)
     nearest_a_to_b = d_heavy[interface_atom_mask_a].min(axis=1)

@@ -4,23 +4,21 @@ cross_summary_view.py
 CrossSummaryRow + CrossSummarySnapshot — a typed read-only view over
 ``cross_sequence_summary.csv``.
 
-The full Phase 4 DesignCohort / NegativeSteeringRun types model the
-underlying experiment (StageResults, PSPs, contamination positions).
-Building them faithfully requires the per-prediction PDB files, the
-gemmi-loaded structures, and the ground-truth PSP — that is the
-"deep" form.
+The `DesignCohort` and `NegativeSteeringRun` types model the underlying
+experiment (StageResults, PSPs, contamination positions).  Building them
+faithfully needs the per-prediction PDB files, the gemmi-loaded
+structures and the ground-truth PSP.  That is the "deep" form.
 
-But many cohort-level queries (which sequences survived, what tier did
-each land in, what is the composite-ranked order) only need the
-already-aggregated values cross_sequence_summary.csv has stamped onto
-each row.  This module provides a shallow typed view for those
-queries, so callers can opt for the cheap path when the deep form is
-overkill.
+Many cohort-level queries need less.  Which sequences survived, what
+tier each landed in and the composite-ranked order are all already
+stamped onto each row of cross_sequence_summary.csv.  This module is a
+shallow typed view for those queries.
 
 Both forms expose the same DesignCohort-style interface:
 ``survivors()``, ``tier_breakdown()``, ``ranked_by_composite()``.
 
-Tier 6.5 — sits beside DesignCohort.  No dependency on PSP / gemmi.
+Imports only csv, dataclasses, pathlib and typing.  Nothing from the
+other typed modules, and no PSP or gemmi dependency.
 """
 
 from __future__ import annotations
@@ -54,8 +52,8 @@ class CrossSummaryRow:
     """One row of cross_sequence_summary.csv as a typed record.
 
     Carries the cohort-level decisions stamped onto each MPNN sequence:
-    tier, n_pass, outcome, composite score, run-one runtime.  Native
-    columns not yet typed remain accessible via the ``extras`` dict.
+    tier, n_pass, outcome, composite score, run-one runtime.  Any other
+    column of the CSV stays reachable through the ``extras`` dict.
     """
     mpnn_sequence: str
     row_type: str
@@ -103,9 +101,8 @@ class CrossSummaryRow:
 class CrossSummarySnapshot:
     """Typed view over a cross_sequence_summary.csv.
 
-    Read-only.  Exposes the cohort queries DesignCohort exposes
-    (survivors / tier_breakdown / ranked_by_composite) on a row-level
-    basis without needing the deep StageResult / PSP scaffolding.
+    Read-only.  Exposes the DesignCohort cohort queries on a row-level
+    basis, without the deep StageResult / PSP scaffolding.
     """
     rows: Tuple[CrossSummaryRow, ...]
     source_csv: Optional[Path] = None
@@ -165,8 +162,12 @@ class CrossSummarySnapshot:
     def ranked_by_composite(self) -> List[CrossSummaryRow]:
         """Sort steered rows by (tier_order, -composite_score).
 
-        Equivalent to the existing ``_assign_cross_ranks`` in
-        cross_sequence_summary.py — used here as a verification path."""
+        Shares the tier-first, composite-descending policy of
+        ``_assign_cross_ranks`` in cross_sequence_summary.py, but is not
+        identical to it.  That function ranks only tier A/B/C records
+        with both composite components present.  This sorts every
+        steered row, putting tier "none" last and treating a missing
+        composite as -inf."""
         def key(r: CrossSummaryRow):
             tier_idx = self._TIER_ORDER.get(r.cross_tier, 99)
             composite = r.cross_composite_score

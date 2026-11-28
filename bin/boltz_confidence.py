@@ -4,20 +4,18 @@ boltz_confidence.py
 BoltzConfidenceMetrics — wrapper around one Boltz prediction sample's
 confidence sidecar JSON (and optional pLDDT npz).
 
-Paired with one `ProteinStructurePrediction` from Boltz (1:1 — each
-sample produces one PDB and one confidence JSON; this type wraps the
-non-structural side).
+Pairs 1:1 with one Boltz `ProteinStructurePrediction`.  Each sample
+produces one PDB and one confidence JSON.  This type wraps the
+non-structural side.
 
-Tier 0 scope (per Phase 4 spec §2.4): the JSON-direct metrics + mean
-pLDDT.  PAE-derived metrics (`ipae`, `pae_pass_frac`, `ipsae*`) are
-deferred to a later tier because they require the chain lengths from
-the matching PDB (a `ProteinStructurePrediction`-dependent operation —
-that type doesn't exist yet at Tier 0).  Until then,
-`compute_metrics.py` keeps its existing PAE-derived computations and
-`BoltzConfidenceMetrics` is augmented at Tier 2+ when it can take a
-`ProteinStructurePrediction` as a parameter.
+Scope is the JSON-direct metrics plus mean pLDDT.  PAE-derived metrics
+(`ipae`, `pae_pass_frac`, `ipsae*`) are absent, because they need the
+chain lengths from the matching PDB.  They are computed instead by the
+negative-steering engine and by `compute_interface_metrics.py`, both of
+which read the `pae_*.npz` sidecar directly.
 
-Tier 0 type — no upstream dependencies on other Phase 4 types.
+Imports nothing from the other typed modules in `bin/`, only json,
+pathlib and typing.
 """
 
 from __future__ import annotations
@@ -30,15 +28,14 @@ from typing import Any, Dict, List, Optional
 class BoltzConfidenceMetrics:
     """One sample's confidence metrics from a Boltz prediction.
 
-    Construction takes the path to a `confidence_<name>.json` file (and
-    optionally a matching `plddt_<name>.npz`).  Lazy loading: the JSON
-    is read on first access and cached for the instance's lifetime.
+    Construction takes the path to a `confidence_<name>.json` file and
+    optionally a matching `plddt_<name>.npz`.  A missing confidence JSON
+    raises FileNotFoundError.  The JSON is read lazily on first access,
+    then cached for the instance's lifetime.
 
-    Properties return `float | None`:
-    - `None` if the sidecar was missing, unparseable, or the field was
-      absent from the JSON.
-    - Otherwise the value as a float (rounded to 4 dp where the
-      existing codebase rounds, matching compute_metrics.py behaviour).
+    Scalar properties return `float | None`.  `None` means the JSON was
+    unparseable or the field was absent.  Otherwise the value is rounded
+    to 4 dp.  `avg_plddt` is the exception and rounds to 2.
     """
 
     def __init__(
@@ -77,9 +74,9 @@ class BoltzConfidenceMetrics:
 
     @property
     def iptm(self) -> Optional[float]:
-        """Boltz writes iptm directly; falls back to protein_iptm when
-        only the protein-protein variant exists (matches compute_metrics
-        behaviour at line 1241-1243)."""
+        """Prefers the `iptm` field Boltz writes directly.  Falls back to
+        `protein_iptm` when only the protein-protein variant is
+        present."""
         val = self._field_float("iptm")
         if val is not None:
             return val
@@ -145,11 +142,13 @@ class BoltzConfidenceMetrics:
 
     @property
     def avg_plddt(self) -> Optional[float]:
-        """Mean pLDDT across all residues, normalised to 0-100.
+        """Mean pLDDT across all residues, rescaled to 0-100.
 
-        Boltz writes the per-residue .npz on a 0-1 scale, conventional
-        PDB B-factor pLDDT is 0-100; we always return 0-100 to match
-        the rest of the pipeline (compute_metrics.py:1277-1278)."""
+        Boltz writes the per-residue .npz on a 0-1 scale.  Values are
+        multiplied by 100 when the array max is <= 1.5, matching the
+        0-100 PDB B-factor convention used elsewhere in the pipeline.
+        `complex_plddt` by contrast stays on Boltz's 0-1 scale.
+        Returns None when no .npz was supplied."""
         if self._avg_plddt_computed:
             return self._cached_avg_plddt
         self._avg_plddt_computed = True
@@ -173,15 +172,13 @@ class BoltzConfidenceMetrics:
     # ── Derived ──────────────────────────────────────────────────────
 
     def confidence_flag(self, thresholds) -> str:
-        """Returns one of: ok | low_pass_frac | low_iptm | low_plddt |
-        high_ipae | multiple.
+        """Returns one of: ok | low_iptm | low_plddt | multiple.
 
-        Tier 0 scope: pae_pass_frac and ipae are NOT yet available from
-        this type (PAE matrix read deferred to Tier 2+).  Until then,
-        confidence_flag checks iptm and complex_plddt only.  Migration
-        of the full check (matching extract_passing.py:_compute_
-        confidence_flag) lands when BoltzConfidenceMetrics gains PAE
-        access via a ProteinStructurePrediction reference.
+        Checks iptm and complex_plddt only, against
+        `thresholds.iptm_min` and `thresholds.complex_plddt_min`.  The
+        low_pass_frac and high_ipae triggers that
+        `extract_passing._compute_confidence_flag` also applies need the
+        PAE matrix, which this type does not read.
         """
         triggers: List[str] = []
         if self.iptm is not None and self.iptm < thresholds.iptm_min:
@@ -209,17 +206,17 @@ class BoltzConfidenceMetrics:
     def from_prediction_dir(
         cls, prediction_dir: Path, base_name: str = "input"
     ) -> List["BoltzConfidenceMetrics"]:
-        """Find every per-sample confidence JSON in `prediction_dir` and
-        return a list of BoltzConfidenceMetrics, one per sample, sorted
-        by model index.
+        """Return one BoltzConfidenceMetrics per per-sample confidence
+        JSON in `prediction_dir`, sorted by filename.
 
         Boltz writes one `confidence_<base_name>_model_<sample>.json`
-        per sample (sample = 0..N-1 where N = diffusion_samples).
-        Default `base_name="input"` matches the typical Boltz output
-        layout used everywhere in this pipeline.
+        per sample, where sample runs 0..N-1 for N diffusion samples.
+        The sort is lexicographic, so model_10 precedes model_2 once
+        there are ten or more samples.  `base_name="input"` matches the
+        Boltz output layout this pipeline uses.
 
-        Each instance is also linked to the matching `plddt_*.npz` if
-        present in the same directory.
+        Each instance is linked to the matching `plddt_*.npz` when one
+        is present in the same directory.
         """
         prediction_dir = Path(prediction_dir)
         if not prediction_dir.is_dir():

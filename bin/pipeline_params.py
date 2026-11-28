@@ -9,15 +9,16 @@ check.  This module is the runtime carrier of THE VALUES.  Construction
 runs full validation, collects every error, raises ParamValidationError
 if any field is bad.  Successfully constructed → all values are valid.
 
-Type design (Phase 4 spec §2.12):
-- Immutable after construction (frozen dataclass-like behaviour).
-- Construction via from_dict / from_nextflow_json; both routes funnel
+Design:
+- Immutable after construction (frozen dataclass).
+- Construction via from_dict or from_nextflow_json.  Both routes funnel
   through validate_params.validate_params for spec enforcement.
 - Carries USER-facing params only.  Research thresholds (ra_eff
   cutoffs, intact thresholds, composite weights) live in
   bin/pipeline_thresholds.py.
 
-Tier 0 type — no upstream dependencies on other Phase 4 types.
+Imports only bin/validate_params.py, none of the other typed modules
+in `bin/`.
 """
 
 from __future__ import annotations
@@ -60,13 +61,13 @@ class PipelineParams:
 
     Constructed via classmethods (``from_dict`` / ``from_nextflow_json``)
     rather than directly so that validation always runs.  Values are
-    stored in a single dict (``values``) keyed by param name; access
-    via attribute-like ``params["key"]`` or via ``params.values["key"]``.
+    stored in a single dict (``values``) keyed by param name.  Read
+    them with ``params["key"]`` or ``params.values["key"]``.
 
     A dict rather than one field per param keeps the type small and
-    avoids drift between two catalogues — `validate_params.PARAM_SPECS`
-    is the single source of truth for which params exist.  Accessor
-    methods on this type return the same dict view.
+    avoids drift between two catalogues.
+    `validate_params.PARAM_SPECS` is the single source of truth for
+    which params exist.
     """
 
     values: Mapping[str, Any] = field(default_factory=dict)
@@ -87,18 +88,18 @@ class PipelineParams:
     def validate(self) -> List[str]:
         """Re-run every spec against the current values.
 
-        Useful as a defence-in-depth check (e.g. before passing the
-        params to a downstream stage that might silently tolerate a bad
-        value).  Returns empty list on success.
+        A defence-in-depth check, e.g. before passing the params to a
+        downstream stage that might silently tolerate a bad value.
+        Returns an empty list on success.
         """
         return validate_params.validate_params(dict(self.values))
 
     @classmethod
     def from_dict(cls, d: Mapping[str, Any]) -> "PipelineParams":
-        """Construct from a flat dict (e.g. the JSON Nextflow dumps).
+        """Construct from a flat dict, e.g. the JSON Nextflow dumps.
 
-        Runs validation; raises ParamValidationError if any field is
-        invalid (with all errors collected, not just the first).
+        Runs validation.  Raises ParamValidationError if any field is
+        invalid, with all errors collected rather than just the first.
         """
         errors = validate_params.validate_params(dict(d))
         if errors:
@@ -108,8 +109,8 @@ class PipelineParams:
     @classmethod
     def from_nextflow_json(cls, path: Path) -> "PipelineParams":
         """Construct from a JSON file dumped by Nextflow's
-        groovy.json.JsonOutput.toJson(params).  Matches the wiring
-        already in main.nf workflow head."""
+        groovy.json.JsonOutput.toJson(params).  Matches the params dump
+        at main.nf:432."""
         path = Path(path)
         if not path.is_file():
             raise FileNotFoundError(f"params JSON not found: {path}")

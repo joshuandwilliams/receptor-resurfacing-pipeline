@@ -2,21 +2,24 @@
 """
 cross_summary_v2.py
 -------------------
-Phase 4 typed CLI entry point for cross-sequence summary emission.
+Typed CLI entry point for cross-sequence summary emission.  This is
+the script the NEGSTEER_CROSS_SEQUENCE Nextflow process actually runs
+(see modules/negative_steering.nf).
 
 Drop-in replacement for cross_sequence_summary.py from the Nextflow
-process perspective: same CLI surface (--passing-summary-dir,
---published-runs-dir, --scored-metadata, --output), same CSV output.
+process perspective.  Same CLI flags (--passing-summary,
+--passing-summary-dir, --published-runs-dir, --scored-metadata,
+--output, --strict and the two --seq-name-from-* switches) and the
+same CSV output.
 
-The implementation routes through ``design_cohort.DesignCohort.
-emit_cross_summary_from_dirs`` — the Phase 4 typed API — which in turn
-delegates to the long-standing ``cross_sequence_summary.aggregate``
-function for the column-level CSV construction.  The architectural
-benefit: the typed API exposes the cohort-CSV emission as a method
-on DesignCohort, so future refactors can reach in via the type
-hierarchy without touching the Nextflow process or this CLI surface.
-
-Bit-identical CSV output relative to cross_sequence_summary.py.
+The implementation routes through
+``design_cohort.DesignCohort.emit_cross_summary_from_dirs``, which in
+turn delegates to ``cross_sequence_summary.aggregate`` for the
+column-level CSV construction.  Routing this way exposes cohort-CSV
+emission as a method on DesignCohort, so later refactors can reach in
+via the types without touching the Nextflow process or this CLI
+surface.  CSV output stays identical to cross_sequence_summary.py
+because the same aggregate() builds it.
 """
 
 from __future__ import annotations

@@ -3,19 +3,18 @@ designed_backbone.py
 --------------------
 DesignedBackbone — one RFDiffusion output.
 
-Per Phase 4 spec §2.6.  Tier 3 type — depends on
-ProteinStructurePrediction, ContigSpec, PositionSet.
+Imports ProteinStructurePrediction, ContigSpec and PositionSet.
 
-Composition over inheritance (per Q8): wraps a
+Composition over inheritance: this type wraps a
 ``ProteinStructurePrediction`` for the structural file rather than
 extending it.  Accessing the structure goes through
 ``backbone.structure.X``.  DesignedBackbone adds the RFDiffusion-
 specific fields (design_id, contig, Rosetta filter score) and the
 design-region accessor that delegates to the contig.
 
-A DesignedBackbone has STRUCTURE but no SEQUENCE — the residue
+A DesignedBackbone has STRUCTURE but no SEQUENCE.  The residue
 identities for the de novo region come later from MPNN.  Adding a
-sequence produces a `DesignedSequence` (Tier 4).
+sequence produces a `DesignedSequence`.
 """
 
 from __future__ import annotations
@@ -38,9 +37,10 @@ from protein_structure_prediction import ProteinStructurePrediction  # noqa: E40
 class DesignedBackbone:
     """One RFDiffusion-generated receptor backbone.
 
-    Carries the structural file via a composed ProteinStructurePrediction
-    (per Q8 — composition, not inheritance), plus the contig that
-    produced it and the Rosetta filter score that gated it forward.
+    Carries the structural file via a composed
+    ProteinStructurePrediction rather than by inheriting from it, plus
+    the contig that produced it and the Rosetta filter score that gated
+    it forward.
     """
     pdb_path: Path
     design_id: str
@@ -66,9 +66,9 @@ class DesignedBackbone:
     # ── Convenience delegating to ContigSpec ─────────────────────────
 
     def design_region(self) -> PositionSet:
-        """Receptor positions that fall in de novo (design) segments,
-        in `designed` frame.  Carries the contig reference so callers
-        can convert with `set.in_frame('native')`."""
+        """Receptor positions in de novo (design) segments, in the
+        `designed` frame.  Carries the contig reference so callers can
+        convert with `set.in_frame('native')`."""
         chain = self.receptor_chain
         positions = self.contig.design_region_positions(chain)
         return PositionSet(
@@ -77,8 +77,8 @@ class DesignedBackbone:
         )
 
     def fixed_anchor_positions(self) -> PositionSet:
-        """Receptor positions anchored to native (fixed segments),
-        in `designed` frame."""
+        """Receptor positions anchored to native (fixed segments), in
+        the `designed` frame."""
         chain = self.receptor_chain
         positions = self.contig.fixed_anchor_positions(chain)
         return PositionSet(
@@ -87,8 +87,8 @@ class DesignedBackbone:
         )
 
     def receptor_length(self) -> int:
-        """Total residues in the resolved receptor chain (= fixed +
-        de novo segment lengths summed)."""
+        """Total residues in the resolved receptor chain, the fixed and
+        de novo segment lengths summed."""
         return self.contig.chain_length(self.receptor_chain)
 
     # ── Pass-through to the composed structure ───────────────────────
@@ -114,8 +114,8 @@ class DesignedBackbone:
         sc_score: Optional[float] = None,
         rfdiff_metrics: Optional[dict] = None,
     ) -> "DesignedBackbone":
-        """Convenience: takes a contig STRING + paths, returns a
-        DesignedBackbone with the contig parsed and the PSP constructed.
+        """Build from a contig STRING plus paths, parsing the contig and
+        constructing the ProteinStructurePrediction along the way.
         """
         contig = ContigSpec.from_resolved_string(contig_string)
         structure = ProteinStructurePrediction(

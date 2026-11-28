@@ -2,66 +2,62 @@
 """
 orthogonal_metrics_plots.py
 ---------------------------
-Production cohort plot script for orthogonal metrics (Task 44).
+Cohort plots for the orthogonal-metrics stage.
 
-Reads survivors_with_orthogonal_metrics.csv produced by
-NEGSTEER_ORTHOGONAL_METRICS, joined to cross_sequence_summary.csv
-from the upstream NEGSTEER_CROSS_SEQUENCE.  Both are required: the
-metrics-vs-composite scatter and the combined cohort+orthogonal
-summary both join on mpnn_sequence to source upstream composite
-scores and cohort-wide context.  Invoked from
-modules/negsteer_orthogonal_metrics_plots.nf::ORTHOG_PLOTS.
+Reads survivors_with_orthogonal_metrics.csv from
+NEGSTEER_ORTHOGONAL_METRICS and cross_sequence_summary.csv from the
+upstream NEGSTEER_CROSS_SEQUENCE.  Both are required.  The
+metrics-vs-composite scatter and the combined summary join on
+mpnn_sequence to pull composite scores and cohort-wide context out of
+the cross-summary.  Invoked from
+modules/negsteer_orthogonal_metrics.nf::ORTHOG_PLOTS.
 
-Lifted verbatim from tests/orthogonal_metrics/iterate_orthogonal_metrics_plots.py;
-the only differences are (a) the test-path fallback in
-_resolve_csv_path is removed (production always passes both CSVs
-explicitly), (b) both CSV flags are required, and (c) this header.
-The two scripts must stay in sync; when iterating on plots, edit
-the test script first, validate against real cluster data, then
-mirror the changes here.
+All the plot logic lives here.
+tests/orthogonal_metrics/iterate_orthogonal_metrics_plots.py is a thin
+shim that imports this module's main() and injects canonical test
+paths for --survivors-csv and --cross-summary-csv.  Edit the plots in
+this file.
 
 Plots produced
 --------------
 
 orthogonal_af3_vs_boltz.png
-    Scatter of af3_nomsa_best_ra_eff (x) vs Boltz
-    rep_ra_eff_vs_truth_median (y).  AF3 region failing
-    the af3_ra_max threshold shaded pale red — but AF3 is
-    INFORMATIONAL only (no longer gates passes_orthogonal_filters).
+    Scatter of af3_nomsa_best_ra_eff (x) against Boltz
+    rep_ra_eff_vs_truth_median (y), coloured by negsteer tier.  The
+    region beyond af3_ra_max is shaded pale red.  AF3 is
+    informational and does not gate passes_orthogonal_filters.
 
 orthogonal_filter_cascade.png
-    Waterfall of the GATING cascade only (sc → bsa → interface_plddt).
-    AF3 disagreement is shown as a separate informational annotation
-    in the corner — disagreement is reported but doesn't drop
-    survivors (negsteer optimises Boltz; AF3 is a sanity check).
+    Waterfall over the flags in orthogonal_flags, in the order
+    sc → bsa → interface_plddt, with a trailing yellow AF3 bar.  Only
+    the AF3 bar is informational.  The real gate is Sc and BSA.
+    merge_orthogonal_metrics.py emits no interface_plddt or ΔΔG flag,
+    so the third bar never drops anyone.
 
 orthogonal_metrics_vs_composite.png
-    Multi-panel scatter: composite_score (Y) vs each orthogonal
-    metric (X).  Six panels: Sc, BSA, interface_plddt, ΔΔG,
-    AF3 ra_eff, AF3 iPTM.  Replaces the earlier strip-plot
-    distributions and standalone ΔΔG plot — both carried no
-    information at small n.  Composite is the upstream ranker, so
-    showing every orthogonal metric against it shows whether each
-    orthogonal metric agrees with or fights the composite ranking.
+    Five-panel scatter of composite_score (y) against each orthogonal
+    metric (x).  The panels are Sc, BSA, interface_plddt, ΔΔG and AF3
+    ra_eff.  Replaces the earlier strip-plot distributions and the
+    standalone ΔΔG plot, both of which carried no information at small
+    n.  Composite is the upstream ranker, so each panel shows whether
+    that metric agrees with the composite ranking or fights it.
 
 orthogonal_combined_cohort_summary.png
-    The big combined view: one row per MPNN sequence in cross_summary
-    (steered only), sorted by cross_composite_score descending.
-    Columns span both the negsteer cascade (Boltz pose, confidence
-    suite, n_mutations) and the orthogonal cascade (AF3, Sc, BSA,
-    ΔΔG).  Sequences that didn't reach the orthogonal stage have
-    grey-hatched cells in those columns.  Tier rendered as left-edge
-    coloured stripe.  Designed for wet-lab triage of the full cohort.
+    One row per steered MPNN sequence in cross_summary, sorted by
+    tier, then by whether every thresholded Boltz-2 confidence metric
+    passes, then by descending cross_composite_score.  Columns span
+    the negsteer cascade (Boltz pose, confidence suite, n_mutations)
+    and the orthogonal cascade (AF3 ra_eff, Sc, BSA, ΔΔG).  Sequences
+    that never reached the orthogonal stage get grey-hatched cells
+    there.  Tier is a left-edge coloured stripe.  Built for wet-lab
+    triage of the full cohort.
 
 Usage
 -----
-    Invoked by modules/negsteer_orthogonal_metrics_plots.nf::ORTHOG_PLOTS.
-    Direct invocation:
-
-        python orthogonal_metrics_plots.py \\
-            --survivors-csv     <path to survivors_with_orthogonal_metrics.csv> \\
-            --cross-summary-csv <path to cross_sequence_summary.csv> \\
-            --outdir            <output directory>
+    python orthogonal_metrics_plots.py \\
+        --survivors-csv     <path to survivors_with_orthogonal_metrics.csv> \\
+        --cross-summary-csv <path to cross_sequence_summary.csv> \\
+        --outdir            <output directory>
 
 Both --survivors-csv and --cross-summary-csv are required.
 """
@@ -83,10 +79,13 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
 
 # ── Threshold defaults ───────────────────────────────────────────────────
-# Sourced from PipelineInternalThresholds (Phase 4 §2.13).  Falls back to
-# literals if pipeline_thresholds isn't importable so the script stays
-# usable standalone.  ORTHOG_PLDDT_MIN is informational only — NOT in the
-# orthogonal_filters gate (see Phase 4 spec §2.11 + commit 47cb9f2).
+# Sourced from PipelineInternalThresholds in bin/pipeline_thresholds.py.
+# Falls back to literals when that module isn't importable, so the script
+# stays usable standalone.  ORTHOG_PLDDT_MIN is informational only.
+# interface_plddt comes from Boltz-2, the same model as the negsteer
+# predictions, so it is not part of the passes_orthogonal_filters gate
+# (see merge_orthogonal_metrics.py).  COMPOSITE_RA_EFF_WEIGHT is read
+# here but not used by any plot below.
 try:
     import sys as _sys
     _sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -113,7 +112,7 @@ COLOUR_FAIL         = "#D62728"   # red
 COLOUR_THRESHOLD    = "#D62728"   # red dashed (threshold reference)
 COLOUR_SURVIVOR     = "#4C72B0"   # blue
 COLOUR_DIAG         = "#888888"   # grey (y=x reference)
-COLOUR_BENNETT_REF  = "#1F77B4"   # blue dashed (ΔΔG reference)
+COLOUR_BENNETT_REF  = "#1F77B4"   # blue dashed ΔΔG reference; unused
 
 COLOUR_TIER = {
     "A":    "#2CA02C",
@@ -122,10 +121,10 @@ COLOUR_TIER = {
     "none": "#B0B0B0",
 }
 
-# Sort order for tier-aware row sorts.  Lower number = appears first.
+# Sort order for tier-aware row sorts.  Lower number appears first.
 # Mirrors _TIER_ORDER in cross_sequence_summary.py so the cohort
-# summary plot's row order matches what `cross_rank_by_composite`
-# produces in the CSV.
+# summary plot's row order matches the cross_rank_by_composite column
+# in the CSV.
 _TIER_SORT_ORDER = {"A": 0, "B": 1, "C": 2, "none": 3}
 
 
@@ -212,20 +211,17 @@ def _short_name(name: str) -> str:
 def plot_af3_vs_boltz(rows: List[Dict], out_path: str) -> bool:
     """Scatter: AF3-no-MSA best ra_eff (x) vs Boltz median ra_eff (y).
 
-    Points are coloured by negsteer tier (A/B/C/none) — see COLOUR_TIER.
-    The threshold line + shaded fail-region convey orthogonal pass/fail
-    visually for AF3 ra_eff; readers can see at a glance which tier-A
-    candidates pass the orthogonal cross-check vs which fail it (e.g.
-    a tier-A point on the right side of the threshold = a candidate
-    that passed negsteer's gating but disagreed with AF3).
+    Points are coloured by negsteer tier (A/B/C/none), per COLOUR_TIER.
+    The threshold line and shaded fail-region carry AF3 pass/fail.  A
+    tier-A point to the right of the threshold is a candidate that
+    passed negsteer's gating but disagreed with AF3.
 
-    Pre-2026-04-29 history: this plot used to bucket points by
-    passes_orthogonal_filters (global pass-all). That made every
-    point appear "Fail" if it failed any one filter, even in panels
-    where its own metric was fine — confusing and misleading.  Tier-
-    colouring sidesteps the issue entirely: tier is a discrete
-    cohort-level signal, threshold lines speak for per-metric pass/
-    fail.
+    Before 2026-04-29 this plot bucketed points by
+    passes_orthogonal_filters, the global pass-all flag.  Every point
+    then read "Fail" if it failed any one filter, even where its own
+    metric was fine.  Tier colouring avoids that.  Tier is a discrete
+    cohort-level signal and the threshold line covers per-metric
+    pass/fail.
     """
     # Bucket points by tier.
     pts_by_tier: Dict[str, List[Tuple[float, float, str]]] = {
@@ -256,9 +252,9 @@ def plot_af3_vs_boltz(rows: List[Dict], out_path: str) -> bool:
 
     fig, ax = plt.subplots(figsize=(7, 6))
 
-    # Compute axis range.  AF3 routinely returns 30–40 Å on bad
-    # candidates so the x-axis must accommodate that, not just the
-    # threshold * 1.4.
+    # Axis range.  AF3 routinely returns 30–40 Å on bad candidates, so
+    # the x-axis has to reach the data.  ORTHOG_AF3_RA_MAX * 1.5 is
+    # only the floor.
     all_x = [p[0] for v in pts_by_tier.values() for p in v]
     all_y = ([p[1] for v in pts_by_tier.values() for p in v]
              + [p[0] for p in pts_missing_af3])
@@ -273,25 +269,24 @@ def plot_af3_vs_boltz(rows: List[Dict], out_path: str) -> bool:
     axis_max = max(x_max, y_max, ORTHOG_AF3_RA_MAX * 1.5)
 
     # Pale-red shading for the AF3-fail region (x ≥ ORTHOG_AF3_RA_MAX).
-    # This is the orthogonal cascade's mandatory hard drop.
+    # Flags cross-model disagreement; it is not a drop.
     ax.axvspan(ORTHOG_AF3_RA_MAX, axis_max,
                color=COLOUR_FAIL, alpha=0.08, zorder=0)
 
-    # y = x diagonal — perfect cross-model agreement reference.
+    # y = x diagonal — the perfect cross-model agreement reference.
     ax.plot([0, axis_max], [0, axis_max], color=COLOUR_DIAG,
             linewidth=0.8, linestyle="--", alpha=0.6, zorder=1,
             label="y = x (perfect agreement)")
 
-    # AF3 threshold as a thin reference line (the shading is the
-    # primary visual; the line is just the boundary).
+    # AF3 threshold as a thin boundary line.  The shading is the
+    # primary visual.
     ax.axvline(ORTHOG_AF3_RA_MAX, color=COLOUR_THRESHOLD,
                linestyle="--", linewidth=1.0, alpha=0.7, zorder=1,
                label=f"af3_ra_max = {ORTHOG_AF3_RA_MAX} Å")
 
-    # Plot one scatter per tier with the tier colour.  Order matters
-    # for z-stacking — A on top of B on top of C on top of none, so
-    # higher-quality tiers aren't hidden by lower-quality ones in
-    # clustered regions.
+    # One scatter per tier.  Order matters for z-stacking: A over B
+    # over C over none, so higher-quality tiers aren't hidden by
+    # lower-quality ones in clustered regions.
     for tier in ("none", "C", "B", "A"):
         tier_pts = pts_by_tier[tier]
         if not tier_pts:
@@ -306,7 +301,7 @@ def plot_af3_vs_boltz(rows: List[Dict], out_path: str) -> bool:
             zorder={"none": 3, "C": 4, "B": 5, "A": 6}[tier],
         )
 
-    # Missing AF3 — drawn at the right edge as an open right-arrow.
+    # Missing AF3 — drawn at the right edge as a white right-arrow.
     if pts_missing_af3:
         for boltz_ra, name in pts_missing_af3:
             ax.scatter(axis_max * 0.97, boltz_ra,
@@ -318,11 +313,11 @@ def plot_af3_vs_boltz(rows: List[Dict], out_path: str) -> bool:
                 ha="right", va="bottom", fontsize=8, color="black",
                 style="italic")
 
-    # (Survivor-name annotations removed 2026-04-28.  Even with greedy
+    # Survivor-name annotations removed 2026-04-28.  Even with greedy
     # 4-corner anti-overlap placement, labels in clustered regions read
-    # as visual noise and don't add information beyond the pass/fail
-    # colour.  The combined cohort summary plot carries the per-survivor
-    # detail; this scatter is for cohort-level cross-model agreement.)
+    # as noise and add nothing beyond the colour.  The combined cohort
+    # summary plot carries the per-survivor detail.  This scatter is for
+    # cohort-level cross-model agreement.
 
     ax.set_xlim(0, axis_max)
     ax.set_ylim(0, axis_max)
@@ -331,8 +326,7 @@ def plot_af3_vs_boltz(rows: List[Dict], out_path: str) -> bool:
     ax.grid(True, linestyle="-", linewidth=0.3, alpha=0.4, color="grey")
     ax.set_axisbelow(True)
     # Legend above the axes so it never overlaps data points.  ncol
-    # spreads the entries horizontally so they fit in one row above
-    # the plot.
+    # spreads the entries into one row.
     ax.legend(loc="lower center", bbox_to_anchor=(0.5, 1.02),
               ncol=4, fontsize=8, framealpha=0.95)
     ax.set_aspect("equal", adjustable="box")
@@ -347,12 +341,16 @@ def plot_af3_vs_boltz(rows: List[Dict], out_path: str) -> bool:
 # Plot 2: Filter cascade
 # ═══════════════════════════════════════════════════════════════════════════
 
-# Order matters: the cascade applies filters in this order so each
-# bar represents "would survive if only this and earlier filters were
-# applied".  AF3 was demoted from gating to informational on
-# 2026-04-28; it appears as a TRAILING bar after the gating cascade,
-# rendered in yellow rather than the cascade-red, so the
-# informational-vs-gating distinction is visually obvious.
+# Order matters.  The cascade applies these in order, so each bar
+# reads "would survive if only this and the earlier filters applied".
+# AF3 was demoted from gating to informational on 2026-04-28.  It is a
+# trailing bar after this cascade, in yellow rather than cascade-red,
+# so the informational-vs-gating split is visible.
+#
+# Caveat: merge_orthogonal_metrics.py emits only sc_*, bsa_* and
+# af3_nomsa_* flags.  Nothing in the pipeline writes
+# interface_plddt_too_low or interface_plddt_missing, so the third bar
+# below always drops zero survivors.  It is drawn for reference.
 FILTER_ORDER = [
     ("sc_too_low",                 f"sc\n≥ {ORTHOG_SC_MIN}",
      "sc_missing"),
@@ -365,19 +363,19 @@ FILTER_ORDER = [
 # Informational AF3 flags (trailing bar, not in the gating cascade).
 AF3_FLAGS = ("af3_nomsa_ra_eff_too_high", "af3_nomsa_missing")
 
-# Yellow for the AF3-trailing-bar drop.  Distinguishes "lost to AF3
-# disagreement" (informational) from cascade-red drops (gating).
+# Yellow for the AF3-trailing-bar drop.  Separates "lost to AF3
+# disagreement" from the cascade-red gating drops.
 COLOUR_AF3_DROP = "#FFB000"
 
 
-# Columns whose presence indicates a survivor actually entered the
-# orthogonal stage (i.e. AF3 / biophysical / Rosetta were attempted).
-# `survivors_with_orthogonal_metrics.csv` is produced by passing the
-# upstream extended CSV through merge_orthogonal_metrics.py, which
-# carries forward EVERY upstream row even if no orthogonal metrics
-# were computed for it (those rows get blank orthogonal columns +
-# `*_missing` flags).  The cascade should only reflect what was
-# actually filtered, so we pre-filter on any-of-these-non-empty.
+# Columns whose presence means a survivor actually entered the
+# orthogonal stage, so AF3 / biophysical / Rosetta were attempted.
+# merge_orthogonal_metrics.py builds
+# survivors_with_orthogonal_metrics.csv from the upstream extended CSV
+# and carries forward every upstream row, even rows with no orthogonal
+# metrics (those get blank orthogonal columns and `*_missing` flags).
+# The cascade should reflect only what was filtered, so pre-filter on
+# any of these being non-empty.
 ORTHOG_PRESENCE_COLS = (
     "af3_nomsa_total_predictions",
     "bsa",
@@ -397,19 +395,17 @@ def _entered_orthogonal_stage(row: Dict) -> bool:
 
 
 def plot_filter_cascade(rows: List[Dict], out_path: str) -> bool:
-    """Waterfall: how many survivors pass each gating filter in
-    succession.  Reads orthogonal_flags directly to determine which
-    filter trips each survivor.
+    """Waterfall: how many survivors pass each filter in succession.
+    Reads orthogonal_flags to decide which filter trips each survivor.
 
-    Pre-filters to rows that actually entered the orthogonal stage —
-    the merge step copies through every upstream row regardless of
-    whether AF3/biophysical/Rosetta ran, so the raw row count
-    overstates what the cascade is actually filtering.
+    Pre-filters to rows that actually entered the orthogonal stage.
+    The merge step copies through every upstream row whether or not
+    AF3/biophysical/Rosetta ran, so the raw row count overstates what
+    the cascade filters.
 
-    Layout: standard cumulative-AND cascade for the gating filters
-    (sc → bsa → interface_plddt), then a trailing INFORMATIONAL bar
-    for AF3 disagreement coloured yellow rather than the cascade-red,
-    to make the gating/informational distinction visually obvious."""
+    Cumulative-AND over FILTER_ORDER (sc → bsa → interface_plddt),
+    then a trailing yellow informational bar for AF3 disagreement.
+    Only sc and bsa actually drop anyone; see FILTER_ORDER."""
     if not rows:
         _make_empty_plot("No survivors in input CSV", out_path)
         return False
@@ -423,17 +419,16 @@ def plot_filter_cascade(rows: List[Dict], out_path: str) -> bool:
 
     n_total = len(rows)
 
-    # Per-survivor: the set of failing-flag names (any prefix match).
+    # Per-survivor set of failing-flag names.
     flag_sets: List[set] = []
     for row in rows:
         flags = set()
         for tok in _parse_flags(row.get("orthogonal_flags", "")):
-            # Strip any ":<value>" suffix on the flag name so the
-            # in-FILTER_ORDER lookups match.
+            # Strip any ":<value>" suffix so FILTER_ORDER lookups match.
             flags.add(tok.split(":", 1)[0])
         flag_sets.append(flags)
 
-    # Cumulative-AND survival counts across the GATING cascade.
+    # Cumulative-AND survival counts across FILTER_ORDER.
     survivors = [n_total]
     drops = [0]
     cumulative_excluded: set = set()
@@ -448,8 +443,8 @@ def plot_filter_cascade(rows: List[Dict], out_path: str) -> bool:
         survivors.append(survivors[-1] - newly_dropped)
         drops.append(newly_dropped)
 
-    # AF3 trailing bar: of the rows that survived the gating cascade,
-    # how many would also have been dropped by AF3 (informational).
+    # AF3 trailing bar: of the rows that survived the cascade, how many
+    # AF3 would also have dropped.  Informational.
     af3_drop_from_survivors = 0
     for i, flags in enumerate(flag_sets):
         if i in cumulative_excluded:
@@ -475,12 +470,12 @@ def plot_filter_cascade(rows: List[Dict], out_path: str) -> bool:
     ax.bar(xs, survivors, color=COLOUR_PASS, edgecolor="black",
            linewidth=0.4, label="Passing", zorder=2)
 
-    # Drop bars: red for the gating cascade steps, yellow for the
-    # trailing AF3 step.  Index 0 is the "All survivors" baseline
-    # (always 0 drops), 1..len-2 are gating, last is AF3.
+    # Drop bars: red for the cascade steps, yellow for the trailing AF3
+    # step.  Index 0 is the "All survivors" baseline and always has 0
+    # drops.  Indices 1..len-2 are the cascade, the last is AF3.
     n_steps = len(labels)
     drop_colours = (
-        [COLOUR_FAIL] * (n_steps - 1)   # cascade-red for gating drops
+        [COLOUR_FAIL] * (n_steps - 1)   # cascade-red for cascade drops
         + [COLOUR_AF3_DROP]              # yellow for AF3 trailing drop
     )
     ax.bar(xs, drops, bottom=survivors, color=drop_colours,
@@ -522,14 +517,14 @@ def plot_filter_cascade(rows: List[Dict], out_path: str) -> bool:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# Plot 3: Composite score vs each orthogonal metric (replaces the
-#         old standalone Sc / BSA / interface_plddt distributions
-#         AND the standalone ΔΔG distribution — both of those were
-#         strip-plots that carried no information at small n).
+# Plot 3: Composite score vs each orthogonal metric.  Replaces the old
+#         standalone Sc / BSA / interface_plddt distributions and the
+#         standalone ΔΔG distribution.  Those were strip-plots and
+#         carried no information at small n.
 # ═══════════════════════════════════════════════════════════════════════════
 
 # (column_name, display_label, threshold, comparison ('>=' or '<='),
-#  units, x-axis style: 'auto' or 'fixed01' for [0,1]-bounded metrics)
+#  units, x-axis style: 'auto', or 'fixed01' for [0,1]-bounded metrics)
 METRIC_VS_COMPOSITE_PANELS = [
     ("sc",                                    "Sc (shape complementarity)",
      ORTHOG_SC_MIN,    ">=", "",       "fixed01"),
@@ -541,9 +536,9 @@ METRIC_VS_COMPOSITE_PANELS = [
      DDG_BENNETT_REFERENCE, "<=", "REU", "auto"),
     ("af3_nomsa_best_ra_eff",                 "AF3-no-MSA best ra_eff",
      ORTHOG_AF3_RA_MAX, "<=", "Å",     "auto"),
-    # (AF3-no-MSA best iPTM panel removed 2026-04-28 — out of scope
-    # for "metric vs composite"; AF3 iPTM is included as a column in
-    # the combined cohort summary instead.)
+    # AF3-no-MSA best iPTM panel removed 2026-04-28.  It was out of
+    # scope for "metric vs composite".  af3_nomsa_best_iptm is in the
+    # merged survivors CSV but is not plotted anywhere now.
 ]
 
 
@@ -553,21 +548,19 @@ def plot_metrics_vs_composite(
     out_path: str,
 ) -> bool:
     """Multi-panel scatter: composite_score (Y) vs each orthogonal
-    metric (X), one panel per metric.  Mirrors the negsteer
-    composite-vs-confidence plot — composite is the primary ranker,
-    so showing every orthogonal metric against it shows whether each
-    orthogonal metric agrees with the upstream composite ranking
-    (high composite + good metric = upper-corner cluster) or fights
-    against it (high composite + bad metric).
+    metric (X), one panel per METRIC_VS_COMPOSITE_PANELS entry.
+    Mirrors the negsteer composite-vs-confidence plot.  Composite is
+    the primary ranker, so each panel shows whether that metric agrees
+    with the composite ranking (good metric clusters with high
+    composite) or fights it.
 
-    Coloured by passes_orthogonal_filters (green pass / dark grey
-    fail).  Threshold drawn as vertical dashed line; the failing
-    region shaded pale red.  Survivor names annotated when n is
-    small enough.
+    Points are coloured by negsteer tier, per COLOUR_TIER.  The
+    threshold is a vertical dashed line and the failing region is
+    shaded pale red.  Survivor names are annotated when the panel has
+    12 points or fewer.
 
-    Composite score is read from cross_summary (joined on
-    mpnn_sequence) since survivors_with_orthogonal_metrics.csv
-    doesn't carry it directly."""
+    Composite score comes from cross_summary, joined on mpnn_sequence,
+    because survivors_with_orthogonal_metrics.csv doesn't carry it."""
     if not rows:
         _make_empty_plot("No survivors to plot", out_path)
         return False
@@ -591,14 +584,12 @@ def plot_metrics_vs_composite(
     for ax, (col, label, threshold, op, units, x_style) in zip(
         axes_flat, METRIC_VS_COMPOSITE_PANELS,
     ):
-        # Bucket points by tier rather than by passes_orthogonal_filters.
-        # The threshold line + shaded region convey per-panel pass/fail
-        # visually; tier carries the orthogonal cohort signal.
-        # Pre-2026-04-29 history: this loop used to bucket by
-        # _passes(row) (global pass-all-filters), which made every
-        # point in every panel show "Fail" if any filter failed
-        # globally — even in panels where the row's own metric was
-        # fine.  Tier-colouring fixes that.
+        # Bucket by tier, not by passes_orthogonal_filters.  The
+        # threshold line and shaded region carry per-panel pass/fail.
+        # Before 2026-04-29 this loop bucketed by _passes(row), the
+        # global pass-all flag.  A point then read "Fail" in every
+        # panel if any filter failed, even where its own metric was
+        # fine.  Tier colouring fixes that.
         pts_by_tier: Dict[str, List[Tuple[float, float, str]]] = {
             "A": [], "B": [], "C": [], "none": [],
         }
@@ -637,12 +628,10 @@ def plot_metrics_vs_composite(
             pad = max((x_max - x_min) * 0.08, 0.01)
             x_lo, x_hi = x_min - pad, x_max + pad
 
-        # Pale-red failing-region shade (when threshold defined).
-        # Threshold info is conveyed via the x-axis label below; no
-        # longer added to the per-panel legend (per-panel legends
-        # were removed 2026-04-29 in favour of one shared figure-
-        # level legend at the top of the grid, freeing the panel
-        # interiors of overlapping legend boxes).
+        # Pale-red failing-region shade, when a threshold is defined.
+        # The threshold value goes in the x-axis label below.  Per-panel
+        # legends were removed 2026-04-29 for one shared figure-level
+        # legend, which frees the panel interiors of legend boxes.
         if threshold is not None:
             if op == ">=":
                 ax.axvspan(x_lo, threshold, color=COLOUR_FAIL,
@@ -653,9 +642,9 @@ def plot_metrics_vs_composite(
             ax.axvline(threshold, color=COLOUR_THRESHOLD,
                        linestyle="--", linewidth=1.2, alpha=0.85, zorder=1)
 
-        # Plot one scatter per tier.  Stack A on top so high-quality
+        # One scatter per tier.  Stack A on top so high-quality
         # candidates aren't hidden in clustered regions.  Tier labels
-        # are conveyed by the shared figure-level legend.
+        # come from the shared figure-level legend.
         for tier in ("none", "C", "B", "A"):
             tier_pts = pts_by_tier[tier]
             if not tier_pts:
@@ -797,8 +786,9 @@ COMBINED_SUMMARY_COLUMNS = [
     # positioning (is the binding mode right?) while this measures
     # whether the receptor's own structure survived the steering.
     # Threshold matches the pipeline's existing intact-check at
-    # boltz2_iterate_steering.py:1046 (≤5 Å).  See
-    # boltz2_negative_steering.py:_compute_pose_metrics for the
+    # the negative-steering engine's postprocess threshold (≤5 Å), which
+    # params.negsteer_postprocess_rmsd_threshold sets.  See that repository
+    # for the
     # underlying definition (whole-receptor Kabsch fit).
     ("rep_independent_receptor_rmsd_median",  "cross",
      "rec RMSD",        5.0,                "<=",  "0p2"),

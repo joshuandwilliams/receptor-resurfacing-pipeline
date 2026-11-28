@@ -2,7 +2,7 @@
 position_set.py
 ---------------
 PositionSet — an immutable set of receptor residue positions, tagged
-with the numbering frame the integers refer to.  Per Phase 4 spec §2.3.
+with the numbering frame the integers refer to.
 
 Three frames in use across the codebase:
 - ``native``     : input PDB's residue numbers (may have gaps).
@@ -11,11 +11,16 @@ Three frames in use across the codebase:
                     the receptor chain this matches the designed frame
                     (the receptor PDB went straight into Boltz).
 
+All three frames are 1-based.  Some on-disk position files are not.
+``derive_true_interface.py`` writes 0-based positional indices and
+``derive_design_region.py`` writes 1-based, so a 0-based file needs +1
+before it becomes a ``designed`` PositionSet.  See ``from_text_file``.
+
 Cross-frame operations raise.  Conversion is explicit via
 ``in_frame(target)`` and requires a `ContigSpec` reference (carried
 optionally on the PositionSet at construction).
 
-Tier 1 type — depends on ContigSpec (Tier 0).
+contig_spec is this module's only import from bin/.
 """
 
 from __future__ import annotations
@@ -30,9 +35,8 @@ if str(_SCRIPT_DIR) not in sys.path:
 
 from contig_spec import ContigSpec  # noqa: E402
 
-# Frames allowed in the codebase today.  Locked-down list rather than a
-# free-form string so typos at construction surface as a clear error
-# instead of silently disabling cross-frame checks downstream.
+# Closed list rather than a free-form string, so a typo at construction
+# raises instead of silently disabling the cross-frame checks.
 _VALID_FRAMES = frozenset(("native", "designed", "prediction"))
 
 
@@ -65,7 +69,7 @@ class PositionSet:
             )
         if not isinstance(chain, str) or not chain:
             raise ValueError(f"chain must be a non-empty string, got {chain!r}")
-        # Deduplicate and normalise to a frozen, sorted tuple.
+        # Deduplicate and freeze.  Ordering comes from the accessors.
         self._positions: FrozenSet[int] = frozenset(int(p) for p in positions)
         self._chain: str = chain
         self._frame: str = frame
@@ -133,13 +137,14 @@ class PositionSet:
     ) -> "PositionSet":
         """Return a new PositionSet in the target frame.
 
-        Requires ``self.contig is not None`` (otherwise raises
-        FrameConversionError — there's no source of truth for how to
-        translate without the contig).
+        Returns ``self`` unchanged when the target frame is already the
+        current one.  Otherwise requires ``self.contig is not None``,
+        since the contig is the only source of truth for the mapping.
+        Raises FrameConversionError without it.
 
-        Positions with no counterpart in the target frame (e.g. de novo
-        positions translating to native) are silently dropped by
-        default; pass ``strict=True`` to raise instead.
+        Positions with no counterpart in the target frame are dropped
+        by default.  De novo positions converting to native are the
+        usual case.  Pass ``strict=True`` to raise instead.
         """
         if target_frame not in _VALID_FRAMES:
             raise ValueError(
@@ -185,7 +190,8 @@ class PositionSet:
         if src == "native" and dst == "designed":
             return self._contig.native_to_designed
         if src == "prediction" and dst == "designed":
-            # Identity for the receptor chain; documented as no-op
+            # prediction_to_designed returns pos unchanged.  Routed
+            # through ContigSpec so the no-op stays in one place.
             return lambda p, c: self._contig.prediction_to_designed(p, c)
         if src == "designed" and dst == "prediction":
             return lambda p, c: p
@@ -241,7 +247,7 @@ class PositionSet:
 
     def to_chimerax_string(self) -> str:
         """Render as the ``/A:5,7,22`` ChimeraX selection format used
-        widely across the codebase.  Empty set → empty string."""
+        across the codebase.  Empty set gives an empty string."""
         if not self._positions:
             return ""
         joined = ",".join(str(p) for p in sorted(self._positions))
@@ -254,10 +260,10 @@ class PositionSet:
         frame: str,
         contig: Optional[ContigSpec] = None,
     ) -> "PositionSet":
-        """Parse a ChimeraX selection string.  Accepts empty string
-        (returns an empty PositionSet — chain defaults to 'A' in that
-        case; if you need a different chain for an empty set, construct
-        directly)."""
+        """Parse a ChimeraX selection string.
+
+        An empty string returns an empty PositionSet on chain 'A'.
+        Construct directly if an empty set needs another chain."""
         s = s.strip()
         if not s:
             return cls(positions=[], chain="A", frame=frame, contig=contig)
@@ -284,10 +290,14 @@ class PositionSet:
         )
 
     def to_text_file(self, path: Path) -> None:
-        """Write integers, one per line, sorted.  Matches the format of
-        the existing ``*_design_region.txt`` / ``*_true_interface.txt``
-        files.  Chain and frame are NOT serialised — callers must
-        provide them at read time."""
+        """Write integers, one per line, sorted.
+
+        This matches ``*_true_interface.txt`` from
+        ``derive_true_interface.py``, which is also one integer per
+        line.  It does NOT match ``*_design_region.txt``, which
+        ``derive_design_region.py`` writes as one comma-separated line.
+        No ``#`` header is written.  Chain and frame are not
+        serialised, so callers must supply them at read time."""
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
         with open(path, "w") as f:
@@ -303,7 +313,14 @@ class PositionSet:
         contig: Optional[ContigSpec] = None,
     ) -> "PositionSet":
         """Read integers one per line.  Blank lines and lines starting
-        with ``#`` are ignored."""
+        with ``#`` are ignored.
+
+        Reads ``*_true_interface.txt`` directly, header comments
+        included.  It cannot read ``*_design_region.txt``, whose
+        comma-separated body raises on the first line.  Note that
+        ``*_true_interface.txt`` holds 0-based indices while every
+        PositionSet frame is 1-based, so ``frame`` alone does not
+        correct the offset."""
         path = Path(path)
         positions: List[int] = []
         with open(path) as f:

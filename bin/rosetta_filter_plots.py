@@ -96,15 +96,14 @@ def plot_sc_histogram(designs, threshold):
     """
     Histogram of shape complementarity (Sc) across all designs.
 
-    The Sc < threshold region is shaded red and extends flush to the
-    left axis spine — achieved by setting ``ax.set_xlim`` BEFORE the
-    ``axvspan`` call so the span's left edge isn't subsequently
-    shifted by matplotlib's autoscaling.
+    The Sc < threshold region is shaded pink and runs flush to the left
+    axis spine.  ``ax.set_xlim`` is called BEFORE ``axvspan`` so
+    matplotlib's autoscaling cannot shift the span's left edge.
 
-    A dashed vertical line marks the threshold.  The legend reports
-    ``Sc < <threshold> (filtered, n=<filtered> of <total>)`` plus the
-    threshold marker — no separate "all designs" entry, which would
-    just be a redundant blue patch.
+    A dashed red line marks the threshold.  The legend carries
+    ``Sc < <threshold> (filtered, n=<filtered> of <total>)`` and the
+    threshold marker.  There is no separate "all designs" entry, which
+    would just be a redundant blue patch.
     """
     out_path = "rosetta_sc_histogram.png"
 

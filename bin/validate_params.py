@@ -2,9 +2,10 @@
 """
 validate_params.py
 ------------------
-Fail-fast parameter validator for the Nextflow pipeline.  Invoked at
-the very top of `workflow {}` in main.nf, BEFORE any process is
-dispatched.  Any constraint violation prints the full list of errors
+Fail-fast parameter validator for the Nextflow pipeline.  Invoked at the
+top of `workflow MAIN_PIPELINE` in main.nf, BEFORE any process is
+dispatched.  The NEGSTEER_ONLY entry route does its own checks and does
+not call this.  Any constraint violation prints the full list of errors
 to stderr and exits non-zero, blocking submission of SLURM jobs that
 would otherwise burn GPU time before failing.
 
@@ -12,10 +13,10 @@ Usage
 =====
     python3 bin/validate_params.py --params-json <path>
 
-The JSON file is expected to be a flat object of `params.*` key:value
-pairs as serialised by Nextflow's `groovy.json.JsonOutput.toJson(params)`.
-Keys not in PARAM_SPECS are reported as warnings (unknown params are
-not fatal — they may be legitimate experimental flags).
+The JSON file must be a flat object of `params.*` key:value pairs, as
+serialised by Nextflow's `groovy.json.JsonOutput.toJson(params)`.  Keys
+not in PARAM_SPECS print a NOTE to stderr and are not fatal.  They may
+be legitimate experimental flags.
 
 Spec model
 ==========
@@ -40,13 +41,14 @@ Each entry in PARAM_SPECS is a `ParamSpec(name, kind, **kwargs)` where
 
 Coverage report
 ===============
-Pass `--report` to print which params have specs and which don't.  Use
-this to track coverage as new params are added.
+Pass `--report` to print the spec count per validator kind, plus the
+params still marked `any`.  Use it to track coverage as new params are
+added.
 
 Tests
 =====
-See tests/characterization/test_validate_params.py for unit coverage of
-each validator kind.
+tests/characterization/test_validate_params.py covers each validator
+kind.
 """
 
 from __future__ import annotations
@@ -66,9 +68,9 @@ from typing import Any, Callable, List, Optional, Sequence
 class ParamSpec:
     """Single-parameter validation spec.
 
-    `kind` is the validator name; `kwargs` carries kind-specific
-    arguments (bounds, allowed values, etc.).  `note` is a one-line
-    rationale surfaced in the coverage report.
+    `kind` is the validator name.  `kwargs` carries kind-specific
+    arguments such as bounds or allowed values.  `note` is a one-line
+    rationale for readers of this file.  It is not printed anywhere.
     """
     name: str
     kind: str
@@ -170,10 +172,10 @@ VALIDATORS = {
 
 
 def _check_num_seeds_odd(v: Any) -> Optional[str]:
-    """negsteer_num_seeds must be odd.  An even seed count lets per-seed
-    verdict majority votes tie, breaking the unambiguous-winner contract
-    in _classify_outcome / _per_seed_verdict_breakdown.  See the comment
-    in main.nf workflow body and the audit Q121 close."""
+    """negsteer_num_seeds must be odd, and within 1..99.  An even seed
+    count lets per-seed verdict majority votes tie, which breaks the
+    unambiguous-winner contract in the negative-steering engine's
+    outcome classifier and its per-seed verdict breakdown."""
     err = _validate_int_range(v, {"min": 1, "max": 99})
     if err is not None:
         return err
@@ -186,11 +188,10 @@ def _check_num_seeds_odd(v: Any) -> Optional[str]:
 # ── Param specs ──────────────────────────────────────────────────────
 #
 # Coverage: most pipeline params have meaningful specs.  A handful
-# remain marked `any` with a TODO note — these are coverage gaps to
-# close as the threshold audit (Task 47 in design_audit.md) decides
-# each value's valid range.  An unspecced param does NOT block the
-# pipeline; the coverage report (--report) lists them so reviewers
-# can prioritise.
+# remain marked `any`.  Those are coverage gaps to close once the pending
+# threshold audit (notes/design_audit.md) decides each value's valid
+# range.  An unspecced param does NOT block the pipeline.  The coverage
+# report (--report) lists them so reviewers can prioritise.
 
 PARAM_SPECS: List[ParamSpec] = [
     # ── Identification ──────────────────────────────────────────────
@@ -335,14 +336,13 @@ PARAM_SPECS: List[ParamSpec] = [
     # ── Pose Solver (Branch A docking) ──────────────────────────────
     ParamSpec("rfdiff_contact_cutoff","float_range", {"min": 0.0, "max": 30.0}),
 
-    # Hard-pin CA-CA pair restraints.  Empty string allowed everywhere;
-    # cross-param "non-empty in Branch A" is enforced in
+    # Hard-pin CA-CA pair restraints.  An empty string passes this spec.
+    # The cross-param "non-empty in Branch A" rule is enforced in
     # _branch_a_pose_solver_pairs_present below.
     #
-    # Format: space-separated 'CHAIN+RES-CHAIN+RES' tokens with optional
-    # '@DIST' suffix overriding the per-pair max distance, e.g.
-    #   "A73-B31 A71-B33 A8-B22"
-    #   "A73-B48@4.5 A71-B50 A8-B39"
+    # Format: space-separated 'CHAIN+RES-CHAIN+RES' tokens, each with an
+    # optional '@DIST' suffix overriding the per-pair max distance, e.g.
+    #   "A73-B31 A71-B33 A8-B48@4.5"
     ParamSpec("pose_solver_pairs", "regex",
               {"pattern": r"^(\s*[A-Za-z]\d+-[A-Za-z]\d+(@\d+(\.\d+)?)?(?:\s+|$))*\s*$"},
               "space-separated 'CHAIN+RES-CHAIN+RES[@DIST]' pair tokens"),

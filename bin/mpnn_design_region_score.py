@@ -118,7 +118,9 @@ def score_sequences_for_design(pdb_path, fasta_path, fixed_dict,
         device: torch device
 
     Returns:
-        list of (seq_idx, global_score, design_region_score, n_free)
+        list of (seq_idx, global_score, design_region_score, n_free).
+        design_region_score is None when the design has no free
+        positions.
     """
     # Parse PDB — returns list of dicts with seq_chain_X, coords_chain_X
     pdb_dict_list = parse_PDB(pdb_path)
@@ -286,7 +288,7 @@ def main():
 
         n_free_total = 0
         for chain, resnums in fixed_dict.items():
-            n_free_total += 0  # we'll get this from the model
+            n_free_total += 0  # placeholder — the real count comes from the model
 
         print(f"  {design_name}: scoring...")
 
