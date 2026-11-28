@@ -94,9 +94,12 @@ def test_cb_is_used_when_present_and_ca_when_not(tmp_path):
     Ca fallback is what stops those residues dropping out of the interface
     entirely."""
     lines, s = [], 1
-    blk, s = _res(s, "A", 1, "ALA", {"CA": (0, 0, 0), "CB": (1, 0, 0)}); lines += blk
-    blk, s = _res(s, "A", 2, "GLY", {"CA": (3.8, 0, 0)}); lines += blk
-    p = tmp_path / "s.pdb"; p.write_text("\n".join(lines) + "\nEND\n")
+    blk, s = _res(s, "A", 1, "ALA", {"CA": (0, 0, 0), "CB": (1, 0, 0)})
+    lines += blk
+    blk, s = _res(s, "A", 2, "GLY", {"CA": (3.8, 0, 0)})
+    lines += blk
+    p = tmp_path / "s.pdb"
+    p.write_text("\n".join(lines) + "\nEND\n")
 
     got = cim._collect_chain_cb_positions(gemmi.read_structure(str(p)), "A")
     assert len(got) == 2
@@ -114,7 +117,8 @@ def test_the_index_is_positional_not_the_residue_number(tmp_path):
     for k, rn in enumerate((101, 102, 103)):
         blk, s = _res(s, "A", rn, "ALA", {"CA": (k * 3.8, 0, 0), "CB": (k * 3.8, 1, 0)})
         lines += blk
-    p = tmp_path / "s.pdb"; p.write_text("\n".join(lines) + "\nEND\n")
+    p = tmp_path / "s.pdb"
+    p.write_text("\n".join(lines) + "\nEND\n")
     got = cim._collect_chain_cb_positions(gemmi.read_structure(str(p)), "A")
     assert [g[0] for g in got] == [0, 1, 2]
 
@@ -122,7 +126,8 @@ def test_the_index_is_positional_not_the_residue_number(tmp_path):
 @pytest.mark.logic
 def test_an_absent_chain_yields_nothing(tmp_path):
     lines, _s = _res(1, "A", 1, "ALA", {"CA": (0, 0, 0)})
-    p = tmp_path / "s.pdb"; p.write_text("\n".join(lines) + "\nEND\n")
+    p = tmp_path / "s.pdb"
+    p.write_text("\n".join(lines) + "\nEND\n")
     assert cim._collect_chain_cb_positions(gemmi.read_structure(str(p)), "Z") == []
 
 
