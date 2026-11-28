@@ -97,10 +97,13 @@ def test_contacts_are_positional_indices_in_range(pdb: Path):
     chains = _chains(pdb)
     rec, eff = chains[0], chains[1]
     seq = sm.get_chain_sequence(pdb, rec)
-    idx = sm.find_contact_residues_heavy(pdb, rec, eff, 5.0)
+    pairs = sm.find_contact_residues_heavy(pdb, rec, eff, 5.0)
+    idx = [i for i, _d in pairs]
     assert idx == sorted(set(idx)), "indices must be sorted and unique"
     assert all(0 <= i < len(seq) for i in idx), (
         f"index outside 0..{len(seq) - 1}")
+    assert all(0.0 <= d <= 5.0 for _i, d in pairs), (
+        "each reported distance must be the closest approach, under the cutoff")
 
 
 @pytest.mark.logic
@@ -113,9 +116,10 @@ def test_contacts_grow_monotonically_with_cutoff(pdb: Path):
     """
     chains = _chains(pdb)
     rec, eff = chains[0], chains[1]
-    tight = set(sm.find_contact_residues_heavy(pdb, rec, eff, 4.0))
-    mid = set(sm.find_contact_residues_heavy(pdb, rec, eff, 5.0))
-    wide = set(sm.find_contact_residues_heavy(pdb, rec, eff, 8.0))
+    def idx(cutoff):
+        return {i for i, _d in sm.find_contact_residues_heavy(pdb, rec, eff, cutoff)}
+
+    tight, mid, wide = idx(4.0), idx(5.0), idx(8.0)
     assert tight <= mid <= wide
 
 
@@ -134,3 +138,21 @@ def test_no_contacts_when_the_effector_chain_is_absent():
     pdb = COMPLEXES[0]
     rec = _chains(pdb)[0]
     assert sm.find_contact_residues_heavy(pdb, rec, "9", 5.0) == []
+
+
+@pytest.mark.logic
+def test_an_expected_sequence_of_the_wrong_length_is_rejected():
+    """A length guard, not an identity check.  A caller holding the sequence
+    it thinks the receptor has must fail here rather than index a different
+    structure silently.  It cannot be tightened into a residue comparison,
+    because a reverted design carries surviving mutations.
+    """
+    pdb = COMPLEXES[0]
+    rec, eff = _chains(pdb)[0], _chains(pdb)[1]
+    real = sm.get_chain_sequence(pdb, rec)
+    # Right length, wrong residues: accepted.
+    sm.find_contact_residues_heavy(pdb, rec, eff, 5.0, "A" * len(real))
+    # Wrong length: rejected, naming both counts.
+    with pytest.raises(ValueError) as exc:
+        sm.find_contact_residues_heavy(pdb, rec, eff, 5.0, "A" * (len(real) + 3))
+    assert str(len(real)) in str(exc.value)
