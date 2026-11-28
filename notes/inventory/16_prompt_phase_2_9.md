@@ -2,15 +2,15 @@
 
 Two prompts, executed in order on the `remediation` branch.
 
-**Prompt A** is a small housekeeping fix: add `#SBATCH --chdir` to all five
-`run_test_*.slurm.sh` scripts and delete the stray `slurm_*.out/.err` files that
-landed at the repo root during earlier test runs. Fast and low-risk; commit before
-Prompt B.
+**Prompt A** is a small housekeeping fix. It adds `#SBATCH --chdir` to all five
+`run_test_*.slurm.sh` scripts and deletes the stray `slurm_*.out/.err` files that
+landed at the repo root during earlier test runs. It is fast and low-risk, so
+commit it before Prompt B.
 
-**Prompt B** is the main 2.9 work: restructure the 184 hpc-tier characterisation
-tests to use the per-module reference sets, expand the negsteer sequence parametrize
-list from 3 to 10, add the RFDiffusion fail-branch unit test, and update
-TRACEABILITY.md throughout.
+**Prompt B** is the main 2.9 work. It restructures the 184 hpc-tier
+characterisation tests to use the per-module reference sets. It also expands the
+negsteer sequence parametrize list from 3 to 10, adds the RFDiffusion fail-branch
+unit test, and updates TRACEABILITY.md throughout.
 
 The active plan is `notes/inventory/14_phase_2_revision_per_module_tests.md`. The
 original plan at `notes/inventory/11_phase_2_plan.md` is a historical record only.
@@ -87,9 +87,9 @@ human's responsibility.
 ## Prompt B — Restructure characterisation tests to per-module reference sets
 
 Run after Prompt A is committed. Goal: all 184 hpc-tier characterisation tests
-point at per-module reference sets, SEQUENCE_TRIO is replaced by SEQUENCE_COHORT
-(10 sequences), the RFDiffusion fail-branch is covered by a new local_unit test,
-and TRACEABILITY.md is consistent throughout. Acceptance: `pytest -m local_unit`
+point at per-module reference sets. SEQUENCE_COHORT (10 sequences) replaces
+SEQUENCE_TRIO. A new local_unit test covers the RFDiffusion fail-branch, and
+TRACEABILITY.md is consistent throughout. Acceptance: `pytest -m local_unit`
 green, `pytest --collect-only -m hpc` clean, all hpc tests skip gracefully when
 RECEPTOR_OUTPUT_ROOT is unset.
 

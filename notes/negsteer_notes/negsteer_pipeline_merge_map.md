@@ -1,15 +1,14 @@
 # Project map: Receptor-Resurfacing pipeline + Negative-Steering validator
 
 This project context contains files from **two related but distinct
-codebases**, both belonging to the same overall research effort: a
-computational pipeline for designing protein binders by **receptor
-resurfacing** (RFDiffusion + ProteinMPNN), with a **Boltz2-based
-validation stage** at the end. The strategic goal of the project is to
-**replace the existing Boltz2 validation stage in the resurfacing
-pipeline with the new negative-steering workflow**, because the
-negative-steering workflow can detect when a Boltz2 binding-site
-prediction is being held up by mutations that won't exist in the
-final wet-lab construct.
+codebases**. Both belong to the same research effort, a computational
+pipeline for designing protein binders by **receptor resurfacing**
+(RFDiffusion + ProteinMPNN), with a **Boltz2-based validation stage**
+at the end. The strategic goal is to **replace the existing Boltz2
+validation stage in the resurfacing pipeline with the new
+negative-steering workflow**. Negative steering can detect when a
+Boltz2 binding-site prediction is held up by mutations that won't
+exist in the final wet-lab construct.
 
 The two codebases are at different points in their lifecycle:
 
@@ -17,9 +16,9 @@ The two codebases are at different points in their lifecycle:
   workflow that is currently in a cleanup/audit phase (see
   `pipeline_notes1.md`, `pipeline_notes2.md`).
 - The **negative-steering pipeline** is a standalone SLURM/Python
-  workflow that has been validated on native benchmark complexes and on
-  RFDiffusion designs and is being prepared for integration into the
-  Nextflow pipeline (see `notes1.md` through `notes6.md`).
+  workflow, validated on native benchmark complexes and on RFDiffusion
+  designs. It is being prepared for integration into the Nextflow
+  pipeline (see `notes1.md` through `notes6.md`).
 
 ---
 
@@ -68,7 +67,7 @@ mutations that contact the effector in the predicted pose.
 
 ### 1.3 Per-module test infrastructure
 
-Each module has an isolated test harness — a `test_<module>.nf`
+Each module has an isolated test harness, a `test_<module>.nf`
 workflow plus a `run_test_<module>_slurm.sh` SLURM wrapper that runs
 just that module on small fixed inputs. Test scripts include production
 modules directly (no inline duplicates) so the test exercises the same
@@ -101,17 +100,17 @@ plus a final whole-pipeline pass on `main.nf`.
 A multi-cycle pipeline that, given a complex where Boltz2 predicts the
 wrong binding site, mutates the receptor residues at the wrong
 interface, re-predicts, and iterates. Each cycle pushes the effector
-away from where it landed before, with the goal of having Boltz2
-converge on the true binding mode (`receptor_aligned_effector_rmsd <
+away from where it landed before. The goal is for Boltz2 to converge
+on the true binding mode (`receptor_aligned_effector_rmsd <
 3 Å` vs ground truth).
 
 The pipeline has a dual purpose:
 
-1. As a **diagnostic tool** for native benchmark complexes — does
+1. As a **diagnostic tool** for native benchmark complexes. Does
    negative steering rescue Boltz2's mistakes?
-2. As a **validation tool** for RFDiffusion+MPNN-designed binders — for
+2. As a **validation tool** for RFDiffusion+MPNN-designed binders. For
    each candidate, can Boltz2 be steered onto the design's intended
-   binding site, and does the rescued pose hold up when the steering
+   binding site? Does the rescued pose hold up when the steering
    mutations are reverted?
 
 Use case (2) is what motivates replacing the current `boltz2.nf`
@@ -144,13 +143,13 @@ validation stage.
 
 | File | Role |
 |---|---|
-| `aggregate_results.sh` | Combines `all_results_multicycle.csv` files from many experiment dirs (default glob `runs/7QPX*/`) into a single CSV. With `--with-metrics`, runs `compute-final-metrics` per experiment first. **Note:** the orchestrator's `aggregate` subcommand and this shell script have confusingly overlapping names but do different things — orchestrator `aggregate` produces the per-experiment CSV; this shell script combines those across experiments. |
+| `aggregate_results.sh` | Combines `all_results_multicycle.csv` files from many experiment dirs (default glob `runs/7QPX*/`) into a single CSV. With `--with-metrics`, runs `compute-final-metrics` per experiment first. The orchestrator's `aggregate` subcommand and this shell script have confusingly overlapping names but do different things. Orchestrator `aggregate` produces the per-experiment CSV. This shell script combines those per-experiment CSVs across experiments. |
 
 ### 2.5 Diagnostic experiments (sequence-walk waypoints)
 
-These were built during the notes-2 diagnostic session investigating why
-6G10 converged but 7QPX did not, by walking the receptor/effector
-sequence between the two complexes:
+The notes-2 diagnostic session investigated why 6G10 converged but
+7QPX did not. These files walk the receptor/effector sequence between
+the two complexes:
 
 | File | Role |
 |---|---|
@@ -174,9 +173,9 @@ sequence between the two complexes:
 - `notes4.md` — RFDiffusion + ProteinMPNN extension session:
   `--true-interface-indices` / `--true-interface-indices-file` flags,
   the `split_sequence` chain-order bug fix in `pipeline_correct_sequences.py`,
-  end-to-end Pikp1 design_1 run. Conclusion: workflow validated on
-  RFDiffusion inputs; ipSAE confirmed broken on RFDiffusion data;
-  HADDOCK identified as the upstream blocker for the receptor-resurfacing
+  end-to-end Pikp1 design_1 run. Conclusion: the workflow is validated
+  on RFDiffusion inputs, ipSAE is confirmed broken on RFDiffusion data,
+  and HADDOCK is the upstream blocker for the receptor-resurfacing
   test case.
 - `notes5.md` — Pikp1 design_3 single-design run with native ground
   truth (no HADDOCK confound). Discovered that high-confidence steered
@@ -225,12 +224,12 @@ The negative-steering workflow addresses both:
    (`pose_holds` verdict) are the ones safe to promote to wet-lab
    triage.
 
-The intended end state is for `boltz2.nf` to be replaced with a
-Nextflow port of the negative-steering chain (`plan` →
+The intended end state replaces `boltz2.nf` with a Nextflow port of
+the negative-steering chain. The chain is `plan` →
 `predict array` → `prefilter` → `build-contaminated` →
 `plan-reversions` → `predict-reversion array` → `harvest-reversions` →
-`finalize`), iterated over `--n-cycles` cycles, with
-`compute-final-metrics` and `compare_versions.py` producing the final
+`finalize`, iterated over `--n-cycles` cycles.
+`compute-final-metrics` and `compare_versions.py` produce the final
 ranked output. Per `notes6.md` open work item 4, this Nextflow
 integration is deferred until the negative-steering codebase is
 restructured.
@@ -242,12 +241,12 @@ restructured.
 ### Receptor-resurfacing pipeline (Nextflow)
 **Modules:** `main.nf`, `aggregate.nf`, `boltz2.nf`, `haddock.nf`,
 `msa.nf`, `preprocessing.nf`, `proteinmpnn.nf`, `rfdiffusion.nf`,
-`rosetta_filtering.nf`
+`rosetta_filtering.nf`.
 **Config / submission:** `nextflow.config`, `params_example.yml`,
-`run_pipeline_slurm.sh`
+`run_pipeline_slurm.sh`.
 **Test harnesses:** `test_boltz2.nf`, `test_haddock.nf`,
 `test_proteinmpnn.nf`, `test_rfdiffusion.nf`,
-`test_rosetta_filtering.nf` and their `run_test_*_slurm.sh` wrappers
+`test_rosetta_filtering.nf` and their `run_test_*_slurm.sh` wrappers.
 **Backing scripts (bin/):** `boltz2_filter.py`, `boltz2_plots.py`,
 `boltz2_prepare.py`, `boltz2_verify_binding.py`, `build_contigs.py`,
 `collect_haddock3_dock.py`, `contig_utils.py`, `extract_hotspots.py`,
@@ -256,28 +255,28 @@ restructured.
 `mpnn_plots.py`, `mpnn_select_top.py`, `mpnn_sequence_qc.py`,
 `pipeline_correct_sequences.py`, `rfdiffusion_contigs.py`,
 `rfdiffusion_filter.py`, `rfdiffusion_plots.py`,
-`rosetta_filter_collect.py`, `rosetta_filter_plots.py`
-**Notes:** `pipeline_notes1.md`, `pipeline_notes2.md`
+`rosetta_filter_collect.py`, `rosetta_filter_plots.py`.
+**Notes:** `pipeline_notes1.md`, `pipeline_notes2.md`.
 
 ### Negative-steering pipeline (standalone)
 **Core:** `boltz2_negative_steering.py`, `boltz2_iterate_steering.py`,
-`reversion.py` (referenced in notes6 — may not be in this snapshot)
+`reversion.py` (referenced in notes6, possibly not in this snapshot).
 **Submission:** `submit_boltz2_negative_steering.sh`,
-`submit_boltz2_iterate_steering.sh`, `submit_steering_experiments.sh`
+`submit_boltz2_iterate_steering.sh`, `submit_steering_experiments.sh`.
 **Metrics / post-processing:** `compute_metrics.py`,
 `derive_design_region.py`, `compare_versions.py` (referenced in
-notes — may not be in this snapshot), `aggregate_results.sh`
+notes, possibly not in this snapshot), `aggregate_results.sh`.
 **Diagnostic experiments:** `generate_waypoints.py`,
-`generate_waypoints_7QPX_chainB.py`, `combine_waypoints.py`
-**Example output:** `all_results_multicycle_with_metrics.csv`
+`generate_waypoints_7QPX_chainB.py`, `combine_waypoints.py`.
+**Example output:** `all_results_multicycle_with_metrics.csv`.
 **Notes:** `notes1.md`, `notes2.md`, `notes3.md`, `notes4.md`,
-`notes5.md`, `notes6.md`
+`notes5.md`, `notes6.md`.
 
 ### Cross-pipeline dependency
 `pipeline_correct_sequences.py` lives in the **resurfacing pipeline**
-(`bin/` for `proteinmpnn.nf`'s `SEQUENCE_CORRECTION` process) but was
+(`bin/` for `proteinmpnn.nf`'s `SEQUENCE_CORRECTION` process). It was
 **patched in a negative-steering session** (notes 4) because its
-`split_sequence` bug was producing systematically wrong receptor
-sequences that broke negative-steering's RFDiffusion-design test runs.
-This is the only file in the project whose ownership crosses the two
+`split_sequence` bug produced systematically wrong receptor sequences,
+which broke negative-steering's RFDiffusion-design test runs. This is
+the only file in the project whose ownership crosses the two
 codebases.

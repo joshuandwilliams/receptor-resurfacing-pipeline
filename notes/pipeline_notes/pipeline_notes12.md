@@ -13,17 +13,18 @@ Two test scripts iterated and integrated:
 - `test_negsteer_plots.py` — cohort plots, fully integrated and
   verified end-to-end on real cluster data.
 - `test_negsteer_within_sequence_plots.py` — within-sequence (per-seed)
-  plots, structurally integrated but reversion-stage representative
+  plots, structurally integrated. Reversion-stage representative
   seeds disappear from the per-seed dispersion plots because
   `reverted_true_jaccard` is blank for those rows in the source CSV.
 
-The work also surfaced six source-side bugs along the way; five are
-fully fixed and verified, one is fixed but the patch's mechanism is
-unverified (the cause-of-blank-reverted_true_jaccard issue).
+The work also surfaced six source-side bugs along the way, five of
+them fully fixed and verified. One is fixed, but the patch's
+mechanism is unverified (the cause-of-blank-reverted_true_jaccard
+issue).
 
 ## Cohort plots — done
 
-`test_negsteer_plots.py` renders 7 PNGs; the prior `seed_verdicts`
+`test_negsteer_plots.py` renders 7 PNGs. The prior `seed_verdicts`
 plot is replaced with two new plots that separate stage from outcome.
 
 | File | Role |
@@ -36,23 +37,23 @@ plot is replaced with two new plots that separate stage from outcome.
 | `negsteer_controls_diagnostic.png` | boxplots, scrambled vs polyA vs steered |
 | `negsteer_mutation_impact.png` | verdict-aware mutation choice; bars green/red, faded if n<3 |
 
-The seed classifier (`classify_seed`) returns `(stage, outcome)`
-where `stage ∈ {cold_start, steering, reversion}` and outcome
+The seed classifier (`classify_seed`) returns `(stage, outcome)`,
+where `stage ∈ {cold_start, steering, reversion}`. Outcome
 distinguishes `off_target` (low confidence acceptable, ra_eff bad)
-from `poor_prediction` (ra_eff acceptable, low confidence) — the
-discrimination the user explicitly requested when the original
+from `poor_prediction` (ra_eff acceptable, low confidence). The user
+explicitly requested that discrimination, because the original
 `seed_verdicts` plot had collapsed both into one bucket.
 
-The classifier reads the right column family per stage:
-`reversion_verdict` populated → reversion stage, read `reverted_*`;
+The classifier reads the right column family per stage.
+`reversion_verdict` populated → reversion stage, read `reverted_*`.
 `steered_total_mutations == 0` AND no reversion → cold-start stage,
-read `steered_*` (which is the cold-start prediction in that path);
-otherwise → steering stage, read `steered_*`.
+read `steered_*`, which is the cold-start prediction in that path.
+Otherwise → steering stage, read `steered_*`.
 
 Outcome layer combines structural pass (`intact==1` AND `ra_eff<5`)
 with confidence pass (`plddt≥0.7` AND `ipae≤15` AND `paepf≥0.1` AND
-`iptm≥0.3`). The 4 pass/fail axes give 4 outcomes; `new_contamination`
-is taken directly from the verdict.
+`iptm≥0.3`). The 4 pass/fail axes give 4 outcomes.
+`new_contamination` is taken directly from the verdict.
 
 ## Within-sequence plots — structurally done, broken on real data
 
@@ -69,9 +70,10 @@ five new plots:
 | `negsteer_composite_vs_confidence.png` | multi-panel scatter. Y = composite; X = each confidence metric. avg_plddt on 0-100; bounded [0,1] metrics on fixed 0-1 axis; ipae and pae_mean autoscale |
 
 Per-design grouping (rather than per-MPNN-sequence) is a deliberate
-scalability choice — at 100+ MPNN sequences per cohort,
-panel-per-sequence won't scale; panel-per-design with sequence as
-within-panel colour does (typically ~30 designs vs 100+ sequences).
+scalability choice. At 100+ MPNN sequences per cohort,
+panel-per-sequence won't scale. Panel-per-design with sequence as
+within-panel colour does scale, at typically ~30 designs vs 100+
+sequences.
 
 `--cross-summary-csv` is now required (was optional). The new plots
 all need it for representative sg lookup and composite-score sorting.
@@ -79,7 +81,7 @@ all need it for representative sg lookup and composite-score sorting.
 ## Source bugs found during plot work
 
 Six bugs found, all in the reversion → aggregator pipeline. All
-patched in `/mnt/user-data/outputs/`. Details below; verification
+patched in `/mnt/user-data/outputs/`. Details below. Verification
 status varies.
 
 ### Bug 1 — jaccard-empty-wrong gate (`boltz2_negative_steering.py`)
@@ -135,7 +137,7 @@ classification of the seed verdict.
 Fixed: moved `_per_seed_verdict_breakdown` call OUT of the
 `if any_reverted:` branch — always run it. Classifier handles all
 cases (clean_steered requires `n_contacts==0` AND `intact==1` AND
-`ra<5`; falls through to no_data). **Deployed.**
+`ra<5`, otherwise falls through to no_data). **Deployed.**
 
 ### Bug 6 — reverted predictions missing extended metrics (`reversion.py` + `boltz2_iterate_steering.py`)
 
@@ -167,9 +169,10 @@ side computes:
 
 Patch added per-seed structural-jaccard computation to reversion.py,
 mirroring `_write_initial_multiseed_csv` from
-`boltz2_negative_steering.py`: extends the boltz2_negative_steering
-import to bring in `find_contact_residues_heavy` and `jaccard`,
-loads cycle0 plan dict for `true_interface_idx` /
+`boltz2_negative_steering.py`. The patch extends the
+boltz2_negative_steering import to bring in
+`find_contact_residues_heavy` and `jaccard`. It loads the cycle0
+plan dict for `true_interface_idx` /
 `initial_wrong_interface_idx`, runs the function on the reverted PDB,
 and computes both jaccard variants. Extended
 `_REVERTED_CONFIDENCE_FIELDS` with the six new field names.
@@ -197,11 +200,11 @@ reversion.py is presumably raising an exception that the broad
 
 **Hypothesis (UNVERIFIED — do not trust without proof)**: passing
 `expected_rec_seq=cycle0_rec_seq` triggers a sequence-mismatch
-ValueError because the reverted PDB has the post-steering mutations
+ValueError. The reverted PDB carries the post-steering mutations
 relative to the cycle_0 wild-type sequence. Patched the call to pass
 `expected_rec_seq=None` (in `/mnt/user-data/outputs/reversion.py`),
-but did not verify the hypothesis before presenting the patch — and
-user (rightly) refused another deploy-and-wait cycle on speculation.
+but did not verify the hypothesis before presenting the patch. The
+user rightly refused another deploy-and-wait cycle on speculation.
 
 The next session must:
 
@@ -211,7 +214,7 @@ The next session must:
    confirm whether they actually differ.
 2. If hypothesis holds, the patch in
    `/mnt/user-data/outputs/reversion.py` is correct — deploy it.
-3. If hypothesis doesn't hold, instrument the failing call: replace
+3. If hypothesis doesn't hold, instrument the failing call. Replace
    the bare `except Exception: pass` with `except Exception as e:
    print(...)` so the next test run logs the actual exception type
    and message.
@@ -219,12 +222,12 @@ The next session must:
 ## Workflow that emerged this session
 
 Same test-harness pattern as pipeline_notes11 (test script in
-`tests/<module>/`, SLURM wrapper, fast iteration without GPU). Where
-this session diverged from the prior pattern: the negsteer test script
-needs both `--runs-dir` AND `--cross-summary-csv` (the cohort plot's
-representative-sg lookup and the composite-score sort both need
-cross_summary). Made `--cross-summary-csv` required in the within-
-sequence wrapper too.
+`tests/<module>/`, SLURM wrapper, fast iteration without GPU). This
+session diverged from the prior pattern in one way. The negsteer
+test script needs both `--runs-dir` AND `--cross-summary-csv`,
+because the cohort plot's representative-sg lookup and the
+composite-score sort both need cross_summary. Made
+`--cross-summary-csv` required in the within-sequence wrapper too.
 
 Environment knowledge re-confirmed:
 
@@ -235,8 +238,8 @@ Environment knowledge re-confirmed:
   `"/A:5,7,18,22,26,32"`). Diagnostics MUST use `csv.DictReader`,
   not awk. I burned hours of user time before learning this.
 - The plot script's empty-data behaviour (`if ra is None or tj is
-  None: continue`) silently drops seeds with missing data, so the
-  user sees an apparently-correctly-rendered plot with no obvious
+  None: continue`) silently drops seeds with missing data. The user
+  then sees an apparently-correctly-rendered plot with no obvious
   signal that data is missing.
 
 ## Files patched / created this session
@@ -281,7 +284,7 @@ In `/mnt/user-data/outputs/` (presented to user, deployed by user):
 The user's frustration this session was warranted. I repeatedly:
 
 - Guessed instead of reading source.
-- Used unsafe diagnostics (awk on quote-comma CSVs; numpy on the
+- Used unsafe diagnostics (awk on quote-comma CSVs, numpy on the
   login node).
 - Persisted in claiming the user's observation was wrong rather
   than treating their report as ground truth.

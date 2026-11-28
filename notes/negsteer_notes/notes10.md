@@ -3,22 +3,23 @@
 ## Context
 
 Entering this session, notes 9 had closed with three consecutive live runs
-(v5, v6, v7) producing zero genuine passing designs and a tentative conclusion
-that "the problem is not a pipeline bug at this point — it's the biology."
-v7 surfaced two false-positive pose_holds candidates (design_08 and design_13)
-that per-seed inspection showed to be noise, and the classifier's inability
-to promote anything was flagged as architectural.
+(v5, v6, v7) producing zero genuine passing designs. v7 surfaced two
+false-positive pose_holds candidates (design_08 and design_13) that per-seed
+inspection showed to be noise, and the classifier's inability to promote
+anything was flagged as architectural. The tentative conclusion of notes 9
+was that "the problem is not a pipeline bug at this point — it's the biology."
 
-The session had two initial goals: (1) decide whether to keep iterating on this
-scaffold or move on, and (2) either patch the classifier to match the real
-per-seed data distribution or confirm the scaffold as a dead end.
+The session had two initial goals. Goal (1) was to decide whether to keep
+iterating on this scaffold or move on. Goal (2) was to either patch the
+classifier to match the real per-seed data distribution or confirm the
+scaffold as a dead end.
 
-Answering (1) first shifted the whole direction of the session: inspection of
-v7's raw per-seed data showed the pipeline was flagging false contamination
-on residues 22/26, which were physically 14 Å from the correct-pose effector
-and therefore could not be genuine load-bearing contacts. The rest of the
-session was spent chasing this bug through four layers of pipeline code and
-finally across four iterations (v8 → v9 → v10) of the patched filter itself.
+Answering (1) first shifted the whole direction of the session, because
+inspection of v7's raw per-seed data showed the pipeline was flagging false
+contamination on residues 22/26. Those residues sit 14 Å from the correct-pose
+effector, so they cannot be genuine load-bearing contacts. The rest of the
+session chased this bug through four layers of pipeline code, and then across
+four iterations (v8 → v9 → v10) of the patched filter itself.
 
 ## What was learned from v7 diagnostics
 
@@ -33,8 +34,8 @@ Across 50 designs × 3 seeds = 150 predictions:
 - 0 designs had ≥2/3 seeds individually passing.
 
 The bimodality was stark: 0/50 three-seed groups all-low, 9/50 all-high,
-15/50 split. Within a sequence, each seed is a roughly-Bernoulli draw —
-when a seed gets the correct pose it sits at sub-5 Å ra_eff, when it
+15/50 split. Within a sequence, each seed is a roughly-Bernoulli draw.
+When a seed gets the correct pose it sits at sub-5 Å ra_eff, and when it
 misses it flies back to the ~29 Å wrong-site attractor.
 
 ### Bug E classifier architecturally incapable
@@ -56,9 +57,9 @@ unwound into a chain of diagnostic turns:
 
 2. **`plan.json` diagnostic on the HPC**: v7 used
    `protected_set_source: true_interface_fallback`, not the requested
-   `design_region_union` — the union emptied the pool so the code
+   `design_region_union`. The union emptied the pool, so the code
    retreated. The actual pool was `{5, 7, 22, 26, 32, 36, 44, 46}`.
-   Empirical per-position table revealed two behavioural classes:
+   An empirical per-position table revealed two behavioural classes:
 
    | Class | Positions | Reverted-contact rate |
    |-------|-----------|----------------------|
@@ -66,7 +67,7 @@ unwound into a chain of diagnostic turns:
    | Recurring contaminator | 22, 26 | 32 / 108, 25 / 99 |
 
    Position 46 was most striking: 120/126 in contact steered, only 6/126
-   contaminating reverted — textbook useful steering residue.
+   contaminating reverted, a textbook useful steering residue.
 
 3. **Widen the protected set?** A second HPC diagnostic measured
    min-heavy-atom distance from each receptor residue to the ground-truth
@@ -76,32 +77,32 @@ unwound into a chain of diagnostic turns:
 
 4. **Direct ChimeraX inspection** (design_25_s2 reverted prediction,
    positions 22 and 26 highlighted on receptor chain A): the reverted
-   effector was at the correct interface but rotated slightly, and an
+   effector was at the correct interface but rotated slightly. An
    extending bit of its surface draped down across the opposite face of
-   the receptor to reach residues 22/26. Not a binding contact — a
-   geometric coincidence from the ~3 Å rotational jitter.
+   the receptor to reach residues 22/26. That is not a binding contact,
+   but a geometric coincidence from the ~3 Å rotational jitter.
 
 5. **Disorder hypothesis**: maybe the extending bit was a flexible tail
-   and its contacts shouldn't count. Two problems: (a) Boltz receives the
+   and its contacts shouldn't count. Two problems. (a) Boltz receives the
    effector as a templated chain with `force: true`, so effector pLDDT
-   is inherited from the template, not a disorder signal; (b) the
+   is inherited from the template, not a disorder signal. (b) The
    residues reaching 22/26 were B:13, B:15, B:17 of the 82-residue
-   prediction — mid-chain, not terminal.
+   prediction, so they are mid-chain, not terminal.
 
 6. **AF3-native-complex distraction**: a brief dead-end where I analysed
    B-factors on `af3_pikp1_native_avrpikf_complex.pdb` as if it were the
    ground truth. User correction: v7 uses `design_3.pdb` (the
    RFDiffusion design itself, Cα-only) as `--ground-truth`. The AF3
-   native complex is only used for validation context and the effector
-   there came from the 7B1I crystal via matchmaker. The low pLDDT values
-   were residual 7B1I B-factors, not confidence.
+   native complex is only used for validation context. Its effector came
+   from the 7B1I crystal via matchmaker. The low pLDDT values were
+   residual 7B1I B-factors, not confidence.
 
 7. **Actual conclusion on 22/26**: the reverted effector sits ~3 Å off the
    ground-truth pose with 14–18 of its contacts at true-interface
    residues. It's genuinely at the correct interface. The 22/26 contacts
-   are the structured-but-non-interface edge of the effector brushing
-   across a non-interface patch of receptor surface as the effector
-   rotates. The contamination check is over-firing.
+   come from the structured but non-interface edge of the effector
+   brushing a non-interface patch of receptor surface as it rotates.
+   The contamination check is over-firing.
 
 ## The contamination-check fix — four iterations
 
@@ -110,7 +111,7 @@ unwound into a chain of diagnostic turns:
 Define contamination on the **effector side**: a mutated receptor
 position counts as contaminating only if it is in contact with an
 effector atom that belongs to the effector's interface region. "Interface
-region" is defined once on the RFDiffusion ground truth — the set of
+region" is defined once on the RFDiffusion ground truth, as the set of
 effector atoms / residues within 8 Å Cα of a receptor residue in
 `true_interface_idx`.
 
@@ -120,11 +121,11 @@ rotates, those contacts are excluded from the contamination check. If a
 mutation at receptor position P contacts only the non-interface side of
 the effector, P is not flagged.
 
-The user explicitly chose to accept the trade-off that a real secondary
-binding site (biologically plausible in some other protein) would be
-excluded from scoring under this rule. Rationale: the alternative —
-residue-weighting schemes — would complicate the pipeline beyond what
-the downstream wet-lab assay can resolve.
+The user explicitly accepted the trade-off that a real secondary binding
+site (biologically plausible in some other protein) would be excluded
+from scoring under this rule. Rationale: the alternative,
+residue-weighting schemes, would complicate the pipeline beyond what the
+downstream wet-lab assay can resolve.
 
 ### What was implemented (level 1 contamination fix)
 
@@ -148,8 +149,8 @@ Consequence for prior notes: all absolute ipSAE numbers in v1–v7 are
 inflated. Rankings within a run are preserved (n_below is similar
 row-to-row) but cross-run thresholds need rescaling. The notes 5
 finding that design_3 hit ipSAE 0.86 becomes ~0.5–0.6 under the fix.
-The notes 3 finding that 7QPX ipSAE plateaus at 0 is unchanged — that's
-driven by n_below = 0, which both formulas produce.
+The notes 3 finding that 7QPX ipSAE plateaus at 0 is unchanged, because
+it is driven by n_below = 0, which both formulas produce.
 
 **Bug G — actifPTM misnamed.** The `actifptm` column was computing
 `0.8 * iptm + 0.2 * ptm`, which is the AlphaFold-Multimer ranking score,
@@ -157,11 +158,10 @@ not Varga et al. 2025's actifPTM. Real actifPTM restricts the pTM sum
 to an "interacting residue set" (residues with at least one inter-chain
 PAE below a threshold).
 
-Fix applied: wrote a proper `compute_actifptm` that identifies the
-interacting residue set from the PAE matrix and applies the pTM kernel
-over it with d0 from the interacting-set size. The old AF ranking
-formula is preserved as a new `af_rank_score` column (renamed, not
-deleted).
+Fix applied: a proper `compute_actifptm` identifies the interacting
+residue set from the PAE matrix, then applies the pTM kernel over it with
+d0 from the interacting-set size. The old AF ranking formula is preserved
+as a new `af_rank_score` column (renamed, not deleted).
 
 ### v8 — failed: atom-level filter on Cα-only ground truth
 
@@ -170,17 +170,17 @@ effector heavy atoms in `design_3.pdb` and kept those within 8 Å of an
 interface receptor Cα. Filter was written to `plan.json` as a list of
 `(resseq, atom_name)` pairs.
 
-**What broke**: `design_3.pdb` is Cα-only on the effector too (it's a
-RFDiffusion design output — Cα placeholders throughout the de novo
+**What broke**: `design_3.pdb` is Cα-only on the effector too. It is an
+RFDiffusion design output, with Cα placeholders throughout the de novo
 region, and even the effector template appears to have been reduced to
-Cα). The atom mask therefore contained only Cα atoms. When applied to
-a Boltz prediction (full heavy atoms), the heavy-to-heavy 5 Å contact
-check against receptor side chains almost never registered — Cα
-backbone atoms just aren't that close to receptor side chains.
+Cα. The atom mask therefore contained only Cα atoms. Applied to a Boltz
+prediction (full heavy atoms), the heavy-to-heavy 5 Å contact check
+against receptor side chains almost never registered. Cα backbone atoms
+are not that close to receptor side chains.
 
 **Result from v8** (100 designs × 3 seeds, 300 predictions):
-`steered_contact_residues` empty on every row; 0 contaminations flagged;
-0 reversions triggered; `passing_summary.csv` contained 57 designs that
+`steered_contact_residues` empty on every row, 0 contaminations flagged,
+0 reversions triggered. `passing_summary.csv` contained 57 designs that
 fell through to `no_reversion` without any contamination check running.
 The steered predictions themselves were real (steered_iptm up to 0.91,
 steered_actifptm up to 0.80 on sub-5 ra_eff designs) but unvalidated.
@@ -192,19 +192,20 @@ Rewrote `compute_effector_interface_atom_mask` as
 residue numbers. `compute_interface_contacts` extended to accept either
 the new residue-set form or the legacy atom-pair form (back-compat).
 
-Self-tested on a synthetic Cα-only ground truth — passed all three
-pathways (direct function, kwarg, CLI-via-JSON).
+Self-tested on a synthetic Cα-only ground truth, where all three
+pathways passed (direct function, kwarg, CLI-via-JSON).
 
 **What broke**: `compute_effector_interface_residues` collected effector
-`resseq` values as they appeared in the ground truth PDB — those came
+`resseq` values as they appeared in the ground truth PDB. Those came
 out as `[89, 90, 91, 92, 94, 97, 98, 112, 113, 114, 115, 116, 123,
 124, 125, 126, 127, 128]`. These are the RFDiffusion design's synthetic
-offset resseq scheme. Boltz predictions renumber chains 1-based
+offset resseq scheme, whereas Boltz predictions renumber chains 1-based
 positional (1, 2, …, 82). A filter saying "keep residues 89–128"
 matched zero atoms in every prediction.
 
-**Result from v9**: identical to v8 — empty `steered_contact_residues`
-on all rows. Same failure mode via a different bug.
+**Result from v9**: identical to v8, with empty
+`steered_contact_residues` on all rows, the same failure mode via a
+different bug.
 
 ### v10 — fixed: positional indices
 
@@ -213,13 +214,13 @@ index as it walks the file (ignoring resseq entirely) and return
 1-based positional indices matching what Boltz writes.
 
 Self-tested with GT-resseq ≠ positional (89–91 in ground truth,
-1–3 in prediction) — filter correctly identifies positional index 1
+1–3 in prediction). The filter correctly identifies positional index 1
 as the interface residue and produces non-empty contacts on the
 prediction.
 
 v10 patch set was prepared and given to the user with a pre-submission
 check (expect small 1-based integers in `plan.json`
-`effector_interface_residues`; NOT values >100). v10 has not yet been
+`effector_interface_residues`, NOT values >100). v10 has not yet been
 submitted as of session end.
 
 ## The Bug E classifier fix
@@ -238,10 +239,10 @@ any-seed gate plus a failure-count guard:
 
 Dry-replay against v7 data: flips exactly one design (design_08) from
 `pose_collapses` to `pose_holds`. Designs 25 and 43 correctly stay
-dropped — design_25 has a position-majority of 22/26 that fires
-`new_contamination` before the any-seed gate is reached; design_43 has
-reverted median ra_eff 7.60 Å (1 clean seed at 4.51, the other two at
-7.60 and 13.61) which fails the structural filter.
+dropped, because for design_25 a position-majority of 22/26 fires
+`new_contamination` before the any-seed gate is reached. For design_43,
+the reverted median ra_eff is 7.60 Å (1 clean seed at 4.51, the other
+two at 7.60 and 13.61), which fails the structural filter.
 
 The patch is conservative: promotes only designs where the aggregated
 evidence is strong AND at least one seed individually agrees AND no
@@ -277,7 +278,7 @@ failure mode dominates.
 ```
 
 Changes vs v7: `--n-designs 100` (was 50), `--rmsd-threshold 6.0`
-(was 5.0), `--max-mutations 6 --candidate-pool-size 10` (v7 was 6/10;
+(was 5.0), `--max-mutations 6 --candidate-pool-size 10` (v7 was 6/10,
 v6 was 4/8). Classifier patch + contamination-check patch + metric
 fixes are all in the code paths.
 
@@ -292,22 +293,22 @@ cat runs/design_3_dedup_test_v10/cycle_0/plan.json | \
 
 Expected: small 1-based integers (e.g. `[1, 2, 3, 4, 5, 6, 9, 10, …]`)
 with all values ≤ 82 (effector length). If values ≥ 89 appear, v9's
-resseq bug is back; if values are atom-pair tuples, v8's atom-level
-code is back; in either case don't submit.
+resseq bug is back, and if values are atom-pair tuples, v8's atom-level
+code is back. In either case, don't submit.
 
 ## Key findings and learnings
 
-1. **22/26 contamination was never a pool problem** — it was a contact-cutoff
-   sensitivity artefact. The reverted pose sits ~3 Å off ground truth and
-   a structured but non-interface edge of the effector reaches over to
-   brush non-interface receptor surface. Widening the true-interface
-   cutoff doesn't help because 22/26 are 14 Å from the correct-pose
-   effector. The fix is effector-side: only effector atoms belonging to
-   the interface region are allowed to generate contamination calls.
+1. **22/26 contamination was never a pool problem**. It was a
+   contact-cutoff sensitivity artefact. The reverted pose sits ~3 Å off
+   ground truth, and a structured but non-interface edge of the effector
+   reaches over to brush non-interface receptor surface. Widening the
+   true-interface cutoff doesn't help because 22/26 are 14 Å from the
+   correct-pose effector. The fix is effector-side: only effector atoms
+   belonging to the interface region can generate contamination calls.
 
 2. **ipSAE values in all prior notes are inflated ~30–50 %**. The d0
    formula was wrong since the metric was added. Rankings within a run
-   are preserved; absolute thresholds need rescaling.
+   are preserved, but absolute thresholds need rescaling.
 
 3. **The `actifptm` column in all prior CSVs is the AF-Multimer ranking
    score, not Varga actifPTM**. Renamed to `af_rank_score`. A new,
@@ -320,10 +321,10 @@ code is back; in either case don't submit.
 
 5. **Coordinate-system mismatch between ground truth and predictions**.
    RFDiffusion designs use synthetic offset resseq schemes (typically
-   1000-offset from the fixed residue max); Boltz predictions
-   renumber 1-based positional. Anything computed on the ground truth
-   that will be applied to predictions must be converted to positional
-   indices before persisting.
+   1000-offset from the fixed residue max). Boltz predictions renumber
+   1-based positional. Anything computed on the ground truth that will
+   be applied to predictions must be converted to positional indices
+   before persisting.
 
 6. **Synthetic self-tests didn't catch the layered bugs**. v8's atom-level
    filter passed a synthetic full-heavy-atom test that didn't exercise
@@ -334,15 +335,15 @@ code is back; in either case don't submit.
    (GT-resseq ≠ positional).
 
 7. **14 % per-seed pose-acquisition rate on the design_3 scaffold**.
-   At `num_seeds=3` this gives an expected ~0.4 passing seeds per design
-   — majority-of-N gates are architecturally wrong at this per-seed
+   At `num_seeds=3` this gives an expected ~0.4 passing seeds per design.
+   Majority-of-N gates are architecturally wrong at this per-seed
    success rate. Any-seed plus failure-count guard is the right shape.
 
 ## Outstanding work
 
 1. **Submit v10**. All four files patched, syntax-checked, self-tested
-   end-to-end. Deploy all four to the cluster together; MD5-check.
-   Run the pre-submission login-node sanity check above before
+   end-to-end. Deploy all four to the cluster together and MD5-check
+   them. Run the pre-submission login-node sanity check above before
    submitting.
 
 2. **ChimeraX inspection of any v10 passes**. Notes 9's deferred inspection
@@ -358,10 +359,10 @@ code is back; in either case don't submit.
 
 3. **Level 2 interface-restricted metrics** (deferred). The `ipae` and
    `ipsae_*` metrics still average over the full inter-chain PAE block,
-   including off-interface contributions. Not technically a bug — the
-   field uses this naive iPAE convention — but the more principled
-   interface-restricted forms (matching the new `actifptm`) would
-   reduce noise from off-interface PAE contributions. Worth doing
+   including off-interface contributions. This is not technically a bug,
+   because the field uses this naive iPAE convention. The more
+   principled interface-restricted forms (matching the new `actifptm`)
+   would reduce noise from off-interface PAE contributions. Worth doing
    before deploying at RFDiffusion scale across diverse effector shapes.
 
 4. **Level 3 core-only RMSDs and full interface-restricted scoring**

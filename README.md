@@ -190,6 +190,6 @@ during development.
 
 ## License / contact
 
-TODO — license not yet specified.
+TODO: license not yet specified.
 
 Maintainer: Joshua Williams (joshuandwilliams@outlook.com).

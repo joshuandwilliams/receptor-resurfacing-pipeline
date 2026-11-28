@@ -37,7 +37,7 @@ work.  Do not relitigate without new evidence.
 
 2. **HADDOCK never produces output clashes**: Empirically verified across
    multiple production runs.  flexref/emref refines clashes away.  The
-   absence of clashes in HADDOCK output is not a constraint violation — it
+   absence of clashes in HADDOCK output is not a constraint violation.  It
    is the pipeline working as designed.
 
 3. **Both proteins are rigid throughout**: Sidechain and backbone
@@ -45,10 +45,10 @@ work.  Do not relitigate without new evidence.
    residues are replaced downstream.  Fixed-region sidechains in their
    crystal rotamers are correct by definition.
 
-4. **Hint pose quality is a manual responsibility**: Without HADDOCK
-   performing the initial placement (which it cannot do in the presence of
-   clashes from regions about to be redesigned), the only starting point is
-   a ChimeraX-aligned complex.  The user accepts this.
+4. **Hint pose quality is a manual responsibility**: HADDOCK cannot do the
+   initial placement, because the regions about to be redesigned clash.
+   The only starting point is a ChimeraX-aligned complex.  The user accepts
+   this.
 
 5. **HADDOCK as placement optimiser, not energy minimiser**: The right
    framing is "find the best effector position given the anchored receptor
@@ -61,10 +61,10 @@ work.  Do not relitigate without new evidence.
 ### The core analogue: partial diffusion in RFdiffusion
 
 The closest published precedent for pose-hint → adaptive refinement is
-**RFdiffusion partial diffusion** (Watson et al. 2023, *Nature*; Glögl
-et al. 2024, *Science*).  Partial diffusion takes a roughly-placed
+**RFdiffusion partial diffusion** (Watson et al. 2023, *Nature*, and
+Glögl et al. 2024, *Science*).  Partial diffusion takes a roughly-placed
 structure, adds a controlled amount of noise, and lets RFdiffusion denoise
-back — sampling near the hint rather than from pure random noise.  The
+back, sampling near the hint rather than from pure random noise.  The
 Glögl et al. TNFR paper demonstrated that partial diffusion for affinity
 maturation improved hit rates from 7–35% to 30–46% for challenging targets
 including GPCRs.  Picomolar affinity was achieved via a partial diffusion
@@ -82,10 +82,10 @@ region from clashes is not a feature of this workflow.
 de novo design of antibodies with RFdiffusion") is the most directly
 analogous published workflow.  The antibody framework (analogous to the HMA
 domain) is provided as a template encoding pairwise geometry but NOT the
-rigid-body relationship to the target — so RFdiffusion samples diverse
-docking orientations.  CDRs (analogous to the design regions) are the only
-parts designed de novo.  ProteinMPNN designs CDR sequences; the framework
-sequence is frozen.
+rigid-body relationship to the target.  RFdiffusion therefore samples
+diverse docking orientations.  CDRs (analogous to the design regions) are
+the only parts designed de novo.  ProteinMPNN designs CDR sequences, and
+the framework sequence is frozen.
 
 **The parallel to this pipeline:**
 - Antibody framework → Pikp-1 HMA fixed regions (A1-32 + A50-68)
@@ -107,7 +107,7 @@ sequences.  If hotspots are not specified, AF2 selects the binding site
 automatically.
 
 **Relevance**: BindCraft can in principle design a novel binding loop
-against a specified target face — which is what this pipeline attempts via
+against a specified target face, which is what this pipeline attempts via
 RFDiffusion.  The pipeline described here differs in that it engineers an
 EXISTING receptor rather than designing a binder de novo.
 
@@ -115,16 +115,17 @@ EXISTING receptor rather than designing a binder de novo.
 
 **PPDiff** (Song et al. ICML 2025) jointly diffuses the sequence and
 backbone of protein-protein complexes, achieving 50% success on pretraining
-tasks and 16-23% on antibody/mini-binder applications.  Does not take a
-user-specified docked pose; samples from the complex distribution
+tasks and 16-23% on antibody/mini-binder applications.  It does not take a
+user-specified docked pose.  It samples from the complex distribution
 conditioned on target structure.
 
 ### ProtFill: interface redesign via inpainting
 
 **ProtFill** (Kozlova et al. 2023/24, NeurIPS MLSB) inpaints protein
 structure and sequence simultaneously using SE(3) equivariant diffusion.
-Demonstrated for antibody interface redesign.  Requires the design region
-to be pre-specified; does not derive it from clash analysis.
+Demonstrated for antibody interface redesign.  It requires the design
+region to be pre-specified, and does not derive the region from clash
+analysis.
 
 ### The Rosetta era: AnchoredDesign and loop remodeling
 
@@ -139,10 +140,10 @@ specify which loops to redesign.
 
 No published method identifies, from a user-provided docked pose, which
 receptor residues are clashing and automatically designates those as the
-redesign region.  This specific formulation — clash detection at a manually
-placed complex → adaptive design region boundary → downstream generative
-redesign of only the carved residues — appears to be methodologically
-novel.
+redesign region.  The specific formulation chains clash detection at a
+manually placed complex → adaptive design region boundary → downstream
+generative redesign of only the carved residues.  That chain appears to be
+methodologically novel.
 
 The closest are:
 - Antibody humanisation tools that flag CDR residues clashing with a human
@@ -164,10 +165,10 @@ The closest are:
 (EXTRACT_HOTSPOTS deleted), 0e8a68a (contig-derived design region), 5fc900c
 (numpy fix), eb4ec37 (plot polish), 375b369 (sidechain strip + DR1 active).
 
-**Goal**: Replace the pre-Session-7 HADDOCK module, which derived AIR
-active residues from the contig's de novo regions (phantom residues that
-don't exist on the input PDB at HADDOCK time), with a user-driven restraint
-system and a BSA-primary cluster ranking.
+**Goal**: Replace the pre-Session-7 HADDOCK module with a user-driven
+restraint system and a BSA-primary cluster ranking.  The old module derived
+AIR active residues from the contig's de novo regions, which are phantom
+residues that don't exist on the input PDB at HADDOCK time.
 
 **Hypothesis**: User-specified pair contacts + effector hotspot AIRs +
 BSA-driven cluster ranking + manual checkpoint will produce biologically
@@ -176,9 +177,10 @@ ranking.
 
 **Rationale**: The original design derived AIRs from contig de novo
 segments, but those residues don't exist on the native receptor PDB at
-HADDOCK time.  AIRs referenced phantom residues; the auto-pick used
-HADDOCK score (misaligned with the geometric-placement goal); no mechanism
-existed for the user to inspect poses before committing to RFDiffusion.
+HADDOCK time.  AIRs referenced phantom residues.  The auto-pick used
+HADDOCK score, which is misaligned with the geometric-placement goal.  No
+mechanism existed for the user to inspect poses before committing to
+RFDiffusion.
 
 **Experimental plan**:
 1. New user-facing restraint params: `haddock_contact_pairs` (hard CA-CA
@@ -200,12 +202,12 @@ existed for the user to inspect poses before committing to RFDiffusion.
 - `haddock_effector_active_residues = "20-26"`
 
 **Results**: Pipeline runs end-to-end.  Pair pins satisfied (3/3).  Hotspot
-B20-26 markers all 8-15 Å from receptor — none in contact range (<5 Å).
+B20-26 markers all 8-15 Å from receptor, none in contact range (<5 Å).
 Effector beta strand bent down toward B20-26 instead of receptor rotating.
 
 **Conclusion**: Functional but does not recover the intended pose.  The
 effector deforms rather than the receptor rotating.  Restraint-following
-works; pose recovery for the intended interface does not.
+works.  Pose recovery for the intended interface does not.
 
 ---
 
@@ -222,7 +224,7 @@ being deflected by sidechains that will be replaced by RFDiffusion anyway.
 HADDOCK's pose search by acting as immovable steric walls, causing the
 effector to bend rather than the receptor to rotate.
 
-**Rationale**: HADDOCK never produces output clashes — it resolves them by
+**Rationale**: HADDOCK never produces output clashes.  It resolves them by
 deforming the more flexible body (typically the smaller/softer one).  The
 receptor's design-region sidechains prevent the effector from approaching
 the design face, so the effector's own interface region bends down to meet
@@ -231,11 +233,11 @@ the effector hotspot from below.
 **Experimental plan**:
 1. `haddock_strip_design_sidechains: true`.
 2. All atoms in contig de novo residues (33-49 + 69-78) stripped to N/CA/C/O
-   and renamed GLY in `receptor_haddock.pdb`.  HADDOCK-only — RFD replaces
-   these residues entirely.
+   and renamed GLY in `receptor_haddock.pdb`.  This is HADDOCK-only,
+   because RFD replaces these residues entirely.
 3. Run at production-length (`haddock_sampling = 10000`).
 
-**Results**: Correct — 27 residues stripped.  Run completes.  Hotspot B20-26
+**Results**: Correct, 27 residues stripped.  Run completes.  Hotspot B20-26
 markers still >5 Å from receptor.  One cluster rotated the receptor in the
 OPPOSITE direction, a different loop (not DR1) lying parallel to the hotspot
 strand.  Sidechain stripping alone insufficient.
@@ -252,14 +254,14 @@ form of the intervention is backbone removal.
 **Commits**: 375b369 (alongside sidechain stripping).
 
 **Goal**: Provide a soft directional pull forcing design region 1 (residues
-33-49) of the receptor toward the effector hotspot patch B20-26, in addition
+33-49) of the receptor toward the effector hotspot patch B20-26.  This adds
 to the hard pair pins that anchor design region 2 (69-78) at the existing
 AvrPikF-like interface.
 
 **Hypothesis**: Adding DR1 to the receptor active list creates a two-sided
-AIR ("each DR1 residue must contact one of B20-26") that, combined with the
-pair pins on DR2, geometrically requires the receptor to rotate so both
-design regions face the effector.
+AIR, namely "each DR1 residue must contact one of B20-26".  Combined with
+the pair pins on DR2, that AIR geometrically requires the receptor to
+rotate so both design regions face the effector.
 
 **Rationale**: The user confirmed DR1 faces the effector in their ChimeraX
 placement.  A two-sided AIR makes the rotation a soft requirement.
@@ -270,8 +272,8 @@ placement.  A two-sided AIR makes the rotation a soft requirement.
 3. Production-length run (10000/400/4).
 
 **Results**: Run completed (37 min).  Auto-picked cluster: pair pins 3/3,
-hotspot B20-26 all >5 Å.  One cluster rotated far in the WRONG direction —
-a different loop lay parallel to the hotspot strand.  The receptor's
+hotspot B20-26 all >5 Å.  One cluster rotated far in the WRONG direction,
+with a different loop lying parallel to the hotspot strand.  The receptor's
 design-region BACKBONE prevented the intended rotation.
 
 **Conclusion**: Soft AIR + sidechain stripping insufficient.  The design-region
@@ -293,10 +295,11 @@ backbone or sidechains.  The user's ChimeraX pose provides the starting hint.
 Both proteins are rigid throughout (no flexref/emref).
 
 **Hypothesis**: The design-region backbone is the steric barrier preventing
-HADDOCK from reaching the user's intended interface.  Removing all design-region
-atoms from the receptor PDB (not just sidechains) and locking the truncated
-receptor at the user's pose orientation will allow HADDOCK to optimally place
-the effector via rigid-body sampling, guided by the restraint set.
+HADDOCK from reaching the user's intended interface.  Remove all
+design-region atoms from the receptor PDB, not just sidechains, and lock
+the truncated receptor at the user's pose orientation.  HADDOCK should
+then place the effector optimally by rigid-body sampling, guided by the
+restraint set.
 
 **Rationale**:
 
@@ -307,14 +310,15 @@ the effector via rigid-body sampling, guided by the restraint set.
   rotation) because the backbone still prevented the desired rotation.
 - Removing backbone entirely creates space for the effector to reach the
   intended receptor face.
-- Freezing the remaining receptor is not restrictive: relative motion between
-  frozen receptor and mobile effector spans the same configuration space as
-  letting both move (rigid-body equivalence).  The restriction is to what
-  the user *wants* — the user's pose orientation for the fixed regions.
+- Freezing the remaining receptor is not restrictive.  Relative motion
+  between frozen receptor and mobile effector spans the same configuration
+  space as letting both move (rigid-body equivalence).  The restriction is
+  instead to what the user *wants*, namely the user's pose orientation for
+  the fixed regions.
 - HADDOCK never produces output clashes, so the absence of design-region
   backbone means no backbone-mediated steric barriers exist.
-- Both proteins rigid: no flexref/emref.  Their crystal-structure
-  coordinates are correct; sidechain optimisation is irrelevant given
+- Both proteins stay rigid, so no flexref/emref.  Their crystal-structure
+  coordinates are correct, and sidechain optimisation is irrelevant given
   downstream redesign.
 
 **Experimental plan**:
@@ -337,15 +341,15 @@ the effector via rigid-body sampling, guided by the restraint set.
 
 4. **Handle chain breaks**: The two fixed segments are no longer covalently
    connected.  Options: (a) treat as two separate molecules in HADDOCK3
-   `molecules = [...]`; (b) keep as one chain with an explicit chain-break
-   record.  Option (a) is more robust — HADDOCK3 supports multi-molecule
-   complexes natively.
+   `molecules = [...]`, or (b) keep as one chain with an explicit chain-break
+   record.  Option (a) is more robust, because HADDOCK3 supports
+   multi-molecule complexes natively.
 
-5. **Pair pins**: If pair-pin residues are in the carve set (e.g., A71-73
-   which are in DR2 / residues 69-78), convert them to distance restraints
-   to virtual Cα positions derived from the user's hint pose.  CNS supports
-   distance-to-coordinate restraints.  If pair pins reference FIXED residues
-   (A1-32 or A50-68), they work unchanged.
+5. **Pair pins**: Pair-pin residues may fall in the carve set, for example
+   A71-73, which are in DR2 (residues 69-78).  Convert any such pins to
+   distance restraints to virtual Cα positions derived from the user's hint
+   pose.  CNS supports distance-to-coordinate restraints.  If pair pins
+   reference FIXED residues (A1-32 or A50-68), they work unchanged.
 
 6. **Configure HADDOCK3**:
    - Reduced sampling (200–500, not 10000) to exploit the hint-initialisation.
@@ -358,22 +362,22 @@ the effector via rigid-body sampling, guided by the restraint set.
    distance window 0-6 Å) to `5,2,3` (window 3-8 Å), matching biologically
    realistic Cα-Cα contact distances for strand-mediated hydrogen bonding.
 
-8. **Post-docking splice**: Before BUILD_CONTIGS, splice placeholder residues
-   back into the receptor PDB at carve-set positions (Cα-only, with the
-   correct residue count for contig compatibility), so RFDiffusion gets the
-   correct protein length and contig string.
+8. **Post-docking splice**: Before BUILD_CONTIGS, splice placeholder
+   residues back into the receptor PDB at carve-set positions.  These are
+   Cα-only, with the correct residue count for contig compatibility.
+   RFDiffusion then gets the correct protein length and contig string.
 
 **Predicted outcome**: HADDOCK finds effector poses where B20-26 lands on
-the DR1 side of the receptor (the only side with actual backbone to bind
-against), pair pins satisfy at biologically realistic distances.
+the DR1 side of the receptor.  That is the only side with actual backbone
+to bind against.  Pair pins satisfy at biologically realistic distances.
 
 **Failure modes**:
 
 - The two fixed-segment "molecules" may be too small / sparse for HADDOCK
   to compute meaningful BSA, leading to degenerate clustering.
 - If only a handful of pair-pin-compatible poses exist, the cluster may have
-  very few members.  Not a scientific problem but may confuse the
-  cluster-size diagnostics.
+  very few members.  This is not a scientific problem, but it may confuse
+  the cluster-size diagnostics.
 - If the user's hint is ≥30° off the true orientation, HADDOCK's reduced
   sampling may not escape the local basin.  Mitigation: increase sampling
   or run blind first (see E5).
@@ -387,15 +391,16 @@ against), pair pins satisfy at biologically realistic distances.
 **Goal**: Discover the minimal carve set that allows HADDOCK to reach the
 user's intended pose, when the initial single-pass carve (E4) fails.
 
-**Hypothesis**: The E4 hint-pose clash detection may miss residues that are
-not clashing at the hint but become clashing when the effector rotates to
-its optimal position against the truncated receptor.  A second pass would
-detect and remove these.
+**Hypothesis**: The E4 hint-pose clash detection may miss residues that do
+not clash at the hint.  They can start clashing when the effector rotates
+to its optimal position against the truncated receptor.  A second pass
+would detect and remove these.
 
 **Rationale**: HADDOCK never produces output clashes (clarification #2), so
-any "new" clashes after E4 won't appear in the output — but they might be
-biologically real if the optimal effector placement puts the effector face
-against a receptor region that was not clashing in the raw hint pose.
+any "new" clashes after E4 won't appear in the output.  They might still
+be biologically real.  That happens if the optimal effector placement puts
+the effector face against a receptor region that was not clashing in the
+raw hint pose.
 
 **Experimental plan**:
 
@@ -430,9 +435,9 @@ this is a sufficient specification.
 **Rationale**: The current pipeline requires the user to provide two
 consistent inputs: (1) a ChimeraX-aligned complex encoding the intended
 pose, and (2) a contig string encoding the design region.  These should be
-the same decision — "which receptor residues need to change to accommodate
-this pose?" — but are expressed separately.  Auto-derivation from clashes
-unifies them into a single input decision.
+the same decision ("which receptor residues need to change to accommodate
+this pose?"), but they are expressed separately.  Auto-derivation from
+clashes unifies them into a single input decision.
 
 **Potential workflow**:
 
@@ -442,10 +447,10 @@ unifies them into a single input decision.
 3. User sees the clashing residues highlighted as the proposed design region.
 4. User adjusts the placement until the design region matches their biological
    intent (e.g., "I want the de novo loop to be roughly 15 residues").
-5. User submits — pose + auto-derived design region.
+5. User submits the pose plus the auto-derived design region.
 6. Contig string is AUTO-GENERATED from the carve set.
 
-**PhD supervisor critique — drawbacks**:
+**PhD supervisor critique (drawbacks)**:
 
 1. **Loss of biological control over the design region.** Not all redesign
    decisions are clash-driven.  A user might want to redesign a
@@ -464,11 +469,11 @@ unifies them into a single input decision.
 
 4. **Threshold ambiguity.** What counts as a clash: 2 Å? 3 Å? 4 Å?
    Replacing "explicit residue list" with "clash threshold" doesn't reduce
-   decisions — it relocates one in a less biologically interpretable form.
+   decisions.  It relocates one in a less biologically interpretable form.
 
 5. **Coupling pose quality to design region quality.** A poor ChimeraX
    placement produces both a poor pose AND a poorly-derived design region.
-   With explicit contigs these are separable; the user can fix the pose
+   With explicit contigs these are separable.  The user can fix the pose
    without changing the design region.
 
 6. **Provenance and reproducibility.** The design region would be an emergent
@@ -476,9 +481,9 @@ unifies them into a single input decision.
    different input PDB produces a different design region.  Explicit contigs
    are version-controlled and self-documenting.
 
-7. **Non-interface redesign intent is inaccessible.** Redesign for binder
-   stability, reduced immunogenicity, specificity against a panel of effectors
-   — none of these are derivable from clashes at a single pose.
+7. **Non-interface redesign intent is inaccessible.** Clashes at a single
+   pose cannot express redesign for binder stability, reduced
+   immunogenicity, or specificity against a panel of effectors.
 
 **Mitigations that make this worth pursuing**:
 
@@ -490,9 +495,9 @@ unifies them into a single input decision.
   I expected 15."  This is the most important mitigation.
 - **Two thresholds**: 2 Å (hard clash, definitely must carve) + 3.5 Å (soft
   near-contact, propose-but-require-user-confirmation).
-- **Contig string preserved as canonical output**: the auto-detection populates
-  a contig string that is saved in params.yml for provenance.  Auto-detection
-  populates it; the user can still inspect and edit.
+- **Contig string preserved as canonical output**: the auto-detection
+  populates a contig string that is saved in params.yml for provenance.
+  The user can still inspect and edit it.
 
 **Verdict**: Pursue as a longer-term UX improvement, built on top of E4.
 Not a replacement for explicit contigs in the near term.  The ChimeraX plugin
@@ -507,7 +512,7 @@ fully-automated contig derivation is never adopted.
 
 **Why**: HADDOCK overrides restraints to avoid clashes.  Providing many
 restraints derived from the intended pose does not force HADDOCK into that
-pose — it will find the best satisfied-restraint configuration that avoids
+pose.  HADDOCK finds the best satisfied-restraint configuration that avoids
 sterically impossible overlaps.  The effector will bend or rotate to the
 nearest restraint-compatible clash-free pose, which may not be the intended
 one.  Rejected based on user's empirical observation.
@@ -515,8 +520,8 @@ one.  Rejected based on user's empirical observation.
 ### D2 — Drop HADDOCK entirely (pose-first workflow)
 
 **Why**: The user's ChimeraX placement is a rough hint, not the final answer.
-Orientation and placement may both be suboptimal; contact distances may be
-biologically implausible.  Taking the hint directly into RFDiffusion without
+Orientation and placement may both be suboptimal, and contact distances
+may be biologically implausible.  Taking the hint directly into RFDiffusion without
 any refinement step gives up the scientific basis the user explicitly wants.
 
 ### D3 — Receptor sidechain refinement / flexref
@@ -530,9 +535,10 @@ the user.
 ### D4 — Effector-only mobile with random initialisation
 
 **Why**: Equivalent to "both mobile" in rigid-body docking (clarification #1).
-The "freeze the receptor" decision is about limiting sampling to a hint-initialised
-basin and skipping receptor refinement — not about changing the configuration
-space.  A hint-initialised run achieves the same relative pose quality.
+The "freeze the receptor" decision is about limiting sampling to a
+hint-initialised basin and skipping receptor refinement.  It does not
+change the configuration space.  A hint-initialised run achieves the same
+relative pose quality.
 
 ---
 
@@ -548,11 +554,12 @@ space.  A hint-initialised run achieves the same relative pose quality.
 | **E4 (this work)** | **✓** | **✓ (from clashes)** | **✓** | **✓** |
 
 **E4 occupies a combination of features that no single published method
-addresses.**  The closest published analogue is RFdiffusion partial diffusion
-(pose-hint input + refinement) but it differs in that the design region
-boundary is pre-specified not auto-derived, and the proteins are not rigid
-(diffusion resamples backbone).  The clash-driven carve is the novel
-methodological contribution if this approach is published.
+addresses.**  The closest published analogue is RFdiffusion partial
+diffusion, which takes a pose-hint input and refines it.  It differs in two
+ways: the design region boundary is pre-specified rather than auto-derived,
+and the proteins are not rigid because diffusion resamples backbone.  The
+clash-driven carve is the novel methodological contribution if this
+approach is published.
 
 ---
 

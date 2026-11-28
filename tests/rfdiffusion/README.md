@@ -6,8 +6,8 @@ Per-module test for the RFDiffusion stage.
 
 `RFDIFFUSION` → `RFDIFFUSION_FILTER` → `RFDIFFUSION_PLOTS` from
 `modules/rfdiffusion.nf`, in isolation. Generates N candidate
-backbones around the fixed effector pose, filters by hotspot
-occupancy, splits each surviving design into chain-A receptor +
+backbones around the fixed effector pose, then filters by hotspot
+occupancy. Splits each surviving design into chain-A receptor +
 chain-B effector PDBs, and emits the per-design metrics blob plus
 diagnostic plots.
 

@@ -1,10 +1,10 @@
 # Phase 4 Architecture Spec
 
-The written specification for the Phase 4 codebase rebuild.  Strategy B (deep modules) — the whole codebase is organised around a small set of domain types, each carrying both its data and the behaviour around it.  Naming convention: domain nouns; descriptive multi-word names are fine when they reduce ambiguity.
+The written specification for the Phase 4 codebase rebuild.  Strategy B (deep modules) organises the whole codebase around a small set of domain types, each carrying both its data and the behaviour around it.  Naming convention: domain nouns.  Descriptive multi-word names are fine when they reduce ambiguity.
 
-This document grows as the Phase 4 grill-me works through it.  Final form is the architectural contract: implementation in the migration phases follows this spec exactly.  Anything not in the spec is internal detail of the type it lives in.
+This document grows as the Phase 4 grill-me works through it.  Final form is the architectural contract.  Implementation in the migration phases follows this spec exactly.  Anything not in the spec is internal detail of the type it lives in.
 
-Live document; updated as decisions land.  Cross-references to `notes/design_audit.md` Session 6+ for the reasoning behind each decision.
+Live document, updated as decisions land.  See `notes/design_audit.md` Session 6+ for the reasoning behind each decision.
 
 ---
 
@@ -26,11 +26,11 @@ The list below is the agreed candidate set after Session 6 grill-me.  Interfaces
 
 5. **`DesignedSequence`** — one MPNN-designed sequence overlaid on a `DesignedBackbone`.  Carries the corrected receptor amino-acid string, the slice at design positions, the MPNN score.  Identified by `design_<N>_seq_<M>`.
 
-6. **`PositionSet`** — a set of residue positions on the receptor, *with frame*.  Frame is one of `native`, `designed`, `prediction`.  Operations between sets in different frames raise; conversion is explicit.  Used for: design region, true interface, wrong interface, protected set, contaminated positions, mutated positions.
+6. **`PositionSet`** — a set of residue positions on the receptor, *with frame*.  Frame is one of `native`, `designed`, `prediction`.  Operations between sets in different frames raise.  Conversion is explicit.  Used for: design region, true interface, wrong interface, protected set, contaminated positions, mutated positions.
 
 7. **`ContigSpec`** — the RFDiffusion contig string parsed into structured segments (fixed / denovo, start, end, length).  Knows: total receptor length, denovo segments, fixed segments, which native positions are anchored.  Used by RFDiffusion, MPNN sequence correction, HADDOCK, indices derivation.
 
-8. **`StageResult`** — the result of one negsteer stage for one configuration: a list of `ProteinStructurePrediction`s (one per seed, count = `num_seeds`, NOT fixed at 3 — `num_seeds` is a user parameter, validated odd-only) plus the collective verdict for that stage (e.g. clean / contaminated / pose_collapses).  The stage's verdict drives whether the next stage runs.
+8. **`StageResult`** — the result of one negsteer stage for one configuration.  Carries a list of `ProteinStructurePrediction`s, one per seed, count = `num_seeds`.  `num_seeds` is a user parameter, validated odd-only, NOT fixed at 3.  Also carries the collective verdict for that stage (e.g. clean / contaminated / pose_collapses).  The stage's verdict drives whether the next stage runs.
 
 9. **`NegativeSteeringRun`** — one full negsteer experiment for one MPNN sequence.  Owns its sequence of `StageResult`s (cold-start → steered-per-design → reversion-per-contaminated-design), plus the per-sequence outcome label and `n_pass` count.  Externally exposes: outcome, n_pass, tier, canonical PDB, passing-summary rows.
 
@@ -40,13 +40,13 @@ The list below is the agreed candidate set after Session 6 grill-me.  Interfaces
 
 12. **`PipelineParams`** — the user-facing parameter set.  Everything `bin/validate_params.py` checks.  Sourced from `params.X` in Nextflow / `params_example.yml`.  Knows how to validate itself.
 
-13. **`PipelineInternalThresholds`** — the internal-threshold catalogue.  Every hard-coded threshold currently scattered through `bin/` (ra_eff < 5 Å, intact threshold, ipae cutoffs, contact cutoff, composite weights, etc.).  Default values live here; the user CAN override but normally doesn't.  This type is the home of the future "Task 47 threshold audit."
+13. **`PipelineInternalThresholds`** — the internal-threshold catalogue.  Every hard-coded threshold currently scattered through `bin/` (ra_eff < 5 Å, intact threshold, ipae cutoffs, contact cutoff, composite weights, etc.).  Default values live here.  The user CAN override but normally doesn't.  This type is the home of the future "Task 47 threshold audit."
 
 ### Confirmed scoping decisions
 
-- **AF3 and Boltz outputs share the structure type, not the metric types.**  ProteinStructurePrediction is predictor-agnostic; `BoltzConfidenceMetrics` and `AF3ConfidenceAggregate` are predictor-specific.
+- **AF3 and Boltz outputs share the structure type, not the metric types.**  ProteinStructurePrediction is predictor-agnostic.  `BoltzConfidenceMetrics` and `AF3ConfidenceAggregate` are predictor-specific.
 - **PositionSet carries its frame.**  Single type, `frame` field, mixing-frames operations raise.  Conversion is explicit (`set.in_frame("native")`).
-- **`StageResult` is in the hierarchy.**  The three-tier-deep hierarchy is: `ProteinStructurePrediction` (one prediction) → `StageResult` (one stage's predictions for one configuration) → `NegativeSteeringRun` (one MPNN sequence's full chain of stages) → `DesignCohort` (all MPNN sequences in one run).
+- **`StageResult` is in the hierarchy.**  The hierarchy is three tiers deep.  `ProteinStructurePrediction` (one prediction) → `StageResult` (one stage's predictions for one configuration) → `NegativeSteeringRun` (one MPNN sequence's full chain of stages) → `DesignCohort` (all MPNN sequences in one run).
 - **Pipeline parameters split.**  Two types: `PipelineParams` (user contract) and `PipelineInternalThresholds` (research methodology).
 
 ### Things considered and dropped from the type list
@@ -63,11 +63,11 @@ These are domain-truths the user has stated during the grill-me that the archite
 
 ### CL-1.  `no_reversion` is NOT cold-start
 
-The aggregate outcome `no_reversion` fires whenever no seed in a sequence-group needed reversion.  This can happen in two distinct paths: (a) cold-start `skip_steering` (all cold-start seeds were structurally fine, steering never ran), OR (b) steering ran but every seed's steered prediction had zero contamination on mutated positions.  `no_reversion` is NOT a synonym for cold-start.  See `~/.claude/.../memory/project_no_reversion_semantics.md`.
+The aggregate outcome `no_reversion` fires whenever no seed in a sequence-group needed reversion.  This can happen by two distinct paths.  Path (a) is cold-start `skip_steering`, where all cold-start seeds were structurally fine and steering never ran.  Path (b) is steering that ran, but where every seed's steered prediction had zero contamination on mutated positions.  Either path gives `no_reversion`, which is NOT a synonym for cold-start.  See `~/.claude/.../memory/project_no_reversion_semantics.md`.
 
 ### CL-2.  Stages run all `num_seeds` predictions; they are not "per-seed mini-workflows"
 
-Each pipeline stage (cold-start, steered-per-design, reversion-per-unique-reverted-sequence) runs ALL `num_seeds` predictions.  Seed indices are RNG controls for individual predictions, NOT threads that flow through stages.  The decision about whether the next stage runs is made on the *collective* result of the current stage's predictions, not seed-by-seed.
+Each pipeline stage (cold-start, steered-per-design, reversion-per-unique-reverted-sequence) runs ALL `num_seeds` predictions.  Seed indices are RNG controls for individual predictions, NOT threads that flow through stages.  The *collective* result of the current stage's predictions decides whether the next stage runs, not the seeds one by one.
 
 ### CL-3.  Reversion gating: majority-of-correctly-placed rule (**TO BE IMPLEMENTED — current code is wrong**)
 
@@ -81,7 +81,7 @@ For each steered design:
 When reversion runs, it always runs all `num_seeds` predictions for the reverted sequence (no per-seed gating at the reversion stage).
 
 Examples (with `num_seeds=3`):
-- 3 correctly placed, 1 contaminated → 1 < ceil(3/2)=2 → **no reversion** (Tier-B-shape result stands; the 1 contaminated seed counts as a failure, NOT as part of `n_pass`).
+- 3 correctly placed, 1 contaminated → 1 < ceil(3/2)=2 → **no reversion** (Tier-B-shape result stands, and the 1 contaminated seed counts as a failure, NOT as part of `n_pass`).
 - 3 correctly placed, 2 contaminated → 2 ≥ 2 → **reversion runs** (3 seeds of reversion).
 - 2 correctly placed (1 wrong placement), 1 contaminated → 1 ≥ ceil(2/2)=1 → **reversion runs**.
 - 2 correctly placed, 0 contaminated → **no reversion** (Tier-B holds).
@@ -89,7 +89,7 @@ Examples (with `num_seeds=3`):
 
 **Code today does it per-seed**: any single contaminated (design, seed) entry queues reversion for that design's reverted sequence.  This drives down Tier B / Tier A outcomes by re-running reversion when it shouldn't.  Phase 4 must change `cmd_build_contaminated` to apply the majority rule on grouping by design.
 
-A new per-seed verdict bucket is needed for "correctly placed but contaminated and didn't trigger reversion under the majority rule" — call it `contaminated_skipped` for now.  It contributes neither to `n_pass` (so the design doesn't claim the contaminated seed as a pass) nor to the reversion-derived verdict set.  Naming to be confirmed in Step 2.
+A new per-seed verdict bucket is needed for "correctly placed but contaminated and didn't trigger reversion under the majority rule", so call it `contaminated_skipped` for now.  It contributes neither to `n_pass` (so the design doesn't claim the contaminated seed as a pass) nor to the reversion-derived verdict set.  Naming to be confirmed in Step 2.
 
 ### CL-4.  Reversion ALWAYS runs `num_seeds` predictions (when it runs)
 
@@ -114,7 +114,7 @@ Order: ProteinStructurePrediction first (it's the spine), then build outward.
 
 ### 2.1 `ProteinStructurePrediction`
 
-**Domain meaning.**  One prediction's structural payload — a Boltz PDB or an AF3 mmCIF — together with its chain composition.  Holds the sequence and atom coordinates and exposes everything derivable from them: per-chain sequences, contact residues between chains, RMSDs against another prediction, jaccard overlap of interfaces.  Does NOT carry predictor-specific confidence metrics (those are `BoltzConfidenceMetrics` / `AF3ConfidenceAggregate`) and does NOT know about its position in any larger experiment (no awareness of "I'm cold-start seed 0").
+**Domain meaning.**  One prediction's structural payload — a Boltz PDB or an AF3 mmCIF — together with its chain composition.  Holds the sequence and atom coordinates and exposes everything derivable from them: per-chain sequences, contact residues between chains, RMSDs against another prediction, jaccard overlap of interfaces.  Does NOT carry predictor-specific confidence metrics (those are `BoltzConfidenceMetrics` / `AF3ConfidenceAggregate`).  Does NOT know its position in any larger experiment (no awareness of "I'm cold-start seed 0").
 
 **Construction.**
 
@@ -147,7 +147,7 @@ Validates `path` exists at construction (fails fast with a clear error).  Atom c
 
 **Methods — pair operations (asymmetric, `_vs_` reads as "self's relation to other").**
 
-All take `other: ProteinStructurePrediction` as the argument.  Both predictions need to be the same type, so either can be called on — values would differ where the operation is genuinely asymmetric (e.g. RMSD with `self` as the mobile structure aligned onto `other`).
+All take `other: ProteinStructurePrediction` as the argument.  Both predictions need to be the same type, so either can be called on.  Values would differ where the operation is genuinely asymmetric (e.g. RMSD with `self` as the mobile structure aligned onto `other`).
 
 - `ra_eff_vs(other) -> float` — receptor-aligned effector RMSD.  Aligns receptor of `self` onto receptor of `other`, then measures effector atom displacement.  The headline structural pose metric.
 - `independent_receptor_rmsd_vs(other) -> float` — receptor-only Cα RMSD (`self` aligned to `other` on receptor atoms).
@@ -192,12 +192,12 @@ All take `other: ProteinStructurePrediction` as the argument.  Both predictions 
 - The literal `0` token within a chain is the RFDiffusion chain-break marker.
 - Different chains are space-separated.  Never commas.
 
-**As-implemented (2026-05-13 update — see commits `7385042` and `babd5d4`).**  The original spec described two forms (resolved vs constraint).  The implementation collapses them: `DeNovoSegment` now always carries `(min_len, max_len)`, with `min_len == max_len` for the resolved case.  Parser accepts both bare integers (`5` → `(5,5)`) and ranges (`5-7` → `(5,7)`).  Serializer emits the short form when resolved.  Each DesignedBackbone has exactly one ContigSpec; downstream code that needs a fixed length consumes resolved instances (a `ContigSpec.is_resolved` boolean property gates this).
+**As-implemented (2026-05-13 update — see commits `7385042` and `babd5d4`).**  The original spec described two forms (resolved vs constraint).  The implementation collapses them.  `DeNovoSegment` now always carries `(min_len, max_len)`, with `min_len == max_len` for the resolved case.  Parser accepts both bare integers (`5` → `(5,5)`) and ranges (`5-7` → `(5,7)`).  Serializer emits the short form when resolved.  Each DesignedBackbone has exactly one ContigSpec.  Downstream code that needs a fixed length consumes resolved instances (a `ContigSpec.is_resolved` boolean property gates this).
 
 Two additional segment types added to support the full RFDiffusion contig grammar:
 
-- `BreakSegment` — the literal `0` token; carries no length.  Position-math methods on `ContigChain` skip these.
-- `PassthroughSegment(chain)` — a bare chain letter inside a block (e.g. `A1-10/B/A15-20`).  Carries no length at the spec level; resolved to a fixed range later by callers that have access to a PDB.
+- `BreakSegment` — the literal `0` token, carrying no length.  Position-math methods on `ContigChain` skip these.
+- `PassthroughSegment(chain)` — a bare chain letter inside a block (e.g. `A1-10/B/A15-20`).  Carries no length at the spec level.  Callers with access to a PDB resolve it to a fixed range later.
 
 **Construction.**
 
@@ -220,7 +220,7 @@ PassthroughSegment(chain: str)                # bare-chain reference; PDB-resolu
 
 Static constructors:
 - `ContigSpec.from_string(s: str) -> ContigSpec` — accepts both resolved and constraint forms.  The canonical parser used by all four migrated callers (`derive_input_design_region`, `haddock3_prepare`, `pipeline_correct_sequences`, `contig_utils`).
-- `ContigSpec.from_resolved_string(s: str) -> ContigSpec` — strict variant; raises if any de novo segment is unresolved.
+- `ContigSpec.from_resolved_string(s: str) -> ContigSpec` — strict variant.  Raises if any de novo segment is unresolved.
 
 **Methods — frame conversion (per Q7 decision).**
 
@@ -228,7 +228,7 @@ Per-position conversion lives here, not on PositionSet.  PositionSet's `in_frame
 
 - `designed_to_native(pos: int, chain: str) -> int | None` — returns the native residue number, or `None` if `pos` falls in a de novo segment (no native counterpart).
 - `native_to_designed(pos: int, chain: str) -> int | None` — returns the designed residue number, or `None` if `pos` is not anchored by any fixed segment.
-- `prediction_to_designed(pos: int, chain: str) -> int` — Boltz/AF3 always emit per-chain 1-based; for the receptor chain this is identity (Boltz numbering matches designed numbering when the receptor PDB went straight into Boltz).  Documented for clarity.
+- `prediction_to_designed(pos: int, chain: str) -> int` — Boltz/AF3 always emit per-chain 1-based numbering.  For the receptor chain this is identity, because Boltz numbering matches designed numbering when the receptor PDB went straight into Boltz.  Documented for clarity.
 
 **Methods — structural queries.**
 
@@ -242,7 +242,7 @@ Per-position conversion lives here, not on PositionSet.  PositionSet's `in_frame
 **Boundary — what this type explicitly does NOT do.**
 
 - Carry the constraint form (length ranges).  ContigSpec is always resolved.  The constraint is an input string used by RFDiffusion's launcher only.
-- Know about residue identities or coordinates — it's pure positional metadata.
+- Knows nothing about residue identities or coordinates — it's pure positional metadata.
 - Validate against any specific PDB (no "does the contig match what's in this file" check).  Validation is the caller's job at the boundary between contig and PDB.
 
 **Code today (consolidation targets).**
@@ -260,7 +260,7 @@ Four contig parsers today.  ContigSpec absorbs them:
 
 ### 2.3 `PositionSet`
 
-**Domain meaning.**  A set of receptor residue positions, tagged with which numbering frame the integers refer to.  Frames in use today: `native` (input PDB's residue numbers; may have gaps), `designed` (RFDiffusion's 1-based contiguous renumbering), `prediction` (Boltz / AF3's 1-based per-chain).  Used everywhere the codebase talks about "which residues" — design region, true interface, wrong interface, protected set, mutated positions, contaminated positions, contact residues.
+**Domain meaning.**  A set of receptor residue positions, tagged with which numbering frame the integers refer to.  Frames in use today: `native` (input PDB's residue numbers, which may have gaps), `designed` (RFDiffusion's 1-based contiguous renumbering), `prediction` (Boltz / AF3's 1-based per-chain).  Used everywhere the codebase talks about "which residues" — design region, true interface, wrong interface, protected set, mutated positions, contaminated positions, contact residues.
 
 **Construction.**
 
@@ -287,7 +287,7 @@ Both operands must be in the same frame and on the same chain.  Mismatched frame
 
 **Methods — frame conversion.**
 
-- `in_frame(target_frame: str) -> PositionSet` — returns a new PositionSet in `target_frame`.  Requires `self.contig is not None`; raises a clear error otherwise.  Default behaviour for positions with no counterpart in the target frame: silently dropped (returned set may be smaller).  Pass `strict=True` to raise on any unmappable position instead.
+- `in_frame(target_frame: str) -> PositionSet` — returns a new PositionSet in `target_frame`.  Requires `self.contig is not None`, and raises a clear error otherwise.  Positions with no counterpart in the target frame are silently dropped by default, so the returned set may be smaller.  Pass `strict=True` to raise on any unmappable position instead.
 
 **Methods — predicates and access.**
 
@@ -300,24 +300,24 @@ Both operands must be in the same frame and on the same chain.  Mismatched frame
 
 - `to_chimerax_string() -> str` — `"/A:5,7,22"` format used widely in the codebase.
 - `PositionSet.from_chimerax_string(s, frame, contig=None) -> PositionSet`
-- `to_text_file(path)` — writes integers one per line, sorted.  Matches current `*_design_region.txt` / `*_true_interface.txt` files.  Chain and frame are NOT serialised (callers know them); for round-trip discipline, the reader must specify both.
+- `to_text_file(path)` — writes integers one per line, sorted.  Matches current `*_design_region.txt` / `*_true_interface.txt` files.  Chain and frame are NOT serialised, because callers know them.  For round-trip discipline, the reader must specify both.
 - `PositionSet.from_text_file(path, chain, frame, contig=None) -> PositionSet`
 
 **Boundary — what this type explicitly does NOT do.**
 
-- Carry per-residue properties (amino acid identity, coordinates, hotspot flags).  Positions are just integers; semantic meaning is conveyed by the variable name (`design_region`, `true_interface`, `mutated_positions`).
+- Carry per-residue properties (amino acid identity, coordinates, hotspot flags).  Positions are just integers.  The variable name conveys the semantic meaning (`design_region`, `true_interface`, `mutated_positions`).
 - Bounds-check positions against any specific receptor length.  Callers validate against their specific receptor when needed.
 - Silently convert between frames.  Cross-frame operations raise.
 - Mutate after construction.
 
 **Code today (consolidation targets).**
 
-Position-set logic is scattered across these files today; PositionSet absorbs all of it:
+Position-set logic is scattered across these files today.  PositionSet absorbs all of it:
 
 | Where | What |
 |---|---|
-| `bin/derive_design_region.py` | Builds the design-region position set; writes `_design_region.txt`. |
-| `bin/derive_true_interface.py` | Builds the true-interface position set; writes `_true_interface.txt`. |
+| `bin/derive_design_region.py` | Builds the design-region position set and writes `_design_region.txt`. |
+| `bin/derive_true_interface.py` | Builds the true-interface position set and writes `_true_interface.txt`. |
 | `bin/derive_input_design_region.py` | Same for the input PDB (control workflow). |
 | `bin/boltz2_negative_steering.py` | `find_contact_residues_heavy`, mutated-position arithmetic, protected-set union. |
 | `bin/boltz2_iterate_steering.py` | `mutated_positions_set & contact_set` for contamination detection. |
@@ -336,7 +336,7 @@ Position-set logic is scattered across these files today; PositionSet absorbs al
 BoltzConfidenceMetrics.from_prediction_dir(path: Path) -> BoltzConfidenceMetrics
 ```
 
-Reads `confidence_<name>_model_<sample>.json`, `pae_<name>_model_<sample>.json`, `plddt_<name>_model_<sample>.json` from the Boltz output directory.  Lazy reads (matches ProteinStructurePrediction's behaviour); validates the directory exists at construction.
+Reads `confidence_<name>_model_<sample>.json`, `pae_<name>_model_<sample>.json`, `plddt_<name>_model_<sample>.json` from the Boltz output directory.  Reads are lazy, matching ProteinStructurePrediction's behaviour.  Validates the directory exists at construction.
 
 **Methods — exposed metrics (read-only properties).**
 
@@ -346,7 +346,7 @@ Selected-sample metrics — the ones currently surfaced through the pipeline:
 - `ptm`, `iptm`, `actifptm`
 - `ipsae_ab`, `ipsae_ba`, `ipsae_min`, `ipsae_ab_15`, `ipsae_ba_15`, `ipsae_min_15`
 
-Each is a `float | None`; `None` if the sidecar JSON was unparseable or the field was missing.
+Each is a `float | None`.  The value is `None` if the sidecar JSON was unparseable or the field was missing.
 
 **Methods — derived.**
 - `confidence_flag(thresholds) -> str` — returns one of `ok | low_pass_frac | low_iptm | low_plddt | high_ipae | multiple`.  Threshold values come from `PipelineInternalThresholds`.
@@ -362,7 +362,7 @@ Each is a `float | None`; `None` if the sidecar JSON was unparseable or the fiel
 
 ### 2.5 `AF3ConfidenceAggregate`
 
-**Domain meaning.**  The aggregated confidence + structural quality from ONE AF3-no-MSA call.  Unlike Boltz (where one call → one kept prediction), AF3 emits multiple per seed × diffusion sample, and `parse_af3_output.py` aggregates across them into best / mean summaries.  This type wraps that aggregate.  Pairs with the *best-ra_eff* `ProteinStructurePrediction` from the AF3 set — for the cases (rare) where the single best prediction needs structural follow-up.
+**Domain meaning.**  The aggregated confidence + structural quality from ONE AF3-no-MSA call.  Unlike Boltz (where one call → one kept prediction), AF3 emits multiple per seed × diffusion sample, and `parse_af3_output.py` aggregates across them into best / mean summaries.  This type wraps that aggregate.  Pairs with the *best-ra_eff* `ProteinStructurePrediction` from the AF3 set, for the rare cases where the single best prediction needs structural follow-up.
 
 **Construction.**
 
@@ -387,7 +387,7 @@ Walks the AF3 output tree, parses every per-sample mmCIF + its `summary_confiden
 - Does not gate (the AF3 ra_eff is informational only in `passes_orthogonal_filters` per Session 5 Q118).
 - Does not compare against Boltz — that's done outside, in the cohort summary.
 
-**Code today.**  `bin/parse_af3_output.py` is the canonical existing implementation; `bin/orthogonal_metrics_plots.py` reads the aggregate fields.  Consolidates here.
+**Code today.**  `bin/parse_af3_output.py` is the canonical existing implementation.  `bin/orthogonal_metrics_plots.py` reads the aggregate fields.  Consolidates here.
 
 ---
 
@@ -422,7 +422,7 @@ Composes `ProteinStructurePrediction` (per Q8 — composition, not inheritance).
 - Owns the structural file, but does NOT own any Boltz prediction OF itself (those come later in the negsteer stage and live as `ProteinStructurePrediction`s inside `StageResult`s).
 - Filter checks (`if sc_score >= sc_threshold`) live in caller code using `PipelineInternalThresholds`.
 
-**Code today.**  `bin/rfdiffusion_filter.py` and `bin/rosetta_filter_collect.py` produce the data that populates this type; consumers in `bin/proteinmpnn/*` read it.  Replaces the implicit "design_id + path + sc" tuple passed through dicts.
+**Code today.**  `bin/rfdiffusion_filter.py` and `bin/rosetta_filter_collect.py` produce the data that populates this type.  Consumers in `bin/proteinmpnn/*` read it.  Replaces the implicit "design_id + path + sc" tuple passed through dicts.
 
 ---
 
@@ -452,16 +452,16 @@ DesignedSequence(
 
 **Boundary.**
 - Carries no Boltz prediction OF this sequence.  Those come from the negsteer stage and live in `StageResult.predictions`.
-- Does not run QC itself — QC happens upstream; this type just carries the metadata.
+- Does not run QC itself.  QC happens upstream, and this type just carries the metadata.
 - Filter checks (`passes_qc`) live in caller code using `PipelineInternalThresholds`.
 
-**Code today.**  `bin/pipeline_correct_sequences.py` produces `mpnn_corrected.fasta` + the metadata rows that become `scored_metadata.csv`; `bin/mpnn_sequence_qc.py` adds the QC metadata.  Today this is plumbed through CSVs and dicts; DesignedSequence absorbs that.
+**Code today.**  `bin/pipeline_correct_sequences.py` produces `mpnn_corrected.fasta` + the metadata rows that become `scored_metadata.csv`.  `bin/mpnn_sequence_qc.py` adds the QC metadata.  Today this is plumbed through CSVs and dicts, and DesignedSequence absorbs that.
 
 ---
 
 ### 2.8 `StageResult`
 
-**Domain meaning.**  One stage's worth of predictions for one configuration.  A stage is `cold_start`, `steered`, or `reversion`.  A configuration is "the receptor sequence being predicted in this stage" — for cold-start it's the wild-type baseline for one MPNN sequence; for steered it's one steered-design slot; for reversion it's one unique reverted sequence.  Each stage runs `num_seeds` predictions for the configuration, with the user-configured `num_seeds` parameter (validated odd-only).
+**Domain meaning.**  One stage's worth of predictions for one configuration.  A stage is `cold_start`, `steered`, or `reversion`.  A configuration is "the receptor sequence being predicted in this stage".  For cold-start that is the wild-type baseline for one MPNN sequence.  For steered it is one steered-design slot.  For reversion it is one unique reverted sequence.  Each stage runs `num_seeds` predictions for the configuration, using the user-configured `num_seeds` parameter (validated odd-only).
 
 The collective verdict of the stage drives whether the *next* stage runs.  Each stage has its own gating rule (see `triggers_next_stage` below).
 
@@ -495,8 +495,8 @@ StageResult(
 
 - `per_seed_verdicts(thresholds, contamination_positions=None) -> list[str]` — applies the per-seed verdict rule for the stage type:
   - `cold_start`: each seed → `clean` (intact + ra_eff < cutoff) or `fail_structural`.
-  - `steered`: each seed → `clean_steered` (intact + ra_eff < cutoff + no mutated contacts) or `contaminated` (correct placement BUT mutated positions contact effector) or `pose_collapses` (intact failed or ra_eff ≥ cutoff) or `no_data`.
-  - `reversion`: each seed → `pose_holds` (reverted prediction intact + ra_eff < cutoff + no new contamination) or `new_contamination` (reverted prediction has mutated positions contacting effector) or `pose_collapses` (intact failed or ra_eff ≥ cutoff) or `no_data`.
+  - `steered`: each seed → `clean_steered` (intact + ra_eff < cutoff + no mutated contacts) or `contaminated` (correct placement BUT mutated positions contact effector).  Otherwise `pose_collapses` (intact failed or ra_eff ≥ cutoff) or `no_data`.
+  - `reversion`: each seed → `pose_holds` (reverted prediction intact + ra_eff < cutoff + no new contamination) or `new_contamination` (reverted prediction has mutated positions contacting effector).  Otherwise `pose_collapses` (intact failed or ra_eff ≥ cutoff) or `no_data`.
 
   `contamination_positions` is the gated position set (design_region ∪ true_interface) — required for steered and reversion stages.
 
@@ -514,15 +514,15 @@ StageResult(
 
 **Boundary.**
 
-- Does not know about other stages.  Cross-stage logic (mapping reversion verdicts back to the steered seeds they replaced; deciding final per-seed verdicts after reversion runs) lives in `NegativeSteeringRun`.
-- Does not orchestrate Boltz runs.  StageResult is constructed from already-completed predictions; it is read-only.
+- Does not know about other stages.  Cross-stage logic lives in `NegativeSteeringRun`, which means mapping reversion verdicts back to the steered seeds they replaced, and deciding final per-seed verdicts after reversion runs.
+- Does not orchestrate Boltz runs.  StageResult is constructed from already-completed predictions, and is read-only.
 - Does not own thresholds.  All threshold checks take `PipelineInternalThresholds` as an argument.
 
 **Code today.**
 
-The per-seed and per-stage logic currently lives scattered across `bin/boltz2_negative_steering.py` (`cmd_plan`, `cmd_finalize`), `bin/boltz2_iterate_steering.py` (`cmd_build_contaminated`, `_per_seed_verdict_breakdown`, `_classify_outcome`), and the orchestration shell `bin/negative_steering_run_one.sh`.  StageResult absorbs the per-stage classification and gating logic; the orchestration stays in shell + Nextflow (see `NegativeSteeringRun` §2.9 below).
+The per-seed and per-stage logic is scattered today.  It lives in `bin/boltz2_negative_steering.py` (`cmd_plan`, `cmd_finalize`).  It also lives in `bin/boltz2_iterate_steering.py` (`cmd_build_contaminated`, `_per_seed_verdict_breakdown`, `_classify_outcome`) and in the orchestration shell `bin/negative_steering_run_one.sh`.  StageResult absorbs the per-stage classification and gating logic.  The orchestration stays in shell + Nextflow (see `NegativeSteeringRun` §2.9 below).
 
-**Implementation note — the CL-3 fix lands here.**  The Phase 4 migration of `cmd_build_contaminated` becomes: instead of iterating per (design, seed) and emitting a contaminated entry per match, group by design, build a `StageResult` for each design's steered seeds, call `stage_result.triggers_next_stage(thresholds, contamination_positions)` to decide whether to queue reversion for that design.  Per-seed verdicts that don't trigger reversion (contaminated seeds in a design that doesn't pass the majority rule) carry the `contaminated` label into the aggregate, where they count as failures, not as `n_pass`.
+**Implementation note — the CL-3 fix lands here.**  Today `cmd_build_contaminated` iterates per (design, seed) and emits a contaminated entry per match.  The Phase 4 migration instead groups by design and builds a `StageResult` for each design's steered seeds.  It then calls `stage_result.triggers_next_stage(thresholds, contamination_positions)` to decide whether to queue reversion for that design.  Per-seed verdicts that don't trigger reversion are contaminated seeds in a design that doesn't pass the majority rule.  They carry the `contaminated` label into the aggregate, where they count as failures, not as `n_pass`.
 
 ---
 
@@ -538,7 +538,7 @@ One per MPNN sequence in a pipeline run, plus one per negative control (`control
 NegativeSteeringRun.from_workdir(workdir: Path) -> NegativeSteeringRun
 ```
 
-Parses `cycle_0/plan.json`, `aggregated_results.csv`, `passing_summary.csv`, the per-stage Boltz outputs under `cycle_0/initial*`, `cycle_0/steered/*`, `cycle_0/reversions/*`, and the sidecars (`row_type.txt`, `run_one_runtime_sec.txt`).
+Parses `cycle_0/plan.json`, `aggregated_results.csv` and `passing_summary.csv`.  Also parses the per-stage Boltz outputs under `cycle_0/initial*`, `cycle_0/steered/*`, `cycle_0/reversions/*`, and the sidecars (`row_type.txt`, `run_one_runtime_sec.txt`).
 
 ```
 NegativeSteeringRun(
@@ -554,7 +554,7 @@ NegativeSteeringRun(
 
 **Methods — per-seed cross-stage aggregation.**
 
-- `per_seed_final_verdicts(thresholds) -> list[dict]` — produces the final verdict for each (design × seed).  Rule: if reversion ran for that design, use the reversion verdict; otherwise use the steered verdict.  Each entry: `{design_id, seed_index, stage_run: "steered" | "reverted", verdict}`.
+- `per_seed_final_verdicts(thresholds) -> list[dict]` — produces the final verdict for each (design × seed).  Rule: if reversion ran for that design, use the reversion verdict.  Otherwise use the steered verdict.  Each entry: `{design_id, seed_index, stage_run: "steered" | "reverted", verdict}`.
 
 - `n_pass(thresholds) -> int` — count of seeds whose final verdict is pass-equivalent (`clean_steered` or `pose_holds`).
 - `n_seeds_total() -> int` — same as `cold_start.num_seeds` (= `num_seeds` parameter).
@@ -563,7 +563,7 @@ NegativeSteeringRun(
 
 - `outcome(thresholds) -> str` — aggregate label.  Returns one of `no_reversion` | `pose_holds` | `pose_collapses` | `new_contamination` | `singleton`.  Computed from per-seed final verdicts (see `_classify_outcome` in current code, which the migration extracts here).
 - `outcome_reason(thresholds) -> str` — diagnostic explanation of the outcome decision.
-- `tier(thresholds) -> str` — `A` | `B` | `C` | `none`.  Derived from `n_pass / n_seeds_total` per the post-rename rule (no `no_reversion → A` shortcut; see CL-3).
+- `tier(thresholds) -> str` — `A` | `B` | `C` | `none`.  Derived from `n_pass / n_seeds_total` per the post-rename rule (no `no_reversion → A` shortcut, see CL-3).
 
 **Methods — representative selection (for cohort plots).**
 
@@ -572,16 +572,16 @@ NegativeSteeringRun(
 **Methods — workdir-cached state (added per Step 4.1).**
 
 - `contamination_positions() -> PositionSet` — cached load of `design_region ∪ true_interface` from `cycle_0/plan.json`.  Required as input to per-seed verdict and CL-3 majority-rule checks.
-- `_reversion_for_design(design_id: str) -> StageResult | None` — private helper (added per Step 4.3); walks `self.reversion.values()` looking for the stage whose `applies_to_designs` includes `design_id`.  Returns the matching reversion StageResult, or `None` if this design didn't trigger reversion.
+- `_reversion_for_design(design_id: str) -> StageResult | None` — private helper (added per Step 4.3).  Walks `self.reversion.values()` looking for the stage whose `applies_to_designs` includes `design_id`.  Returns the matching reversion StageResult, or `None` if this design didn't trigger reversion.
 
 **Boundary.**
 
 - Read-only.  Does NOT run Boltz, does NOT submit SLURM jobs, does NOT manage subprocesses.
 - Does not know about other NegativeSteeringRuns (no cohort-level methods here — those live in `DesignCohort`).
-- Threshold checks (`tier`, `outcome`) take `PipelineInternalThresholds` as an argument; no hidden state.
-- Does not own orthogonal metrics for this sequence; those are a separate type computed from `canonical_prediction()` downstream.
+- Threshold checks (`tier`, `outcome`) take `PipelineInternalThresholds` as an argument.  There is no hidden state.
+- Does not own orthogonal metrics for this sequence.  Those are a separate type computed from `canonical_prediction()` downstream.
 
-**Code today.**  `bin/cross_sequence_summary.py`'s representative-picking + per-sequence aggregation + tier logic; `bin/boltz2_iterate_steering.py`'s `_classify_outcome` + `_per_seed_verdict_breakdown` + aggregator chain.  All of that read-side logic absorbs into this type.
+**Code today.**  `bin/cross_sequence_summary.py`'s representative-picking + per-sequence aggregation + tier logic.  Plus `bin/boltz2_iterate_steering.py`'s `_classify_outcome` + `_per_seed_verdict_breakdown` + aggregator chain.  All of that read-side logic absorbs into this type.
 
 ---
 
@@ -617,15 +617,15 @@ DesignCohort(runs: list[NegativeSteeringRun])
 
 **Methods — MPNN-sequence join.**
 
-- `attach_designed_sequences(scored_metadata: dict)` — populates each NegativeSteeringRun's `DesignedSequence` reference from `scored_metadata.csv`.  Optional; without it, `corrected_receptor`/`designed_residues`/`native_residues` columns come out blank in the CSV.
+- `attach_designed_sequences(scored_metadata: dict)` — populates each NegativeSteeringRun's `DesignedSequence` reference from `scored_metadata.csv`.  Optional.  Without it, `corrected_receptor`/`designed_residues`/`native_residues` columns come out blank in the CSV.
 
 **Boundary.**
 
 - Does not know about orthogonal metrics.  Survivor selection produces a list of `NegativeSteeringRun`s that the orthogonal stage processes externally.
-- Does not generate plots; plot scripts call methods on this type to get the data they need.
-- Does not own thresholds; takes `PipelineInternalThresholds` as a method argument.
+- Does not generate plots.  Plot scripts call methods on this type to get the data they need.
+- Does not own thresholds.  Takes `PipelineInternalThresholds` as a method argument.
 
-**Code today.**  `bin/cross_sequence_summary.py`'s `aggregate` function + CLI; the cohort-summary plot scripts' iteration over CSV rows.  Replaces dict-of-fieldnames flowing through CSVs with method calls on this type.
+**Code today.**  `bin/cross_sequence_summary.py`'s `aggregate` function + CLI, plus the cohort-summary plot scripts' iteration over CSV rows.  Replaces dict-of-fieldnames flowing through CSVs with method calls on this type.
 
 ---
 
@@ -657,18 +657,18 @@ OrthogonalMetrics(
 
 **Methods — the gate.**
 
-- `passes_orthogonal_filters(thresholds) -> bool` — True iff `sc >= thresholds.orthogonal_sc_min` AND `bsa >= thresholds.orthogonal_bsa_min` AND `ddg <= thresholds.orthogonal_ddg_max`.  AF3 is NOT in this gate; it's surfaced separately as informational disagreement.
+- `passes_orthogonal_filters(thresholds) -> bool` — True iff `sc >= thresholds.orthogonal_sc_min` AND `bsa >= thresholds.orthogonal_bsa_min` AND `ddg <= thresholds.orthogonal_ddg_max`.  AF3 is NOT in this gate.  It's surfaced separately as informational disagreement.
 - `failed_filter_names(thresholds) -> list[str]` — returns the names of any orthogonal metrics that failed the gate (e.g. `["sc", "ddg"]`).  Empty if `passes_orthogonal_filters` is True.
 
 **Methods — informational.**
 
-- `af3_disagrees(thresholds) -> bool` — True iff `af3.best_ra_eff >= thresholds.orthogonal_af3_ra_max`.  Diagnostic only; never used in the gate.
+- `af3_disagrees(thresholds) -> bool` — True iff `af3.best_ra_eff >= thresholds.orthogonal_af3_ra_max`.  Diagnostic only, never used in the gate.
 - `to_summary_row() -> dict` — flat dict for CSV output, matches existing `survivors_with_orthogonal_metrics.csv` schema.
 
 **Boundary.**
 
 - Does not own the prediction it validates (just a reference to a `ProteinStructurePrediction`).
-- Does not own thresholds; takes `PipelineInternalThresholds` as a method argument.
+- Does not own thresholds.  Takes `PipelineInternalThresholds` as a method argument.
 - Does not depend on `DesignCohort` — produced one-per-survivor, consumed by cohort-summary plot or further analysis.
 
 **Code today.**  `bin/run_biophysical_metrics.py`, `bin/run_rosetta_metrics.py`, `bin/merge_orthogonal_metrics.py`, `bin/parse_af3_output.py`.  Per Session 5 the test-copy divergence (`tests/orthogonal_metrics/merge_orthogonal_metrics.py`) is eliminated as part of this migration.
@@ -677,7 +677,7 @@ OrthogonalMetrics(
 
 ### 2.12 `PipelineParams`
 
-**Domain meaning.**  The validated, user-facing parameter set for one pipeline run.  Sourced from Nextflow `params.X` (resolved from `params_example.yml` + user overrides).  Every parameter has a type, a valid range, and a default; the type validates itself at construction and refuses to operate with bad inputs.  This is the user contract — changing a field touches user-visible behaviour.
+**Domain meaning.**  The validated, user-facing parameter set for one pipeline run.  Sourced from Nextflow `params.X` (resolved from `params_example.yml` + user overrides).  Every parameter has a type, a valid range, and a default.  The type validates itself at construction and refuses to operate with bad inputs.  This is the user contract — changing a field touches user-visible behaviour.
 
 **Construction.**
 
@@ -700,11 +700,11 @@ Both routes validate via the existing `bin/validate_params.py` `PARAM_SPECS` cat
 **Methods.**
 
 - `as_dict() -> dict` — flat snapshot of all values.
-- `validate() -> list[str]` — re-runs every spec; returns the empty list on success.
+- `validate() -> list[str]` — re-runs every spec.  Returns the empty list on success.
 
 **Boundary.**
 
-- Carries USER-facing params only.  Internal research thresholds (ra_eff cutoffs, intact thresholds, composite weights) live in `PipelineInternalThresholds`.  The split is by audit trail: changing a `PipelineParams` field affects the user contract; changing a `PipelineInternalThresholds` field is a research-methodology change.
+- Carries USER-facing params only.  Internal research thresholds (ra_eff cutoffs, intact thresholds, composite weights) live in `PipelineInternalThresholds`.  The split is by audit trail.  Changing a `PipelineParams` field affects the user contract.  Changing a `PipelineInternalThresholds` field is a research-methodology change.
 - Read-only after construction.
 
 **Code today.**  `bin/validate_params.py` (already exists from commit `05f0c07`).  This type is a thin runtime wrapper around the existing validator's `PARAM_SPECS`.
@@ -724,9 +724,9 @@ PipelineInternalThresholds.default() -> PipelineInternalThresholds
 PipelineInternalThresholds.from_overrides(d: dict) -> PipelineInternalThresholds  # default ∪ overrides
 ```
 
-Defaults are Python literals defined in the type's module (chosen because they're part of the methodology and live in version control with the code, not in a YAML the user might edit per-environment).
+Defaults are Python literals defined in the type's module.  They live there because they're part of the methodology and belong in version control with the code, not in a YAML the user might edit per-environment.
 
-**Fields (initial enumeration; populated/extended during the Task 47 audit).**
+**Fields (initial enumeration, populated and extended during the Task 47 audit).**
 
 Structural thresholds:
 - `steered_ra_eff = 5.0` — ra_eff threshold for "correctly placed" steered prediction.
@@ -743,7 +743,7 @@ Confidence thresholds (used by `confidence_flag` and friends):
 Orthogonal thresholds (the gate):
 - `orthogonal_sc_min = 0.55`
 - `orthogonal_bsa_min = 600.0`
-- `orthogonal_ddg_max = ?` (Bennett reference; populate during Task 47)
+- `orthogonal_ddg_max = ?` (Bennett reference, populate during Task 47)
 - `orthogonal_af3_ra_max = 5.0` (informational)
 
 Contact / interface:
@@ -759,18 +759,18 @@ Filter values:
 - `controls_warning_ipsae_max = 0.5`
 - `controls_warning_ra_eff_min = 5.0`
 
-(Complete enumeration done during the Task 47 audit; this list is the starting set.)
+(Complete enumeration happens during the Task 47 audit.  This list is the starting set.)
 
 **Methods.**
 
 - `as_dict() -> dict`
-- `with_overrides(d: dict) -> PipelineInternalThresholds` — returns a new instance with overrides applied; original is unchanged (immutable).
+- `with_overrides(d: dict) -> PipelineInternalThresholds` — returns a new instance with overrides applied.  The original is unchanged (immutable).
 
 **Boundary.**
 
 - Carries internal research thresholds only.  User-facing params live in `PipelineParams`.
 - Read-only after construction (override produces a new instance).
-- Does not enforce thresholds itself; consumed by methods on other types (`StageResult.triggers_next_stage(thresholds)`, `OrthogonalMetrics.passes_orthogonal_filters(thresholds)`, etc.).
+- Does not enforce thresholds itself.  Methods on other types consume it (`StageResult.triggers_next_stage(thresholds)`, `OrthogonalMetrics.passes_orthogonal_filters(thresholds)`, etc.).
 
 **Code today.**  Currently scattered: hard-coded literal `5.0` in `cmd_build_contaminated`'s `rmsd_threshold`, `0.05` in `_ranking_composite`, etc.  Phase 4 collects every such literal into this type as defaults, then refactors each usage site to read from a passed `PipelineInternalThresholds` instance.
 
@@ -813,13 +813,13 @@ PipelineInternalThresholds  [singleton per pipeline run; passed to every method
 
 ### Dependency-order table (drives migration order)
 
-Each row lists what each type DEPENDS ON (must exist first).  Tier 0 = no deps; migrate first.
+Each row lists what each type DEPENDS ON (must exist first).  Tier 0 = no deps, so migrate those first.
 
 | Type | Depends on | Tier |
 |---|---|---|
 | `ContigSpec` | — | 0 |
 | `BoltzConfidenceMetrics` | — | 0 |
-| `AF3ConfidenceAggregate` | (uses `ProteinStructurePrediction` internally — forward reference; OK to implement in parallel with PSP) | 0 |
+| `AF3ConfidenceAggregate` | (uses `ProteinStructurePrediction` internally — forward reference, OK to implement in parallel with PSP) | 0 |
 | `PipelineParams` | — | 0 |
 | `PipelineInternalThresholds` | — | 0 |
 | `PositionSet` | `ContigSpec` (optional) | 1 |
@@ -835,20 +835,20 @@ Each row lists what each type DEPENDS ON (must exist first).  Tier 0 = no deps; 
 
 ### Data flow through one pipeline run
 
-1. **Entry.**  `PipelineParams.from_nextflow_json(...)` validates user input; pipeline aborts on error before any compute.  `PipelineInternalThresholds.default()` loaded alongside.
+1. **Entry.**  `PipelineParams.from_nextflow_json(...)` validates user input.  The pipeline aborts on error before any compute.  `PipelineInternalThresholds.default()` loaded alongside.
 2. **Branch A (HADDOCK) or Branch B (pre-docked).**  Input PDB(s) become a `ProteinStructurePrediction` (the input complex).
 3. **RFDiffusion.**  Produces N `DesignedBackbone`s (each carrying its `ContigSpec`).  Rosetta filter populates `sc_score` and culls those below threshold.
 4. **ProteinMPNN.**  For each surviving `DesignedBackbone`, produces M `DesignedSequence`s.  QC + cluster + top-N pick.
-5. **Negative steering — per `DesignedSequence`.**  Driven by `bin/negative_steering_run_one.sh` (orchestration unchanged per Q10; the read-side types just consume its workdir at the end).
+5. **Negative steering — per `DesignedSequence`.**  Driven by `bin/negative_steering_run_one.sh` (orchestration unchanged per Q10, and the read-side types just consume its workdir at the end).
    - Cold-start: predict the wild-type baseline `num_seeds` times → `StageResult` (cold_start).
-   - Check `cold_start.triggers_next_stage(thresholds)` (existing majority-clean rule).  If False (= majority clean): skip steering; the run is `outcome="no_reversion"` with `n_pass = n_seeds`.
+   - Check `cold_start.triggers_next_stage(thresholds)` (existing majority-clean rule).  If False (= majority clean), skip steering.  The run is then `outcome="no_reversion"` with `n_pass = n_seeds`.
    - Else: for each steered design slot, predict `num_seeds` times → `StageResult` (steered).
    - For each steered `StageResult`, check `triggers_next_stage(thresholds, contamination_positions)` (the NEW CL-3 majority rule).  If True: queue reversion for this design.
    - Reversion: for each unique reverted sequence, predict `num_seeds` times → `StageResult` (reversion).
    - Construct `NegativeSteeringRun.from_workdir(workdir)` once all stages are done.
 6. **Cohort aggregation.**  `DesignCohort.from_runs_directory(runs_dir)` builds the cohort.  Tier-ranking, composite-score ranking, survivor selection.  `cross_sequence_summary.csv` emitted.
 7. **Orthogonal validation — per survivor.**  For each `survivor` in `cohort.survivors(thresholds)`: run AF3, biophysical, Rosetta against `survivor.canonical_prediction(thresholds)`.  Build `OrthogonalMetrics.from_orthogonal_outputs(workdir, survivor.mpnn_sequence_id)`.
-8. **Cohort summary plot.**  Reads `DesignCohort` + per-survivor `OrthogonalMetrics`; renders the cohort-summary table with the three-axis column groups.
+8. **Cohort summary plot.**  Reads `DesignCohort` + per-survivor `OrthogonalMetrics`.  Renders the cohort-summary table with the three-axis column groups.
 
 The whole pipeline is linear — no loops, no shared mutable state between stages.  Each type is constructed once from already-produced outputs and is read-only thereafter.
 
@@ -858,7 +858,7 @@ Four representative pieces of current code rewritten on paper against the new ty
 
 ### 4.1 Contamination check + reversion gating (the CL-3 fix)
 
-**Current code.**  `bin/boltz2_iterate_steering.py:cmd_build_contaminated` walks each prefilter-passing (design, seed) candidate; for each candidate that's intact AND ra_eff < threshold AND has at least one mutated position contacting effector, it appends a contaminated entry.  Result: per-(design, seed) gating — even one contaminated seed triggers reversion for the design.  This is the bug CL-3 fixes.
+**Current code.**  `bin/boltz2_iterate_steering.py:cmd_build_contaminated` walks each prefilter-passing (design, seed) candidate.  It appends a contaminated entry for each candidate that's intact AND ra_eff < threshold AND has at least one mutated position contacting effector.  Result: per-(design, seed) gating — even one contaminated seed triggers reversion for the design.  This is the bug CL-3 fixes.
 
 **Rewrite using the new types.**
 
@@ -892,9 +892,9 @@ def triggers_next_stage(self, thresholds, contamination_positions):
 ```
 
 **Discoveries (gaps surfaced).**
-- ✅ `contamination_positions` is a `PositionSet` — needs to come from somewhere.  In current code it's built from `cycle_0/plan.json` (`design_region ∪ true_interface`).  Means: `NegativeSteeringRun` needs a `contamination_positions(self)` method that loads + caches this from the workdir.  Add to §2.9.
-- ✅ `StageResult.n_correctly_placed` and `n_contaminated` need to access the per-seed metrics — those live in the `confidences` list and the `predictions` list (heavy-atom-contacts come from `ProteinStructurePrediction.receptor_contact_residues(cutoff)`).  Cutoff comes from `thresholds.contact_cutoff`.  Spec already supports this.
-- ⚠ The "mutated positions" needed by `n_contaminated` come from `DesignedSequence.mutations_vs_native()` — but the StageResult doesn't directly know its DesignedSequence.  Fix: `NegativeSteeringRun.designs_needing_reversion(...)` knows both, and either passes mutated_positions into `triggers_next_stage`, or `StageResult` carries a `mutated_positions: PositionSet | None` field at construction (per current §2.8 spec).
+- ✅ `contamination_positions` is a `PositionSet`, and it needs to come from somewhere.  In current code it's built from `cycle_0/plan.json` (`design_region ∪ true_interface`).  Means: `NegativeSteeringRun` needs a `contamination_positions(self)` method that loads + caches this from the workdir.  Add to §2.9.
+- ✅ `StageResult.n_correctly_placed` and `n_contaminated` need to access the per-seed metrics.  Those live in the `confidences` list and the `predictions` list (heavy-atom-contacts come from `ProteinStructurePrediction.receptor_contact_residues(cutoff)`).  Cutoff comes from `thresholds.contact_cutoff`.  Spec already supports this.
+- ⚠ The "mutated positions" needed by `n_contaminated` come from `DesignedSequence.mutations_vs_native()`, but the StageResult doesn't directly know its DesignedSequence.  Fix: `NegativeSteeringRun.designs_needing_reversion(...)` knows both, and either passes mutated_positions into `triggers_next_stage`, or `StageResult` carries a `mutated_positions: PositionSet | None` field at construction (per current §2.8 spec).
 
 **Conclusion.**  Spec covers this with one tiny addition (loading `contamination_positions` once from the workdir into `NegativeSteeringRun`).  CL-3 rule implementable cleanly.
 
@@ -942,15 +942,15 @@ def to_cross_summary_csv(self, path, thresholds):
 
 **Discoveries.**
 - ✅ The `rep_*` column names map cleanly to method calls on `NegativeSteeringRun` (`run.canonical_prediction(...)`, `run.median_ra_eff(...)`, etc.).  Spec covers it.
-- ⚠ `NegativeSteeringRun` needs convenience methods like `median_ra_eff`, `median_iptm`, etc. for every column that ends up in the rep_* group.  Either: (a) a wide explicit set of methods, (b) a single `aggregated_metric(name, thresholds)` method that takes a metric name.  Option (a) is more discoverable but verbose; (b) is dynamic but less safe.  Defer to first migration commit.
-- ✅ The tier-none fallback (`_pick_rep_from_aggregated` in current code) becomes part of `NegativeSteeringRun.canonical_prediction(thresholds)` — it knows what to do when passing_summary.csv is empty.
+- ⚠ `NegativeSteeringRun` needs convenience methods like `median_ra_eff`, `median_iptm`, etc. for every column that ends up in the rep_* group.  Either: (a) a wide explicit set of methods, (b) a single `aggregated_metric(name, thresholds)` method that takes a metric name.  Option (a) is more discoverable but verbose.  Option (b) is dynamic but less safe.  Defer to first migration commit.
+- ✅ The tier-none fallback (`_pick_rep_from_aggregated` in current code) becomes part of `NegativeSteeringRun.canonical_prediction(thresholds)`, which knows what to do when passing_summary.csv is empty.
 - ✅ Sort by `(tier_order, -composite)` is `DesignCohort.ranked_by_composite(thresholds)`.
 
 **Conclusion.**  Spec covers this.  One implementation choice (wide methods vs metric-name method) to make at migration time.
 
 ### 4.3 Per-seed cross-stage verdict aggregation
 
-**Current code.**  `bin/boltz2_iterate_steering.py:_per_seed_verdict_breakdown` + `_classify_outcome` together produce the final per-seed verdict tally for one MPNN sequence (used to compute `n_pass` and the aggregate `outcome` label).  Branches on whether the reversion verdict column is populated for each seed.
+**Current code.**  `bin/boltz2_iterate_steering.py:_per_seed_verdict_breakdown` + `_classify_outcome` together produce the final per-seed verdict tally for one MPNN sequence.  That tally computes `n_pass` and the aggregate `outcome` label.  Branches on whether the reversion verdict column is populated for each seed.
 
 **Rewrite using the new types.**
 
@@ -1041,8 +1041,8 @@ def write_survivor_orthogonal_metrics(
 ```
 
 **Discoveries.**
-- ✅ Clean.  `OrthogonalMetrics` already owns the gate; the caller just iterates over survivors.
-- ✅ The test/production divergence (the long-standing `merge_orthogonal_metrics.py` problem) disappears because there's only one home for the gate logic — it's a method on `OrthogonalMetrics`, not a script that two copies of can drift.
+- ✅ Clean.  `OrthogonalMetrics` already owns the gate.  The caller just iterates over survivors.
+- ✅ The test/production divergence (the long-standing `merge_orthogonal_metrics.py` problem) disappears.  There's only one home for the gate logic, a method on `OrthogonalMetrics` rather than a script whose two copies can drift.
 
 **Conclusion.**  Cleanest rewrite of the four.  Spec covers this without modification.
 

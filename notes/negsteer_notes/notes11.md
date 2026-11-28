@@ -5,17 +5,17 @@
 Notes 10 closed with v10 in flight: 19 per-seed `pose_holds`, 6 aggregated
 promoted to wet-lab triage. The strict-protection patch (v11) was staged
 but not yet validated. v11 was expected to remove design-region
-contamination entirely — and it did — but it surfaced a deeper bug
-in the post-reversion contamination check that was hiding the majority of
-the pipeline's actual successes.
+contamination entirely, and it did. It also surfaced a deeper bug in the
+post-reversion contamination check that was hiding most of the
+pipeline's actual successes.
 
 This session covered:
 
 1. v11 deployment and validation of the strict-protection patch.
-2. Discovery and fix of the **gated `new_contamination` bug** — the
+2. Discovery and fix of the **gated `new_contamination` bug**. The
    contamination check on the reverted prediction was not applying the
-   same gating policy as the pre-reversion check, falsely flagging 61 of
-   167 reversion runs as contamination at off-interface positions.
+   same gating policy as the pre-reversion check. That falsely flagged
+   61 of 167 reversion runs as contamination at off-interface positions.
 3. Establishing the **tier-then-composite ranking method** for wet-lab
    selection.
 4. Trimming `passing_summary.csv` from 44 → 43 columns: removed 8
@@ -48,8 +48,8 @@ Per-seed verdict distribution (before the gated-classifier patch):
 | new_contamination | 61    |
 
 A 50% jump in pose_holds vs v10 (29 vs 19), but the new_contamination
-count seemed high — and on inspection every single one was at off-
-interface positions.
+count seemed high. On inspection, every single one was at off-interface
+positions.
 
 ## The gated `new_contamination` bug
 
@@ -57,11 +57,11 @@ interface positions.
 
 `classify_reversion_verdict` in `reversion.py` was firing
 `new_contamination` whenever the reverted prediction had any mutated
-residue contacting the effector — regardless of whether the position
-was inside the design region or true interface. This was inconsistent
-with the pre-reversion contamination policy: that side already excluded
-contacts at off-interface positions (the "reaching bit" pattern at
-positions 5, 7, 22, 26, 32).
+residue contacting the effector. The position did not have to be inside
+the design region or true interface. This was inconsistent with the
+pre-reversion contamination policy, which already excluded contacts at
+off-interface positions (the "reaching bit" pattern at positions
+5, 7, 22, 26, 32).
 
 The asymmetry meant a design could:
 
@@ -126,24 +126,25 @@ Aggregated verdict distribution:
 
 `passing_summary.csv` went from 18 rows (10 pose_holds + 8 no_reversion)
 to **42 rows (34 pose_holds + 8 no_reversion)**. Three pose_holds
-designs were under composite rank 5; the strongest are tied across true
+designs were under composite rank 5. The strongest are tied across true
 interface overlap and confidence.
 
 ### Why this was easy to miss
 
-The pre-reversion gating was implemented as an effector-atom filter
-(restricting which effector atoms count as "interface"), and the post-
-reversion check inherited that filter via the same `compute_metrics.py`
-invocation — so the filter WAS applied, but at the **atom** level. The
-position-level contamination decision (`reverted_mutated_contact_positions
-= remaining_muts ∩ contact_residues`) didn't apply any further gating
-on which receptor positions counted. The atom filter restricts which
-effector atoms register as contacts in the first place, but does not
-restrict which receptor positions are considered. So contacts to
-ungated receptor positions (5, 7, 22, 26, 32) involving filtered
-effector atoms still came through as `mutated_contact_positions`, and
-the unconditional `if mutated_contacts: → new_contamination` on line
-929 of `reversion.py` then fired.
+The pre-reversion gating was implemented as an effector-atom filter,
+restricting which effector atoms count as "interface". The
+post-reversion check inherited that filter via the same
+`compute_metrics.py` invocation, so the filter WAS applied, but at the
+**atom** level. The position-level contamination decision
+(`reverted_mutated_contact_positions = remaining_muts ∩
+contact_residues`) didn't apply any further gating on which receptor
+positions counted. The atom filter restricts which effector atoms
+register as contacts in the first place, but does not restrict which
+receptor positions are considered. So contacts to ungated receptor
+positions (5, 7, 22, 26, 32) involving filtered effector atoms still
+came through as `mutated_contact_positions`. The unconditional
+`if mutated_contacts: → new_contamination` on line 929 of
+`reversion.py` then fired.
 
 The fix gates at the receptor-position level, mirroring the pre-
 reversion policy.
@@ -154,8 +155,8 @@ The pipeline emits two rank columns (`rank_by_composite_score`,
 `rank_by_ra_eff`) but neither incorporates per-seed agreement. With
 v11's 90 pose_holds seeds spread across 34 sequences, many designs are
 3/3, 2/3, or 1/3 pose_holds. Reproducibility across independent Boltz
-seeds is a stronger transferability signal than a small interface-
-overlap difference.
+seeds is a stronger transferability signal than a small
+interface-overlap difference.
 
 Adopted policy:
 
@@ -170,15 +171,15 @@ non-empty tier. Same rule applied per MPNN sequence when comparing
 across the 100 candidates.
 
 Confidence metrics (`iptm_median`, `actifptm_median`, `ipsae_min_median`)
-are tie-breakers for near-identical composite scores within a tier —
-not the primary ranker, because prior analysis (notes 10 / metric
-reliability memo) showed iPTM and ipSAE have anti-informative AUROC for
-correct-vs-wrong discrimination on this system.
+are tie-breakers for near-identical composite scores within a tier, not
+the primary ranker. Prior analysis (notes 10 / metric reliability memo)
+showed iPTM and ipSAE have anti-informative AUROC for correct-vs-wrong
+discrimination on this system.
 
 This rule is recomputable from the columns already in
 `passing_summary.csv` (`n_seeds_pose_holds`, `n_seeds`,
-`aggregated_verdict`, `rank_by_composite_score`); it's NOT written
-back as a `tier` column to avoid baking the policy into the data
+`aggregated_verdict`, `rank_by_composite_score`). It's NOT written
+back as a `tier` column, to avoid baking the policy into the data
 files. If the policy evolves the data files don't need to be
 regenerated.
 
@@ -190,8 +191,9 @@ Under tier-then-composite (top three of tier A):
 steered)**: composite rank 1. Steered ra_eff 2.71 Å (median across 3
 seeds), MAD 0.29. iPTM 0.892, actifPTM 0.758, ipSAE 0.754,
 true_jaccard 0.720. Mutation at position 7 contacts the effector in all
-three steered seeds — load-bearing steering at a non-design-region
-position. The wet-lab construct is the unmutated MPNN sequence.
+three steered seeds, which is load-bearing steering at a
+non-design-region position. The wet-lab construct is the unmutated MPNN
+sequence.
 
 **design_32 (pose_holds, 3/3)**: composite rank 3. Reverted ra_eff
 3.53 Å, true_jaccard 0.739 (highest in the set). iPTM 0.845, actifPTM
@@ -203,7 +205,7 @@ remaining mutations.
 ipSAE 0.429, true_jaccard 0.708.
 
 design_15 (composite rank 2 by composite alone) drops to tier B because
-it's 2/3 pose_holds — the third seed produced an off-interface-only
+it's 2/3 pose_holds. The third seed produced an off-interface-only
 contamination flag pre-patch, which under the new gating reclassifies
 to pose_holds in 2/3 of seeds.
 
@@ -224,7 +226,7 @@ These were redundant or tautological:
 ### Added (7 mutation columns)
 
 The wet-lab construct never carries any steering mutations, but the
-scored prediction does — the user wanted to see exactly which mutations
+scored prediction does. The user wanted to see exactly which mutations
 are in each scored sequence. Per-seed mutation strings were already in
 `raw_per_seed_results.csv`, but `passing_summary.csv` only had a
 median count.
@@ -257,18 +259,18 @@ contains every mutated position).
 ## A side observation: pool uniformity in v11
 
 Every one of the 100 designs uses the exact same set of mutated
-positions: `{5, 7, 22, 26, 32}`. This is a consequence of the strict-
-protection patch reducing `max_mutations_effective` to 5 (the pool
-size). With pool size = max mutations, every design HAS to mutate the
-full pool — only AA-identity choice differs between designs.
+positions: `{5, 7, 22, 26, 32}`. This is a consequence of the
+strict-protection patch reducing `max_mutations_effective` to 5 (the
+pool size). With pool size = max mutations, every design HAS to mutate
+the full pool. Only AA-identity choice differs between designs.
 
-For future runs, if positional diversity across designs matters
-(e.g. for the assay's ability to sample sequence-binding mappings),
-either the candidate pool needs to be larger (loosen protection
-beyond design-region union) or `max_mutations` needs to be set
-strictly less than the pool size. The latter would relax steering
-pressure proportionally — worth thinking about whether the resulting
-designs are still steered enough.
+For future runs, positional diversity across designs may matter, for
+example for the assay's ability to sample sequence-binding mappings.
+That needs either a larger candidate pool (loosen protection beyond
+design-region union) or `max_mutations` set strictly less than the pool
+size. The latter would relax steering pressure proportionally, so it is
+worth thinking about whether the resulting designs are still steered
+enough.
 
 ## Output file final state
 
@@ -300,31 +302,31 @@ Full schema reference is in `columns.md`.
 1. **Multi-seed validation of passing candidates** — promoted
    sequences through additional independent seeds before wet-lab.
    Now more pressing because the v11 `pose_holds` set has 34 entries,
-   and many are 2/3 or 1/3 — a confirmation pass would tighten the
+   and many are 2/3 or 1/3. A confirmation pass would tighten the
    ranking signal.
 
 2. **Reversion deduplication across designs** — when many designs
    revert to the same residual mutation set, the corresponding Boltz
    reversion predictions are redundant. notes 8 / 9 partially addressed
-   this for steered sequences; the same logic on the reverted side
+   this for steered sequences. The same logic on the reverted side
    would save GPU.
 
 3. **Generative ESM-2 for steering proposals** — fine-tune ESM-2 (LoRA
    or full fine-tune, depending on cost tolerance) on production
-   NextFlow data to generate candidate steering mutation sets given a
-   (receptor, effector) pair. Boltz remains the gate; the model is a
-   pre-filter to avoid wasting GPU on bad mutation sets. Training data
-   accumulates as a free byproduct of production runs once the
-   classifier semantics are stable. Discussed under "fool Boltz" framing
-   in this session — well-suited as a generator since the goal is to
-   produce mutation sets that pass Boltz, not to predict in-planta
-   binding directly.
+   NextFlow data. The model generates candidate steering mutation sets
+   for a given (receptor, effector) pair. Boltz remains the gate. The
+   model is a pre-filter to avoid wasting GPU on bad mutation sets.
+   Training data accumulates as a free byproduct of production runs once
+   the classifier semantics are stable. Discussed under "fool Boltz"
+   framing in this session. It is well-suited as a generator, since the
+   goal is to produce mutation sets that pass Boltz, not to predict
+   in-planta binding directly.
 
 4. **Orthogonal scoring layer (separate ESM-2)** — once PCP assay data
    is available, train a second model to predict in-planta binding from
-   (receptor sequence, effector sequence) and use it to rank Boltz-
-   passing candidates. Different model, different data, different
-   purpose from the steering generator above.
+   (receptor sequence, effector sequence). Use it to rank Boltz-passing
+   candidates. Different model, different data, different purpose from
+   the steering generator above.
 
 5. **Pool diversity for the next run** — see the v11 pool-uniformity
    observation. If the assay benefits from sequence-binding diversity

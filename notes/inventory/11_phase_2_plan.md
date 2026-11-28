@@ -1,8 +1,8 @@
 # 11 — Phase 2 Plan: Characterization Test Suite
 
-A planning document, written before any test code exists. The goal is to produce a behavioral safety net that makes Phase 3 mechanical cleanup possible: a suite that captures the pipeline's *current* output behavior so that any divergence introduced by refactoring is visible immediately.
+A planning document, written before any test code exists. The goal is a behavioral safety net that makes Phase 3 mechanical cleanup possible. The suite captures the pipeline's *current* output behavior, so any divergence introduced by refactoring is visible immediately.
 
-This document fixes the scope, structure, comparison strategy, and delivery sequence of that suite. It does *not* yet contain test code; it is the artefact to review and amend before code is written.
+This document fixes the scope, structure, comparison strategy, and delivery sequence of that suite. It does *not* yet contain test code. It is the artefact to review and amend before code is written.
 
 ---
 
@@ -12,9 +12,9 @@ This document fixes the scope, structure, comparison strategy, and delivery sequ
 
 Characterization tests in the sense of [Feathers, *Working Effectively with Legacy Code*]: tests that pin current behavior so changes become visible. They assert **stability**, not **correctness**.
 
-The reference outputs we compare against are the artefacts of a real pipeline run (the supervisor-demo run, 32 designs × 4 MPNN sequences + 2 controls, files already on disk in `tests/full_test_run/example_output_files/`). Some of those outputs almost certainly contain undetected logical errors — the inverted `scaffold` semantics flagged in glossary §F3, the `merge_orthogonal_metrics.py` semantic divergence flagged in finding A4, and the suspected `--n-cycles 1` reversion-skip bug from notes6 are all candidates. These tests will not detect those errors. They will detect any *change* in behavior, which during refactoring is the property that matters.
+The reference outputs are the artefacts of a real pipeline run, the supervisor-demo run of 32 designs × 4 MPNN sequences + 2 controls. Those files are already on disk in `tests/full_test_run/example_output_files/`. Some of those outputs almost certainly contain undetected logical errors. One candidate is the inverted `scaffold` semantics flagged in glossary §F3. Another is the `merge_orthogonal_metrics.py` semantic divergence flagged in finding A4, and a third is the suspected `--n-cycles 1` reversion-skip bug from notes6. These tests will not detect those errors. They will detect any *change* in behavior, which during refactoring is the property that matters.
 
-A test failing during refactoring does not by itself indicate the refactor is wrong. It indicates behavior changed. The change must be evaluated on its merits — and a refactor that *fixes* a latent bug will produce a failure that should be welcomed, investigated, and (after confirmation) used to update the reference output.
+A test failing during refactoring does not by itself indicate the refactor is wrong. It indicates behavior changed. The change must be evaluated on its merits. A refactor that *fixes* a latent bug will produce a failure that should be welcomed and investigated. After confirmation, that failure is used to update the reference output.
 
 ### 1.2 What these tests are not
 
@@ -30,23 +30,23 @@ Phase 2 ships in two waves:
 - **Wave 1 — Cohort + intermediates.** All comparison-friendly file outputs the pipeline emits, plus the per-stage intermediates that downstream stages consume. Round-trip tested against a fresh re-run on the HPC. This is the working safety net before any Phase 3 code change.
 - **Wave 2 — Python-internal state.** Targeted instrumentation around the small set of complex functions whose behavior is too subtle to capture from output files alone (`align_to_native_by_anchors` is the canonical example). Layered on after Wave 1 is green.
 
-The plan below specifies Wave 1 in full detail. Wave 2 is sketched (§5) — the precise list of functions and instrumentation strategies will be decided after Wave 1 surfaces what's actually load-bearing.
+The plan below specifies Wave 1 in full detail. Wave 2 is only sketched (§5). The precise list of functions and instrumentation strategies will be decided after Wave 1 surfaces what is actually load-bearing.
 
 ---
 
 ## 2. Scope of comparison — Wave 1
 
-The following table enumerates every reference output that Wave 1's tests will pin. Each entry specifies the producing process/script (so the test's failure points to a known location), the comparison strategy, and whether the file exists in the current example set or needs to be sourced from HPC.
+The following table enumerates every reference output that Wave 1's tests will pin. Each entry specifies the producing process or script, so a test failure points to a known location. It also gives the comparison strategy, and whether the file exists in the current example set or needs sourcing from HPC.
 
 Comparison strategies are abbreviated:
 
 - **EXACT** — byte-equal.
-- **CSV-EXACT** — column names and order identical; row order identical; string columns byte-equal; numeric columns equal within `1e-6` absolute and `1e-9` relative tolerance.
-- **CSV-STRUCT** — column names and order identical; row count identical; types per column identical; row-order tolerated (sort by a designated key column before comparison). Used where the producing code does not guarantee row order.
-- **JSON-DEEP** — recursive comparison with numeric tolerance (same `1e-6` / `1e-9`); list element order significant unless flagged otherwise.
+- **CSV-EXACT** — column names and order identical, row order identical, string columns byte-equal, and numeric columns equal within `1e-6` absolute and `1e-9` relative tolerance.
+- **CSV-STRUCT** — column names and order identical, row count identical, types per column identical, row-order tolerated (sort by a designated key column before comparison). Used where the producing code does not guarantee row order.
+- **JSON-DEEP** — recursive comparison with numeric tolerance (same `1e-6` / `1e-9`). List element order is significant unless flagged otherwise.
 - **JSON-MODULO-PATHS** — JSON-DEEP after rewriting any absolute path strings (workdir hashes, HPC-specific prefixes) to a canonical form.
-- **PNG-PERCEPTUAL** — file exists; size within ±5%; structural similarity (SSIM) ≥ 0.95 against reference.
-- **PNG-EXISTS** — file exists and is non-empty. For the cases where pinning even SSIM is too brittle (very stochastic plot content).
+- **PNG-PERCEPTUAL** — file exists, size within ±5%, structural similarity (SSIM) ≥ 0.95 against reference.
+- **PNG-EXISTS** — file exists and is non-empty. Used where pinning even SSIM is too brittle (very stochastic plot content).
 
 ### 2.1 Stage 1 — Preprocessing
 
@@ -55,7 +55,7 @@ Comparison strategies are abbreviated:
 | `preprocessing/sequences.json` | `EXTRACT_SEQUENCES` (inline Python in `modules/preprocessing.nf`) | JSON-DEEP | ✅ on disk |
 | `preprocessing/processed_contigs.txt` | `RESOLVE_CONTIGS` → `bin/rfdiffusion_contigs.py` | EXACT | ✅ on disk |
 
-**Gap to fill:** the `WRITE_DUMMY_MAPPING` placeholder JSON. Trivially reproducible (2-byte `{}`); decision: **skip pinning** — its content is degenerate and any divergence would mean the script started writing real data, which a downstream consumer would catch.
+**Gap to fill:** the `WRITE_DUMMY_MAPPING` placeholder JSON. It is trivially reproducible (2-byte `{}`), so the decision is to **skip pinning**. Its content is degenerate, and any divergence would mean the script started writing real data, which a downstream consumer would catch.
 
 ### 2.2 Stage 2 — RFDiffusion + filter
 
@@ -104,7 +104,7 @@ This is the most reference-data-rich stage and the one where the gap-filling mat
 
 **Gaps to fill (priority for HPC hunt):**
 
-1. **A populated-reversion per-sequence example.** All four reversion-related JSONs in the current set are empty (`n_contaminated=0`). At least one MPNN sequence whose cold-start prediction *did* produce contaminating mutations needs to be added — this exercises the entire reversion harvest path that is currently uncovered.
+1. **A populated-reversion per-sequence example.** All four reversion-related JSONs in the current set are empty (`n_contaminated=0`). At least one MPNN sequence whose cold-start prediction *did* produce contaminating mutations needs to be added. That exercises the entire reversion harvest path, which is currently uncovered.
 2. **The two control sequences' rows.** The current `cross_sequence_summary.csv` does not include `control_scrambled` / `control_polyA`. These exercise the cold-start-only path with no contact residues → silent skip → 3-row stub (per glossary §5).
 3. **All 34 per-sequence subdirectories' aggregated/passing/raw CSVs.** Confirm whether the example set has all 34 or only a subset.
 
@@ -134,9 +134,9 @@ This is the most reference-data-rich stage and the one where the gap-filling mat
 | `plots/negsteer_*.png` (within-sequence) | 5 | `NEGSTEER_WITHIN_SEQUENCE_PLOTS` | PNG-PERCEPTUAL |
 | `plots/orthogonal_*.png` | 4 | `ORTHOG_PLOTS` | PNG-PERCEPTUAL |
 
-26 PNGs total. SSIM threshold of 0.95 is a starting calibration; the test framework will allow per-plot override (some plots are inherently more stochastic than others — e.g., plots that depend on random tie-breaking in clustering).
+26 PNGs total. The SSIM threshold of 0.95 is a starting calibration. The test framework will allow per-plot override, because some plots are inherently more stochastic than others. Plots that depend on random tie-breaking in clustering are one example.
 
-If SSIM proves too noisy in practice, individual plots demote to PNG-EXISTS and a Verification Queue entry records the demotion. The principle: plots are weak evidence; a plot regression should prompt investigation but rarely block a refactor.
+If SSIM proves too noisy in practice, individual plots demote to PNG-EXISTS and a Verification Queue entry records the demotion. The principle is that plots are weak evidence. A plot regression should prompt investigation, but it should rarely block a refactor.
 
 ---
 
@@ -167,7 +167,7 @@ tests/
     └── test_plots.py
 ```
 
-The reference data continues to live at `tests/full_test_run/example_output_files/`; tests resolve it via a fixture, not a hardcoded path. This separation keeps the framework portable: when the reference set is updated, only the fixture's resolution logic changes.
+The reference data continues to live at `tests/full_test_run/example_output_files/`. Tests resolve it via a fixture, not a hardcoded path. This separation keeps the framework portable. When the reference set is updated, only the fixture's resolution logic changes.
 
 ### 3.2 pytest conventions
 
@@ -176,14 +176,14 @@ The reference data continues to live at `tests/full_test_run/example_output_file
   - `output_root` — resolves to the directory of a fresh pipeline run. Configurable via env var `RECEPTOR_OUTPUT_ROOT`. Defaults to a sensible HPC location.
   - `numeric_tolerance` — returns `(abs=1e-6, rel=1e-9)`. Per-test override via marker: `@pytest.mark.tolerance(abs=1e-4, rel=1e-6)`.
   - `path_normalizer` — returns the canonicalization function for absolute paths.
-  - `ssim_threshold` — returns `0.95` by default; per-plot override via marker.
+  - `ssim_threshold` — returns `0.95` by default, with per-plot override via marker.
 
 - **Parameterization:** `test_negsteer_per_sequence.py` parameterizes over the 34 sequences. Each sequence's failure is a separate test, so a single-sequence regression doesn't mask others.
 
 - **Markers:**
   - **Tier markers** (mutually exclusive — every test has exactly one):
     - `@pytest.mark.local_unit` — tests of individual functions/comparators in isolation. Fast (<1 sec each). Runnable anywhere with Python. Wave 1 comparator unit tests live here.
-    - `@pytest.mark.local_integration` — tests of pure-Python characterization on saved inputs (e.g., Wave 2 snapshot tests on `align_to_native_by_anchors`). Runnable on Mac without HPC, Singularity, or Nextflow. Wave 1 has no tests here; Wave 2 populates it.
+    - `@pytest.mark.local_integration` — tests of pure-Python characterization on saved inputs (e.g., Wave 2 snapshot tests on `align_to_native_by_anchors`). Runnable on Mac without HPC, Singularity, or Nextflow. Wave 1 has no tests here. Wave 2 populates it.
     - `@pytest.mark.hpc` — tests requiring a fresh pipeline run. HPC-only. Wave 1's stage-by-stage characterization tests live here.
   - **Selection markers** (orthogonal, multiple allowed):
     - `@pytest.mark.wave1` / `@pytest.mark.wave2` — selectable test subsets by remediation phase.
@@ -191,11 +191,11 @@ The reference data continues to live at `tests/full_test_run/example_output_file
     - `@pytest.mark.requires_controls` — tests that need control rows (skipped until those are filled).
     - `@pytest.mark.slow` — for tests that compute SSIM over large images.
 
-- **Reporting:** failures emit a unified-diff-style report for CSV/JSON, and side-by-side diff plus SSIM score for PNG. The comparator helpers own that formatting; tests just assert.
+- **Reporting:** failures emit a unified-diff-style report for CSV/JSON, and side-by-side diff plus SSIM score for PNG. The comparator helpers own that formatting. Tests just assert.
 
 ### 3.3 Invocation
 
-Tier-aware invocation patterns. Note the three tiers correspond to where each test can run:
+Tier-aware invocation patterns. The three tiers correspond to where each test can run:
 
 | Tier | Runs where | Speed | Used when |
 |---|---|---|---|
@@ -228,7 +228,7 @@ Exit code 0 means all selected tests passed. The marker scheme means a Mac invoc
 Added to whatever dependency manifest the project uses (assuming `requirements.txt` or `pyproject.toml`):
 
 - `pytest>=7.0`
-- `pandas` (likely already a dependency; used for CSV comparison)
+- `pandas` (likely already a dependency, used for CSV comparison)
 - `numpy` (likely already a dependency)
 - `Pillow` (PNG loading)
 - `scikit-image` (SSIM) — only one needed beyond what's likely already present
@@ -345,7 +345,7 @@ The exact regex set is small but matters for false-positive avoidance. The first
 
 Wave 2 is layered on after Wave 1 is green and the cache-busting audit is complete. It targets functions whose behavior is too subtle to capture from output files alone.
 
-**Tier classification:** Wave 2 tests are explicitly `local_integration` — they pin Python-internal state from saved inputs and run on the Mac without needing the HPC. This is one of the main payoffs of the tiered scheme: as soon as Wave 2 ships, you can iterate on the highest-complexity functions (e.g., `align_to_native_by_anchors`) with Mac-speed feedback rather than HPC-round-trip-speed feedback.
+**Tier classification:** Wave 2 tests are explicitly `local_integration`. They pin Python-internal state from saved inputs and run on the Mac without needing the HPC. That is one of the main payoffs of the tiered scheme. As soon as Wave 2 ships, you can iterate on the highest-complexity functions (e.g., `align_to_native_by_anchors`) with Mac-speed feedback rather than HPC-round-trip-speed feedback.
 
 The synthesis identified one canonical case explicitly (`align_to_native_by_anchors` in `pipeline_correct_sequences.py`, complexity E=36). Wave 2 will survey the remaining complexity hotspots and decide which deserve internal-state pinning. Provisional candidates from §2 of the synthesis:
 
@@ -371,17 +371,17 @@ The exact list and strategies are deferred to a post-Wave-1 follow-up planning p
 
 ### 6.1 Entry conditions (must hold before Phase 2 execution begins)
 
-1. **Cache-busting audit complete.** Every `bin/X.py` invocation in `modules/*.nf` must use the `path script_input` pattern (or equivalent) so refactors invalidate the Nextflow cache. This is a standalone pre-Phase-2 task per the most recent direction; tracked separately. **Without this, characterization tests will silently pass on cached old outputs.**
-2. **Reference set gaps inventoried.** §2 above contains a checklist of files marked ⚠️ — each must be confirmed present on the example set or sourced from HPC before its corresponding test ships.
-3. **Empty `main` file removed and `bin/sequence_registry.py` flagged for deletion.** Both are housekeeping; the test suite will be run before and after the deletions in §6.3.
+1. **Cache-busting audit complete.** Every `bin/X.py` invocation in `modules/*.nf` must use the `path script_input` pattern (or equivalent) so refactors invalidate the Nextflow cache. This is a standalone pre-Phase-2 task per the most recent direction, tracked separately. **Without this, characterization tests will silently pass on cached old outputs.**
+2. **Reference set gaps inventoried.** §2 above contains a checklist of files marked ⚠️. Each must be confirmed present on the example set or sourced from HPC before its corresponding test ships.
+3. **Empty `main` file removed and `bin/sequence_registry.py` flagged for deletion.** Both are housekeeping. The test suite will be run before and after the deletions in §6.3.
 
 ### 6.2 Wave 1 build sequence
 
-1. **Scaffolding.** Create `tests/characterization/` with `conftest.py`, `pyproject.toml` (or update existing), and the four helper modules. Tests are no-ops; goal is that `pytest tests/characterization/` runs and discovers the test files.
-2. **Helper unit tests.** Each comparator gets a small test verifying it correctly identifies identity (reference == reference returns pass), single-cell numeric drift (returns fail with correct location), and edge cases (empty CSV, NaN, missing file). These are real unit tests on the comparators themselves, not characterization tests.
+1. **Scaffolding.** Create `tests/characterization/` with `conftest.py`, `pyproject.toml` (or update existing), and the four helper modules. Tests are no-ops. The goal is that `pytest tests/characterization/` runs and discovers the test files.
+2. **Helper unit tests.** Each comparator gets a small test verifying three behaviors. It must correctly identify identity (reference == reference returns pass), single-cell numeric drift (returns fail with correct location), and edge cases (empty CSV, NaN, missing file). These are real unit tests on the comparators themselves, not characterization tests.
 3. **Stage-by-stage characterization tests.** Order: preprocessing → RFDiffusion → Rosetta filtering → MPNN → negsteer cohort → orthogonal metrics → plots → negsteer per-sequence. Per-sequence is last because it's the largest parameterization and shaking out the comparators on simpler tests first reduces churn.
 4. **Local self-check.** Run the suite on the Mac against the reference set as both reference *and* actual. All tests must pass. (This catches comparator bugs before round-trip cost is incurred.)
-5. **HPC round-trip.** Copy the suite to HPC. Run against a fresh re-run of the same `params_test.yml`. All tests should pass — failures here are *real* signal: either a non-determinism not yet accounted for, or a bug in cache-busting, or a flawed comparator. Iterate until clean.
+5. **HPC round-trip.** Copy the suite to HPC. Run against a fresh re-run of the same `params_test.yml`. All tests should pass. Failures here are *real* signal, meaning either a non-determinism not yet accounted for, a bug in cache-busting, or a flawed comparator. Iterate until clean.
 
 ### 6.3 First Phase 3 commit gated on the safety net
 
@@ -391,9 +391,9 @@ Once the suite is green on a fresh HPC run, Phase 3 begins with the smallest pos
 2. Delete the empty `main` file at repo root.
 3. Re-run pipeline on HPC.
 4. Re-run characterization tests.
-5. **Hand-eye plot review.** Open the 26 reference plots and the 26 fresh plots side-by-side. Visual inspection is a sanity check on the SSIM thresholds and a chance to catch regressions that pass numeric comparison but look wrong. Plots are the most human-readable view into the pipeline's outputs; suspicious changes will surface here even when CSVs pass.
+5. **Hand-eye plot review.** Open the 26 reference plots and the 26 fresh plots side-by-side. Visual inspection is a sanity check on the SSIM thresholds and a chance to catch regressions that pass numeric comparison but look wrong. Plots are the most human-readable view into the pipeline's outputs. Suspicious changes will surface here even when CSVs pass.
 
-If green and the plots look right, the safety net works. If not green, the failure must be diagnosed before any further Phase 3 commits. This is the canonical "first refactor commit" — chosen because both deletions are demonstrably unreachable from the current pipeline and should produce zero output diffs.
+If green and the plots look right, the safety net works. If not green, the failure must be diagnosed before any further Phase 3 commits. This is the canonical "first refactor commit". It was chosen because both deletions are demonstrably unreachable from the current pipeline and should produce zero output diffs.
 
 **On the pass criterion broadly:** a clean `pytest` exit on a fresh HPC run is the formal pass criterion. The hand-eye plot review is the informal sanity check that complements it. Both are required to declare a wave's tests green.
 
@@ -415,17 +415,17 @@ The following entries should be added to `remediation_state.md`'s Verification Q
 
 ### 7.2 Verification Queue entries to add
 
-> - **What:** `merge_orthogonal_metrics.py` semantic divergence (production gates on AF3; test demotes to flag-only). Reference output reflects whichever version ran in the supervisor-demo.
+> - **What:** `merge_orthogonal_metrics.py` semantic divergence (production gates on AF3, test demotes to flag-only). Reference output reflects whichever version ran in the supervisor-demo.
 > - **Why suspicious:** Finding A4 explicitly flags this as a latent bug. The Phase 2 test pin will lock production behavior — including the bug — until Phase 3.
-> - **How to verify:** Compare the production `merge_orthogonal_metrics.py` against the test-tree copy; check the cohort's AF3 column distribution (synthesis §5 open question); if production was used, expect this test to fail when Phase 3 fixes the divergence, and update the reference at that point.
+> - **How to verify:** Compare the production `merge_orthogonal_metrics.py` against the test-tree copy. Check the cohort's AF3 column distribution (synthesis §5 open question). If production was used, expect this test to fail when Phase 3 fixes the divergence, and update the reference at that point.
 
 > - **What:** Suspected `--n-cycles 1` silent-skip-reversion bug from notes6.
 > - **Why suspicious:** Synthesis §5 records the bug as not verified during inventory. The supervisor-demo ran with `--n-cycles 1`, so reference outputs may bake in this skipped behavior.
-> - **How to verify:** Inspect a per-sequence run's `pathways.json` and reversion JSONs; cross-check whether reversion was actually attempted on contaminated sequences. If skipped where it should not have been, the reversion-related JSONs need to be regenerated from a `--n-cycles >= 2` run before Phase 3.
+> - **How to verify:** Inspect a per-sequence run's `pathways.json` and reversion JSONs. Cross-check whether reversion was actually attempted on contaminated sequences. If skipped where it should not have been, the reversion-related JSONs need to be regenerated from a `--n-cycles >= 2` run before Phase 3.
 
 > - **What:** `scaffold_rmsd` field in `rfdiffusion_metrics.json` is actually motif RMSD (glossary §F3 inversion).
-> - **Why suspicious:** Field name is inverted from Baker-lab convention; semantics not in question, naming is.
-> - **How to verify:** Naming-only fix in Phase 3.3. Test will need to be updated at that point — reference file's field name changes, not its values.
+> - **Why suspicious:** Field name is inverted from Baker-lab convention. The semantics are not in question, only the naming.
+> - **How to verify:** Naming-only fix in Phase 3.3. Test will need to be updated at that point. The reference file's field name changes, not its values.
 
 ---
 
@@ -434,7 +434,7 @@ The following entries should be added to `remediation_state.md`'s Verification Q
 The deliverable of Phase 2, in order:
 
 1. **This plan document** (`notes/inventory/11_phase_2_plan.md`), reviewed and amended.
-2. **The reference-set gap-fill checklist from §2** completed by an HPC round-trip; README in `example_output_files/` updated with the new files.
+2. **The reference-set gap-fill checklist from §2** completed by an HPC round-trip, and the README in `example_output_files/` updated with the new files.
 3. **Wave 1 test suite under `tests/characterization/`,** green on the Mac (`local_unit` tier) and on the HPC against a fresh re-run (`hpc` tier). Pass criterion: clean `pytest` exit *and* hand-eye plot review.
 4. **`tests/characterization/README.md`** documenting how to run the suite at each tier, the marker scheme, and the **manual reference-update procedure** (see §8.1 below).
 5. **First Phase 3 commit (delete dead files), green tests post-commit,** as the safety-net validation.
@@ -455,7 +455,7 @@ When a Phase 3+ change legitimately alters behavior (e.g., the Stage 6 AF3 diver
    - Add an entry to a "Reference set change log" section noting the date, the Phase 3+ commit hash, the affected files, and a one-line summary of why the reference changed.
    - Update any file-description text in the README that has changed (e.g., column added, field renamed).
 6. Re-run `pytest -m hpc`. The previously-failing tests should now pass against the updated reference. Any tests that *still* fail are unexpected regressions and need investigation before commit.
-7. Commit the reference update and the README update together; commit message format `chore(reference): update for <commit hash> — <summary>`.
+7. Commit the reference update and the README update together. Commit message format: `chore(reference): update for <commit hash> — <summary>`.
 
 This procedure is documented in `tests/characterization/README.md` and is the canonical way to acknowledge a behavior change.
 
@@ -465,15 +465,15 @@ This procedure is documented in `tests/characterization/README.md` and is the ca
 
 The four open questions raised during planning were resolved as follows. Recorded here so this document stands alone for future readers.
 
-1. **Tolerance calibration.** Default `abs=1e-6, rel=1e-9`. If a column repeatedly fails on benign re-runs, response is per-column override + Verification Queue entry — *not* blanket loosening. Boltz columns are expected to need overrides (drift typically <1e-3); this will be confirmed empirically on the first HPC round-trip.
+1. **Tolerance calibration.** Default `abs=1e-6, rel=1e-9`. If a column repeatedly fails on benign re-runs, response is per-column override + Verification Queue entry — *not* blanket loosening. Boltz columns are expected to need overrides, since drift is typically <1e-3. This will be confirmed empirically on the first HPC round-trip.
 
 2. **Pass criterion.** Clean `pytest` exit on a fresh HPC run, plus a hand-eye review of the 26 reference vs fresh plots side-by-side. Both are required to declare a wave's tests green. The plot review is the easiest human-readable check on whether numbers that pass numeric comparison still *look* right.
 
-3. **CI scope.** No GitHub Actions. The marginal value over disciplined local invocation is low for a solo-developer remediation pass. The framework is CI-ready — `pytest -m local_unit` is single-command and would add to a workflow file in 10 minutes — so this can be revisited without refactoring if the project's collaboration profile changes.
+3. **CI scope.** No GitHub Actions. The marginal value over disciplined local invocation is low for a solo-developer remediation pass. The framework is CI-ready. `pytest -m local_unit` is a single command and would add to a workflow file in 10 minutes. This can be revisited without refactoring if the project's collaboration profile changes.
 
 4. **Reference-update workflow.** Fully manual, per the procedure in §8.1. The README in `example_output_files/` doubles as the change log for reference-set updates.
 
-The three-tier marker scheme (`local_unit` / `local_integration` / `hpc`) was adopted in preference to a flat local/hpc split, so that pure-Python characterization tests on saved inputs (Wave 2 territory) have a clear home distinct from comparator unit tests.
+The three-tier marker scheme (`local_unit` / `local_integration` / `hpc`) was adopted in preference to a flat local/hpc split. That gives pure-Python characterization tests on saved inputs (Wave 2 territory) a clear home, distinct from comparator unit tests.
 
 ---
 

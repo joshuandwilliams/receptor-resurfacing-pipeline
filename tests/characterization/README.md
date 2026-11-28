@@ -1,14 +1,14 @@
 # Characterization Test Suite
 
-This directory holds the Phase 2 characterization tests for the receptor-resurfacing pipeline. The suite pins the pipeline's *current* observable behavior so that any divergence introduced by Phase 3+ refactoring becomes visible immediately.
+This directory holds the Phase 2 characterization tests for the receptor-resurfacing pipeline. The suite pins the pipeline's *current* observable behavior, so any divergence introduced by Phase 3+ refactoring becomes visible immediately.
 
 ## What this suite is — and is not
 
 These are **characterization tests** in the sense of Feathers, *Working Effectively with Legacy Code*. They assert **stability**, not **correctness**.
 
-The reference outputs live under `tests/full_test_run/example_output_files/` and were captured from a real pipeline run (the supervisor-demo: 32 designs × 4 MPNN sequences + 2 controls). **They are not certified correct.** Some entries are known or suspected to encode latent bugs (e.g. inverted `scaffold` semantics from glossary §F3, the production/test divergence in `merge_orthogonal_metrics.py` flagged in finding A4, the suspected `--n-cycles 1` reversion-skip from notes6). These tests will not catch those bugs. They will catch any *change* in behavior — which during refactoring is the property that matters.
+The reference outputs live under `tests/full_test_run/example_output_files/`. They were captured from a real pipeline run (the supervisor-demo: 32 designs × 4 MPNN sequences + 2 controls). **They are not certified correct.** Some entries are known or suspected to encode latent bugs (e.g. inverted `scaffold` semantics from glossary §F3, the production/test divergence in `merge_orthogonal_metrics.py` flagged in finding A4, the suspected `--n-cycles 1` reversion-skip from notes6). These tests will not catch those bugs. They will catch any *change* in behavior, which during refactoring is the property that matters.
 
-A test failing during refactoring does **not** by itself mean the refactor is wrong. It means behavior changed. Evaluate the change on its merits; a refactor that *fixes* a latent bug will produce a failure that should be welcomed, investigated, and (after confirmation) used to update the reference output via the manual procedure below.
+A test failing during refactoring does **not** by itself mean the refactor is wrong. It means behavior changed. Evaluate the change on its merits. A refactor that *fixes* a latent bug produces a failure that should be welcomed, investigated, and (after confirmation) used to update the reference output via the manual procedure below.
 
 The full framing is in `notes/inventory/11_phase_2_plan.md` §1.
 
@@ -91,7 +91,7 @@ When a Phase 3+ change legitimately alters behavior (e.g. fixing the Stage 6 AF3
 
 1. On Mac, run `pytest -m logic`. Confirm the pre-update state is green for everything that does not depend on the affected stage.
 2. Sync the change to HPC and run the pipeline.
-3. On HPC, run `pytest -m check_test_run` (with `RECEPTOR_OUTPUT_ROOT` pointing at the fresh run). Note which tests fail; confirm the failures match the *expected* behavior change.
+3. On HPC, run `pytest -m check_test_run` (with `RECEPTOR_OUTPUT_ROOT` pointing at the fresh run). Note which tests fail, and confirm the failures match the *expected* behavior change.
 4. For each expected failure, manually copy the new output file from the HPC run into `tests/full_test_run/example_output_files/`, replacing the old reference.
 5. Update `tests/full_test_run/example_output_files/README.md`:
    - Add an entry to a "Reference set change log" section noting the date, the Phase 3+ commit hash, the affected files, and a one-line summary of why the reference changed.
@@ -104,5 +104,5 @@ When a Phase 3+ change legitimately alters behavior (e.g. fixing the Stage 6 AF3
 - **"unknown marker" warnings.** All markers are registered in the root `pyproject.toml` under `[tool.pytest.ini_options].markers`. If you add a marker, register it there or pytest will fail under `--strict-markers`.
 - **Tests skipped with "Reference root does not exist".** Either populate `tests/full_test_run/example_output_files/` (the data files are gitignored) or point `RECEPTOR_REF_ROOT` at a populated copy.
 - **Tests skipped with "RECEPTOR_OUTPUT_ROOT is not set".** Expected on Mac: HPC-tier tests need a fresh pipeline run directory and have no useful default.
-- **Comparator passes locally but fails on HPC round-trip.** This is *real* signal — either non-determinism not yet accounted for (e.g. an unset random seed), a Nextflow cache poisoning issue (cache hashes the command string rather than the script content; refactored scripts produce cached old outputs), or a comparator bug. Investigate before treating as a tolerance problem. Per plan §7.1, the response to repeated benign failures on a single column is a per-column tolerance override + Verification Queue entry, **not** a blanket loosening.
+- **Comparator passes locally but fails on HPC round-trip.** This is *real* signal. The cause is either non-determinism not yet accounted for (e.g. an unset random seed), a Nextflow cache poisoning issue, or a comparator bug. The cache hashes the command string rather than the script content, so refactored scripts produce cached old outputs. Investigate before treating as a tolerance problem. Per plan §7.1, the response to repeated benign failures on a single column is a per-column tolerance override + Verification Queue entry, **not** a blanket loosening.
 - **Plot SSIM is too noisy.** Demote the offending plot to `PNG-EXISTS`, log the demotion in the Verification Queue, and rely on the hand-eye plot review at the end of each Phase 3 commit (plan §6.3).

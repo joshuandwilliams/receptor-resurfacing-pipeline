@@ -5,17 +5,18 @@
 Entering this session, the pipeline had been validated on four native benchmark
 complexes (notes 3) and two RFDiffusion design runs (notes 4–5). The open question
 from notes 5 was whether the high-confidence steered predictions for Pikp1 design_3
-were trustworthy as wet-lab candidates, given that the steering mutations were
-landing inside or adjacent to the protected design region and forming contacts in
-the rescued pose. The mutation-reliance check added at the end of notes 5 flagged
-51 of 57 passing designs as contaminated — but that check was using mutation-position
+were trustworthy as wet-lab candidates. The steering mutations were landing inside
+or adjacent to the protected design region, and forming contacts in the rescued
+pose. The mutation-reliance check added at the end of notes 5 flagged 51 of 57
+passing designs as contaminated. But that check used mutation-position
 intersection rather than design-region intersection, which was too broad.
 
-This session had two goals: (1) build the full reversion validation pass — a
-per-cycle mechanism that, for any steered design whose rescue depends on mutations
-at protected-set positions, reverts those mutations and re-runs Boltz to determine
-whether the pose holds without them, and (2) run it end-to-end on a fresh design_3
-experiment to get the first real data on how many steered candidates actually survive.
+This session had two goals. The first was to build the full reversion validation
+pass. That is a per-cycle mechanism for any steered design whose rescue depends on
+mutations at protected-set positions. It reverts those mutations and re-runs Boltz
+to determine whether the pose holds without them. The second was to
+run it end-to-end on a fresh design_3 experiment, to get the first real data on
+how many steered candidates actually survive.
 
 ## What we built
 
@@ -49,21 +50,23 @@ New columns emitted by `compute_metrics.py`:
 - `construct_reliance_flag` (`clean` / `contaminated` / `""`)
 
 The old `mutation_reliance_flag` remains for backward compat but is now a noisier
-diagnostic; `construct_reliance_flag` is the operationally meaningful one.
+diagnostic. `construct_reliance_flag` is the operationally meaningful one.
 
-The key insight from applying the corrected check to the previous design_3 CSV: the
-distinction between position 44 (inside design region 33-46 → protected → flag)
-and position 26 (outside design region, outside true interface → not protected →
-don't flag) is what separates the c0d40 family from the cycle-0 d40 parent. Under
-the corrected check, cycle-0 design_40 (A26R Q46D) is clean; all its c0d40.c1dXX
-children are contaminated because Y44X contacts appear in the rescued poses.
+Applying the corrected check to the previous design_3 CSV gives the key insight.
+Position 44 sits inside design region 33-46, so it is protected and flagged.
+Position 26 sits outside the design region and outside the true interface, so it
+is not protected and not flagged. That distinction is what separates the c0d40
+family from the cycle-0 d40 parent. Under the corrected check, cycle-0 design_40
+(A26R Q46D) is clean. All its c0d40.c1dXX children are contaminated because Y44X
+contacts appear in the rescued poses.
 
 ### 2. `derive_design_region.py`
 
-New standalone stdlib-only script. Takes `rfdiffusion_metrics.json` + a design name,
-derives 1-based positional indices of the de novo region, writes them as a collapsed
-range string (e.g. `33-46,74-79`), and optionally cross-checks against
-`cycle_0/plan.json`'s `true_interface_idx` to confirm coordinate-system consistency.
+New standalone stdlib-only script. It takes `rfdiffusion_metrics.json` plus a
+design name and derives 1-based positional indices of the de novo region. It
+writes them as a collapsed range string (e.g. `33-46,74-79`). It optionally
+cross-checks against `cycle_0/plan.json`'s `true_interface_idx` to confirm
+coordinate-system consistency.
 
 Usage:
 ```bash
@@ -75,7 +78,7 @@ python3 derive_design_region.py \
 ```
 
 For Pikp1 design_3 the output is `33-46,74-79` (two de novo blocks, 20 positions
-total). The cross-check WARNING is expected and correct: design_3's true interface
+total). The cross-check WARNING is expected and correct. design_3's true interface
 includes 6 native-scaffold anchor residues (3, 48, 70-73) that RFDiffusion kept
 outside the de novo region. Those anchors are covered by the union in the orchestrator
 even though they're not in the design-region file.
@@ -86,13 +89,13 @@ Added to `boltz2_negative_steering.py`. Accepts a file in the same range/list fo
 that `derive_design_region.py` produces. Converts from 1-based (file convention) to
 0-based and stores `design_region_idx` in `cycle_0/plan.json` alongside the existing
 `true_interface_idx`. Future runs will read `design_region_idx` from plan.json
-automatically; existing runs can use the `--design-region-positions-file` override in
-`compute-final-metrics`.
+automatically. Existing runs can use the `--design-region-positions-file` override
+in `compute-final-metrics`.
 
 ### 4. Full reversion validation pass
 
-The reversion pass runs at the end of every cycle (cycle 0 and cycle 1+) as a chain
-of new SLURM stages inserted between the existing collect stage and the
+The reversion pass runs at the end of every cycle, both cycle 0 and cycle 1+. It
+is a chain of new SLURM stages inserted between the existing collect stage and the
 novelty/maximin selection. The full per-cycle flow is now:
 
 ```
@@ -111,9 +114,9 @@ Cycle 0 uses `kickoff-prefilter` / `kickoff-finalize` in the same pattern.
 
 | condition | verdict | outcome |
 |---|---|---|
-| Reverted pose passes structural filter AND `construct_reliance_flag == clean` | `pose_holds` | Design kept; `receptor.fasta` overwritten with reverted sequence so cycle N+1 starts from the validated sequence |
-| Reverted ra_eff ≥ threshold OR receptor not intact | `pose_collapses` | Design dropped from `passing.json`; kept in `all_results_multicycle.csv` with verdict |
-| Reverted pose passes structural filter BUT `construct_reliance_flag == contaminated` | `new_contamination` | Design dropped; kept in CSV |
+| Reverted pose passes structural filter AND `construct_reliance_flag == clean` | `pose_holds` | Design kept, and `receptor.fasta` is overwritten with the reverted sequence so cycle N+1 starts from the validated sequence |
+| Reverted ra_eff ≥ threshold OR receptor not intact | `pose_collapses` | Design dropped from `passing.json`, but kept in `all_results_multicycle.csv` with verdict |
+| Reverted pose passes structural filter BUT `construct_reliance_flag == contaminated` | `new_contamination` | Design dropped, but kept in CSV |
 | Design not flagged contaminated by `build-contaminated` | (no verdict) | Passes through unchanged |
 
 The ordering is: structural filter → reversion → repeat structural filter on reverted
@@ -124,19 +127,20 @@ validated-sequence versions of surviving designs, not on the steered sequences.
 design's `receptor.fasta` is overwritten with the reverted sequence. The original
 steered sequence is preserved implicitly in the reversion workdir
 (`cycle_N/pathway_<label>/reversions/<label>/receptor.fasta`). The existing
-`mutations.tsv` is left intact (it records that the position was touched, which is
-correct for the burnt-positions rule — cycle N+1 should not re-mutate a position
-that was already edited and reverted, since that would just recreate the contamination).
+`mutations.tsv` is left intact, because it records that the position was touched.
+That is correct for the burnt-positions rule. Cycle N+1 should not re-mutate a
+position that was already edited and reverted, since that would just recreate the
+contamination.
 
 ### 5. New subcommands
 
 | subcommand | runs where | purpose |
 |---|---|---|
-| `iterate-collect-prefilter` | host | intact filter; writes `prefilter.json` |
-| `build-contaminated` | container | contact analysis per intact candidate; writes `contaminated.json` |
-| `plan-reversions` | container | stages reverted Boltz YAMLs; writes `reversion_plan.json` |
+| `iterate-collect-prefilter` | host | intact filter, writes `prefilter.json` |
+| `build-contaminated` | container | contact analysis per intact candidate, writes `contaminated.json` |
+| `plan-reversions` | container | stages reverted Boltz YAMLs, writes `reversion_plan.json` |
 | `predict-reversion-one` | container (GPU) | Boltz on one reversion YAML by array index |
-| `harvest-reversions` | container | metrics on reverted predictions; writes `reversion_results.json` |
+| `harvest-reversions` | container | metrics on reverted predictions, writes `reversion_results.json` |
 | `iterate-collect-finalize` | host | verdict routing + novelty + maximin + resubmit |
 | `kickoff-prefilter` | host | cycle-0 equivalent of `iterate-collect-prefilter` |
 | `kickoff-finalize` | host | cycle-0 equivalent of `iterate-collect-finalize` |
@@ -148,9 +152,9 @@ New module with four pure-logic functions:
 - `build_reverted_sequence(steered_fasta_path, cumulative_mutations, positions_to_revert) → str`
   Reverts exactly the specified positions to their earliest wild-type residue from the
   mutation history. Includes a sanity check that verifies the current residue in the
-  FASTA matches the most-recent edit in the history before reverting. This check caught
-  the off-by-one label bug (see Bug history) correctly — it hard-failed rather than
-  silently reverting the wrong positions.
+  FASTA matches the most-recent edit in the history before reverting. This check
+  caught the off-by-one label bug (see Bug history) correctly. It hard-failed rather
+  than silently reverting the wrong positions.
 - `write_reversion_plan(workdir, contaminated_designs, plan_meta) → Path`
 - `harvest_reversion_results(workdir, ...) → Dict`
 - `classify_reversion_verdict(steered_metrics, reverted_metrics, ...) → str`
@@ -167,8 +171,8 @@ New: plan → predict-array → collect-prefilter → reversion-prep (build-cont
 plan-reversions) → reversion-predict-array → finalize (harvest-reversions +
 iterate-collect-finalize)
 
-The reversion array is sized to `ARRAY_MAX` (same as the main predict array); tasks
-whose index exceeds the number of contaminated designs exit 0 immediately. If no
+The reversion array is sized to `ARRAY_MAX`, the same as the main predict array.
+Tasks whose index exceeds the number of contaminated designs exit 0 immediately. If no
 designs are contaminated, the reversion prep produces an empty `reversion_plan.json`
 and all array tasks are no-ops.
 
@@ -234,7 +238,7 @@ through without reversion.
 | c0d03.c1d31 | 1.80 Å | pose_holds | |
 
 All three cycle-1 survivors come from the c0d03 parent. The c0d00 pathway produced
-zero pose_holds survivors — all 15 intact cycle-1 children of c0d00 collapsed when
+zero pose_holds survivors. All 15 intact cycle-1 children of c0d00 collapsed when
 reverted, with median reverted ra_eff ~28.4 Å (essentially returning to cold-start).
 
 ### The c0d00 vs c0d03 divergence
@@ -253,13 +257,13 @@ Without those mutations, Boltz returns to its cold-start prior. Without the reve
 pass, all 15 of these would have been presented as promising wet-lab candidates.
 
 **c0d03 pathway:** multiple pose_holds survivors. Cycle-1 mutations on c0d03's
-descendants are non-load-bearing at protected positions — when reverted, Boltz still
-finds the correct binding mode because the receptor's inherent sequence (the actual
+descendants are non-load-bearing at protected positions. When reverted, Boltz still
+finds the correct binding mode, because the receptor's inherent sequence (the actual
 ProteinMPNN design) is already sufficient to direct the prediction to the right site.
 
-The distinction matters enormously: sending c0d00 descendants to the wet lab would
-have been a waste of synthesis budget on sequences that Boltz does not predict will
-bind when expressed as designed.
+The distinction matters enormously. Sending c0d00 descendants to the wet lab would
+have wasted synthesis budget on sequences that Boltz does not predict will bind
+when expressed as designed.
 
 ## Bug history
 
@@ -273,7 +277,7 @@ labels like `c0d00.c0d04` (two cycle-0 segments) instead of the correct `c0d00.c
 When `read_cumulative_mutations` was called with the bogus label, it parsed two
 cycle-0 entries and walked back through two unrelated cycle-0 designs' mutation
 files. The cumulative history it returned was design_00's mutations combined with
-design_04's mutations — completely unrelated to what cycle-1 design_04 actually had
+design_04's mutations, completely unrelated to what cycle-1 design_04 actually had
 in its FASTA.
 
 `build_reverted_sequence`'s sanity check correctly caught this and hard-failed:
@@ -286,9 +290,9 @@ Fixed by dropping the `- 1` from both label constructions.
 
 **Note:** the sanity check in `build_reverted_sequence` working correctly here is
 important. If it had been permissive, the bug would have silently built garbage
-reverted sequences and Boltz would have predicted nonsense — probably all appearing
-as pose_collapses by coincidence, which would have been a hard-to-diagnose false
-negative. The hard-fail was the right behaviour.
+reverted sequences and Boltz would have predicted nonsense. Those would probably
+all have appeared as pose_collapses by coincidence, which would have been a
+hard-to-diagnose false negative. The hard-fail was the right behaviour.
 
 ### Cycle-0 `plan.json` schema mismatch
 
@@ -308,7 +312,8 @@ In `cmd_build_contaminated`'s cycle-0 branch, `label = label_suffix` produces
 `ValueError` (expects `cNdMM` format). The `except Exception` around the call
 silently catches it, sets `cumulative = []`, gives `mutated_cli = ""`, and omits
 `--mutated-positions` from the `compute_metrics.py` call. Without that argument,
-`construct_reliance_flag` is never computed — every cycle-0 design comes back clean.
+`construct_reliance_flag` is never computed, so every cycle-0 design comes back
+clean.
 
 Result: the entire cycle-0 reversion pass was a no-op. design_11 (Y44E contacting
 effector at protected position 44) and design_38 (L36R at position 36) were never
@@ -327,8 +332,8 @@ finalize functions only copied four structural fields from `rev` into the candid
 dict. The confidence metrics never reached `passing.json` or the aggregate CSV.
 
 This is critical because `reverted_ipsae_min` is the correct ranking signal for
-wet-lab triage — not `cm_ipsae_min` (steered ipSAE), which includes contributions
-from mutations that will not exist in the expressed construct.
+wet-lab triage. The right signal is not `cm_ipsae_min` (steered ipSAE), which
+includes contributions from mutations that will not exist in the expressed construct.
 
 Fix: added `_REVERTED_CONFIDENCE_FIELDS` and `_copy_reverted_confidence` helper.
 Extended `reversion.py::harvest_reversion_results` to emit 11 reverted confidence
@@ -346,9 +351,10 @@ For reversion validation to run, always use `--n-cycles 2` or higher.
 
 The first run used `af3_pikp1_native_avrpikf_complex.pdb` as ground truth and did
 not pass `--receptor-fasta`. The plan stage extracted the receptor sequence from the
-PDB's chain A, which is the RFDiffusion Cα-only backbone with glycine placeholders
-in the de novo region (positions 33-40, 74-79 all G). Boltz then tried to fold a
-poly-glycine stretch and produced a receptor backbone at 14.5 Å from the reference.
+PDB's chain A. That chain is the RFDiffusion Cα-only backbone, with glycine
+placeholders in the de novo region (positions 33-40, 74-79 all G). Boltz then tried
+to fold a poly-glycine stretch and produced a receptor backbone at 14.5 Å from the
+reference.
 
 Fix: always pass `--receptor-fasta design_3_seq_3_receptor.fasta` for RFDiffusion
 designs. The ground-truth PDB is used only for structural reference (RMSD measurement
@@ -377,7 +383,7 @@ didn't end up contacting the effector in the rescued pose. This meant the revers
 pass had nothing to do at cycle 0, and the 5 cycle-0 survivors passed through as-is.
 
 This is consistent with the notes-3 observation that cycle-0 single-shot steering
-is often sufficient to produce structurally correct poses — the contamination problem
+is often sufficient to produce structurally correct poses. The contamination problem
 accumulates as later cycles build on progressively more-mutated parents.
 
 ### 3. The `new_contamination` rate is low (2/41 post-reversion survivors)
@@ -391,9 +397,9 @@ what triggers it.
 
 This suggests c0d03's cycle-0 mutations established a receptor configuration that
 inherently supports the designed interface even without further steering. What makes
-c0d03's receptor more self-sufficient than c0d00's is not yet clear — the mutations
-are drawn from the same pool of 6 candidate positions. Worth checking what c0d03's
-3 cycle-0 mutations actually were vs c0d00's.
+c0d03's receptor more self-sufficient than c0d00's is not yet clear, since the
+mutations are drawn from the same pool of 6 candidate positions. Worth checking
+what c0d03's 3 cycle-0 mutations actually were vs c0d00's.
 
 ## Run commands for this design class
 
@@ -442,15 +448,16 @@ a valid sequence source.
 
 ## Files produced this session
 
-- `boltz2_negative_steering.py` — `--design-region-indices-file` flag; writes
+- `boltz2_negative_steering.py` — `--design-region-indices-file` flag, writes
   `design_region_idx` into `plan.json`
-- `boltz2_iterate_steering.py` — 8 new subcommands; `iterate-collect` and
-  `kickoff` split into prefilter/finalize phases; `cmd_aggregate` reversion columns;
-  cycle-0 schema-awareness in `cmd_build_contaminated` and `cmd_harvest_reversions`
+- `boltz2_iterate_steering.py` — 8 new subcommands, `iterate-collect` and
+  `kickoff` split into prefilter/finalize phases, `cmd_aggregate` reversion columns,
+  and cycle-0 schema-awareness in `cmd_build_contaminated` and
+  `cmd_harvest_reversions`
 - `reversion.py` — new module with `build_reverted_sequence`,
   `write_reversion_plan`, `harvest_reversion_results`, `classify_reversion_verdict`
 - `compute_metrics.py` — `construct_reliance_flag` and protected-set intersection
-  columns; `--protected-positions` CLI flag
+  columns, plus the `--protected-positions` CLI flag
 - `derive_design_region.py` — new standalone helper
 - `submit_boltz2_negative_steering.sh` — 6-stage chain (was 3)
 - `submit_boltz2_iterate_steering.sh` — 6-stage chain (was 3)
@@ -477,35 +484,37 @@ workdir is already in scope) rather than going through `read_cumulative_mutation
 The `mutations.tsv` path is `pdb.parent / "mutations.tsv"` — straightforward stdlib
 read, no pathway label needed.
 
-Consequence for the run where this was found: the cycle-0 reversion pass was a
-complete no-op. design_11 (Y44E contacting effector at protected position 44) and
-design_38 (L36R contacting effector at protected position 36) were never reverted.
-All cycle-1 designs were unaffected — their labels (`c0d03.c1d32` etc.) parse
-correctly through `read_cumulative_mutations`, so contamination was properly detected
-and reverted for cycle 1.
+In the run where this was found, the cycle-0 reversion pass was a complete no-op.
+design_11 (Y44E contacting effector at protected position 44) and design_38 (L36R
+contacting effector at protected position 36) were never reverted. All cycle-1
+designs were unaffected. Their labels (`c0d03.c1d32` etc.) parse correctly through
+`read_cumulative_mutations`, so contamination was properly detected and reverted
+for cycle 1.
 
 ### `reverted_ipsae_min` and confidence suite not forwarded to aggregate CSV
 
 After the reversion pass ran correctly for cycle 1, `harvest-reversions` was already
 computing `reverted_ipsae_min`, `reverted_iptm`, `reverted_complex_plddt` and storing
 them in `reversion_results.json`. However, `cmd_kickoff_finalize` and
-`cmd_iterate_collect_finalize` only copied four structural fields from `rev` into the
-candidate dict — `reverted_ra_eff_vs_truth`, `reverted_independent_receptor_rmsd`,
-`reverted_independent_effector_rmsd`, `reverted_construct_reliance_flag`. The
-confidence metrics never made it into `passing.json` or the aggregate CSV.
+`cmd_iterate_collect_finalize` only copied four structural fields from `rev` into
+the candidate dict. Those were `reverted_ra_eff_vs_truth`,
+`reverted_independent_receptor_rmsd`, `reverted_independent_effector_rmsd` and
+`reverted_construct_reliance_flag`. The confidence metrics never made it into
+`passing.json` or the aggregate CSV.
 
-This was the critical gap: `reverted_ipsae_min` is the correct ranking signal for
-wet-lab triage — Boltz's confidence in the interface using only the residues that
-will actually exist in the expressed construct. Using `cm_ipsae_min` (steered
-prediction) for ranking is systematically biased upward for contaminated designs,
-because the steered prediction includes the contribution of mutations that will not
-be present in the construct.
+This was the critical gap. `reverted_ipsae_min` is the correct ranking signal for
+wet-lab triage. It is Boltz's confidence in the interface using only the residues
+that will actually exist in the expressed construct. Using `cm_ipsae_min` (steered
+prediction) for ranking is systematically biased upward for contaminated designs.
+The steered prediction includes the contribution of mutations that will not be
+present in the construct.
 
 Fix: added `_REVERTED_CONFIDENCE_FIELDS` list and `_copy_reverted_confidence(c, rev)`
-helper. Extended `reversion.py::harvest_reversion_results` to emit the full suite
-(`reverted_ipsae_min/ab/ba`, `reverted_iptm`, `reverted_ptm`, `reverted_actifptm`,
-`reverted_complex_plddt`, `reverted_avg_plddt`, `reverted_ipae`, `reverted_pae_mean`,
-`reverted_pae_pass_frac`). Wired `_copy_reverted_confidence` into all six verdict
+helper. Extended `reversion.py::harvest_reversion_results` to emit the full suite.
+That suite is `reverted_ipsae_min/ab/ba`, `reverted_iptm`, `reverted_ptm`,
+`reverted_actifptm`, `reverted_complex_plddt`, `reverted_avg_plddt`,
+`reverted_ipae`, `reverted_pae_mean` and `reverted_pae_pass_frac`. Wired
+`_copy_reverted_confidence` into all six verdict
 sites (pose_holds / pose_collapses / new_contamination × 2 finalize functions).
 Updated `cmd_aggregate` to forward all 11 fields into the CSV for both cycle-0 and
 cycle-1+ rows.
@@ -513,16 +522,16 @@ cycle-1+ rows.
 **Important note on `ipTM`:** `reverted_iptm` is the Boltz-native scalar from the
 confidence JSON of the reverted prediction, not a recomputed value. `ipSAE` is the
 more principled ranking signal because it derives from the PAE matrix over actual
-interface pairs — but `reverted_iptm` is also available and moves consistently with
+interface pairs. But `reverted_iptm` is also available and moves consistently with
 `reverted_ipsae_min` across candidates.
 
 **Why not mask mutated positions from `cm_ipsae_min`?** A construct-aware ipSAE
-computed by masking mutated rows from the steered prediction's PAE matrix would still
-be contaminated — Boltz folded the structure with the mutations in place, so every
-residue's PAE reflects a backbone that was conditioned on the mutations being there.
-Masking rows from an already-mutation-conditioned PAE matrix gives a score for "the
-non-mutated residues in a structure as predicted with mutations present" — which is
-not the same as "confidence in binding if only the construct sequence existed."
+computed by masking mutated rows from the steered prediction's PAE matrix would
+still be contaminated. Boltz folded the structure with the mutations in place, so
+every residue's PAE reflects a backbone that was conditioned on the mutations being
+there. Masking rows from an already-mutation-conditioned PAE matrix scores "the
+non-mutated residues in a structure as predicted with mutations present". That is
+not the same as "confidence in binding if only the construct sequence existed".
 The only clean answer is to run Boltz on the reverted sequence, which is exactly
 what the reversion pass does. `compute_metrics.py` was therefore kept unchanged.
 
@@ -549,8 +558,8 @@ incidental, pose moved only 0.5 Å on reversion).
 | 11 | c0d03.c1d41 | 1 | 1.24 Å | 1.24 Å | 0.732 | — |
 
 **Design_38 confirmed false positive.** The `low_pass_frac` flag on `cm_ipsae_min`
-(0.016) was already catching the problem — steered confidence was near-zero despite
-the 1.15 Å ra_eff. The reversion pass confirms it: L36R was the only thing holding
+(0.016) was already catching the problem. Steered confidence was near-zero despite
+the 1.15 Å ra_eff. The reversion pass confirms it. L36R was the only thing holding
 Boltz's effector at the correct site.
 
 **c0d03.c1d35 is the top candidate by reverted ipSAE (0.884) despite the largest
@@ -563,16 +572,16 @@ artefact.
 **The ranking split between ra_eff and reverted ipSAE is the intended pipeline
 output.** c0d03.c1d41 has the best structural score (1.24 Å) but ranks 11th on
 reverted ipSAE (0.732). c0d03.c1d35 has the best confidence but a middling structural
-score. Neither axis alone is sufficient; both are needed.
+score. Neither axis alone is sufficient. Both are needed.
 
-**For wet-lab triage:** rank by `reverted_ipsae_min` for contaminated designs,
-fall back to `cm_ipsae_min` for uncontaminated designs (where the two are equivalent
-— no mutations contacted the effector, so steered and reverted predictions are
-identical).
+**For wet-lab triage:** rank by `reverted_ipsae_min` for contaminated designs.
+Fall back to `cm_ipsae_min` for uncontaminated designs, where the two are
+equivalent. No mutations contacted the effector there, so steered and reverted
+predictions are identical.
 
 **For wet-lab synthesis:** the construct sequence is the steered FASTA (not the
 reverted one). `pose_holds` means "the pose doesn't depend on the load-bearing
-mutations" — but the wet-lab construct carries the full steered sequence. The FASTA
+mutations". The wet-lab construct still carries the full steered sequence. The FASTA
 to order is at `cycle_N/pathway_<label>/steered/design_XX/receptor.fasta`.
 
 **ChimeraX top-5 paths for visual QC:**
@@ -617,7 +626,7 @@ cycle_0/steered/design_11/prediction.pdb                (rev ipSAE 0.751)
 5. **Production tier update.** The notes-3 tier (`ra_eff < 3.0 AND tJac >= 0.7
    AND intact`) predates the reversion pass. With reversion available, the criterion
    for sending a design to the wet lab should be:
-   `reversion_verdict == 'pose_holds' OR (cycle == 0 AND intact AND ra_eff < 3.0)`
+   `reversion_verdict == 'pose_holds' OR (cycle == 0 AND intact AND ra_eff < 3.0)`.
    The confidence-aware tier from notes 5 (`ra_eff < 5 AND tJac >= 0.7 AND
    ipSAE >= 0.5`) also still needs formalising as a separate RFDiffusion-specific
    tier in `compare_versions.py`.
@@ -625,7 +634,7 @@ cycle_0/steered/design_11/prediction.pdb                (rev ipSAE 0.751)
 6. **iRMSD / DockQ metric.** Carried from notes 3. `ra_eff` is still the primary
    filter and it's still a whole-effector Cα RMSD with no interface restriction.
    The 7B1I flexible-termini problem from notes 3 hasn't been addressed. iRMSD is
-   the easiest drop-in; DockQ is the most standard.
+   the easiest drop-in, and DockQ is the most standard.
 
 7. **`boltz2_iterate_steering.py` is now 4175 lines (2868 actual code).** Natural
    split points: cycle-0/cycle-1 phase handlers, reversion subcommands, and
@@ -649,7 +658,7 @@ cycle_0/steered/design_11/prediction.pdb                (rev ipSAE 0.751)
 - **The `build_reverted_sequence` sanity check is intentionally strict.** It will
   hard-fail if the cumulative mutation history is inconsistent with the FASTA. This
   is a feature. If you see "steered sequence mismatch at position X", the most likely
-  cause is a wrong label being passed to `read_cumulative_mutations` — check that
+  cause is a wrong label being passed to `read_cumulative_mutations`. Check that
   `make_pathway_label(parent_label, cycle, design_idx)` is using the child's cycle,
   not `cycle - 1`.
 - **Cycle-0 plan.json does not have `experiment_root` or `cycle`.** Any new

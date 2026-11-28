@@ -62,9 +62,9 @@ the data the orthogonal-metrics cascade needs:
 - `cycle_0/plan.json` — `ground_truth`, `effector_template_cif`, and
   `cold_start_seeds[*].pdb_path` rewritten to local paths.
   `boltz_container`, `receptor_fasta_override`, `effector_fasta_override`,
-  and every `designs[*].dir` / `designs[*].yaml` blanked out (these
-  pointed at HPC scratch / a Singularity image; the orthogonal-metrics
-  test cascade does not read them).
+  and every `designs[*].dir` / `designs[*].yaml` blanked out. Those
+  pointed at HPC scratch / a Singularity image, and the
+  orthogonal-metrics test cascade does not read them.
 - `cycle_0/effector_template.cif` — used by `AF3_NOMSA_ON_SURVIVORS`.
 - `cycle_0/initial_prediction[_s<N>].pdb` — the cold-start prediction
   PDB(s).
@@ -76,10 +76,10 @@ the data the orthogonal-metrics cascade needs:
 
 These exclusion patterns were applied when building the source tarball:
 
-- `*.npz` — Boltz internal weight checkpoints; not read by any
+- `*.npz` — Boltz internal weight checkpoints, not read by any
   orthogonal_metrics module (verified).
-- `*.a3m`, `msa/` — MSA inputs; not used by AF3-no-MSA stream.
-- `predictions/` — raw Boltz outputs; the cascade only reads PDBs via
+- `*.a3m`, `msa/` — MSA inputs, not used by AF3-no-MSA stream.
+- `predictions/` — raw Boltz outputs. The cascade only reads PDBs via
   the `canonical_pdb` path.
 - `contamination_scratch/` — intermediate files from the
   build-contaminated stage.
@@ -102,16 +102,16 @@ python3 scripts/rewrite_fixture_paths.py \
 The rewriter points `plan["ground_truth"]` at
 `tests/negative_steering/data/design_pdbs/design_<N>.pdb`. The two
 fixtures share that directory rather than duplicating the parent
-design PDBs into both `data/` trees — the per-module-test isolation
-contract is preserved because the path is absolute (not a relative
-import) and either fixture can be re-staged independently with the
-rewriter pointing at a different `--design-pdbs-dir`.
+design PDBs into both `data/` trees. The per-module-test isolation
+contract still holds, because the path is absolute rather than a
+relative import. Either fixture can also be re-staged independently,
+with the rewriter pointing at a different `--design-pdbs-dir`.
 
 ## Path coverage
 
 See `notes/inventory/15_discovery_run_path_coverage.md` §Orthogonal
-metrics for the full path-coverage analysis. Note Coverage gap 3:
-production thresholds yield 0 passes on the discovery cohort because
+metrics for the full path-coverage analysis. Note Coverage gap 3.
+Production thresholds yield 0 passes on the discovery cohort, because
 `af3_nomsa_ra_eff` is a warning-style gate that AF3-no-MSA's accuracy
 floor regularly trips. The pass branch of `merge_orthogonal_metrics.py`
 is exercisable via param override (e.g. `--orthogonal_filter_af3_ra_max=50.0`)

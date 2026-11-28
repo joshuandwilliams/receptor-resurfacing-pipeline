@@ -2,7 +2,7 @@
 
 ## Goal
 
-Enable cuEquivariance CUDA kernels inside the `boltz2_negsteer` Singularity/Apptainer container so Boltz-2 inference runs 20–30% faster than the CPU-fallback path. Relevant because production experiments run ~10,000 Boltz predictions; compounded, the speedup is meaningful.
+Enable cuEquivariance CUDA kernels inside the `boltz2_negsteer` Singularity/Apptainer container so Boltz-2 inference runs 20–30% faster than the CPU-fallback path. Relevant because production experiments run ~10,000 Boltz predictions, and compounded over that many calls the speedup is substantial.
 
 ## Symptom
 
@@ -28,7 +28,7 @@ Three independent facts combined:
 
 2. **torch 2.6.0+cu124 ships cuBLAS 12.4.5.8** bundled as the `nvidia-cublas-cu12` pip wheel. This wheel does NOT contain the required symbol.
 
-3. **`torch/__init__.py`'s `_preload_cuda_deps()` dlopens the bundled cuBLAS at import time**, populating process memory with the stale 12.4 library. When `libcue_ops.so` is subsequently loaded and asks the dynamic linker for `libcublas.so.12`, Linux's policy of one SONAME per process means the already-loaded 12.4 version is reused — LD_LIBRARY_PATH changes at that point are inert.
+3. **`torch/__init__.py`'s `_preload_cuda_deps()` dlopens the bundled cuBLAS at import time**, populating process memory with the stale 12.4 library. When `libcue_ops.so` is subsequently loaded and asks the dynamic linker for `libcublas.so.12`, Linux's policy of one SONAME per process reuses the already-loaded 12.4 version. LD_LIBRARY_PATH changes at that point are inert.
 
 So even if we installed cuBLAS 12.8 somewhere on disk, torch would always win at runtime by loading 12.4 first.
 
@@ -38,22 +38,22 @@ These were tried, confirmed broken, and abandoned:
 
 - **`pip install --upgrade nvidia-cublas-cu12==12.6.*`** — succeeded in isolation but produced `ResolutionImpossible` errors on every subsequent pip install because torch 2.6 declares a hard `==12.4.5.8` pin on `nvidia-cublas-cu12`.
 - **Pinning upgraded NVIDIA wheels in the constraints file** — same `ResolutionImpossible` cascade.
-- **`LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH` in `%environment`** — inert. Once torch's `_preload_cuda_deps` has loaded the pip-bundled cuBLAS into the process, the dynamic linker won't look elsewhere. Proven with the `ctypes.CDLL` vs `import torch; ctypes.CDLL` comparison during sandbox testing: the raw dlopen succeeded against system 12.8, but the same dlopen after `import torch` failed with the undefined-symbol error.
-- **Overriding `LD_LIBRARY_PATH` at `apptainer exec` invocation** — same reason. Too late; torch has already loaded stale cuBLAS by the time the user's code runs.
+- **`LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH` in `%environment`** — inert. Once torch's `_preload_cuda_deps` has loaded the pip-bundled cuBLAS into the process, the dynamic linker won't look elsewhere. Proven with the `ctypes.CDLL` vs `import torch; ctypes.CDLL` comparison during sandbox testing. The raw dlopen succeeded against system 12.8, but the same dlopen after `import torch` failed with the undefined-symbol error.
+- **Overriding `LD_LIBRARY_PATH` at `apptainer exec` invocation** — same reason. Too late, because torch has already loaded stale cuBLAS by the time the user's code runs.
 
 ## The architectural fix: NGC-style build
 
-Pattern lifted from NVIDIA's NGC PyTorch containers (e.g. 25.01): install CUDA at the **system level** via the NVIDIA rhel9 yum repo, install torch with `--no-deps` so it doesn't pull the pip wheels, rely on `ldconfig` + system `/usr/local/cuda/lib64` to satisfy torch's runtime dlopens.
+Pattern lifted from NVIDIA's NGC PyTorch containers (e.g. 25.01). Install CUDA at the **system level** via the NVIDIA rhel9 yum repo, and install torch with `--no-deps` so it doesn't pull the pip wheels. `ldconfig` plus the system `/usr/local/cuda/lib64` then satisfies torch's runtime dlopens.
 
 Concretely in `%post`:
 
 1. Add NVIDIA rhel9 yum repo (`cuda-rhel9.repo`).
-2. `dnf install` the minimal CUDA 12.8 runtime packages (package names verified against NVIDIA's CUDA-Q build script, cuSPARSELt download page, and NCCL download page — naming is inconsistent across libraries, not guessable).
+2. `dnf install` the minimal CUDA 12.8 runtime packages. Package names were verified against NVIDIA's CUDA-Q build script, cuSPARSELt download page, and NCCL download page, because naming is inconsistent across libraries and not guessable.
 3. `pip install --no-deps torch==2.6.0` to prevent torch pulling its declared nvidia-*-cu12 wheels.
 4. Install torch's non-CUDA python deps explicitly (filelock, sympy, etc.).
 5. Install the rest of the stack (cuequivariance, trifast, boltz, DockQ, freesasa, MDAnalysis) with constraints pinning versions.
 
-**But this alone was insufficient.** Subsequent pip installs re-resolved torch's declared deps and pulled in all 14 nvidia-*-cu12 wheels anyway — the `--no-deps` only applied to the literal `pip install torch` command. Once those wheels exist on disk, torch's `_preload_cuda_deps` finds them via entry-point metadata and loads them in preference to the system libs.
+**But this alone was insufficient.** Subsequent pip installs re-resolved torch's declared deps and pulled in all 14 nvidia-*-cu12 wheels anyway. The `--no-deps` only applied to the literal `pip install torch` command. Once those wheels exist on disk, torch's `_preload_cuda_deps` finds them via entry-point metadata and loads them in preference to the system libs.
 
 **So the final step that actually fixes it:** after all installs complete, purge the 12 stale nvidia-*-cu12 wheels from the image.
 
@@ -94,13 +94,13 @@ torch 2.6's `torch/cuda/__init__.py` does `import pynvml`. Two PyPI packages pro
 - `pynvml` — original third-party wrapper, deprecated.
 - `nvidia-ml-py` — NVIDIA's own maintained package, also exporting `pynvml`.
 
-With both installed, torch finds the deprecated one first and emits `FutureWarning` on every `import torch`. Uninstalling the `pynvml` package leaves `nvidia-ml-py` as the sole provider; `import pynvml` resolves to its shim (`/usr/local/lib/python3.11/site-packages/pynvml.py`), and the warning disappears.
+With both installed, torch finds the deprecated one first and emits `FutureWarning` on every `import torch`. Uninstalling the `pynvml` package leaves `nvidia-ml-py` as the sole provider. `import pynvml` then resolves to its shim (`/usr/local/lib/python3.11/site-packages/pynvml.py`), and the warning disappears.
 
 Added to the same purge block in `%post`.
 
 ## Validation path (writable sandbox before bake-in)
 
-Container rebuilds take ~hour. To avoid another failed rebuild, the fix was validated on a writable sandbox derived from the existing broken image:
+Container rebuilds take ~hour, so the fix was validated on a writable sandbox derived from the existing broken image to avoid another failed rebuild:
 
 1. `apptainer build --sandbox boltz2_sandbox <broken.img>` — unpacks the squashfs into a mutable directory tree.
 2. `apptainer exec --writable --fakeroot boltz2_sandbox pip uninstall -y <the 12 wheels>`.
@@ -112,7 +112,7 @@ Container rebuilds take ~hour. To avoid another failed rebuild, the fix was vali
    - `import trifast` OK
    - A real cuBLAS matmul on GPU returns a valid result
 
-All six criteria passed in the sandbox. Then and only then was the .def updated and a full rebuild kicked off. The rebuilt image passed the same six checks.
+All six criteria passed in the sandbox. Only then was the .def updated and a full rebuild initiated, and the rebuilt image passed the same six checks.
 
 Notable sandbox logistics:
 - Built on NBI-HPC (software node) where `/tmp/jowillia` exists and sandbox builds work. GPU nodes can't see `/tmp` across nodes, so sandbox had to be copied to `/hpc-home/jowillia/singularity/`.
@@ -132,13 +132,13 @@ trifast import OK, attrs: ['autotune', 'autotune_helpers', 'torch', 'triangle_at
 cuBLAS matmul OK, shape: torch.Size([8, 64, 64]) sum: 31220.7265625
 ```
 
-Next: real negative-steering test with kernels enabled (drop `--negsteer_no_kernels true`), compare wall-clock to the v3 run that used the CPU-fallback path. **Result pending as of writing**; will be appended when available.
+Next: real negative-steering test with kernels enabled (drop `--negsteer_no_kernels true`), compare wall-clock to the v3 run that used the CPU-fallback path. **Result pending as of writing**, to be appended when available.
 
 ## Key design principles learned
 
 - **Don't trust pip's `--no-deps`** when the downstream installs will re-resolve the dep tree. Either uninstall after, or use `uv pip install --no-deps --system ...` and build a lockfile.
 - **Python dynamic linking is one-shot per SONAME per process.** Once a `.so` is loaded, LD_LIBRARY_PATH changes can't redirect subsequent dlopens of the same SONAME. This is why the NGC approach requires physically removing the competing libs, not just re-ordering paths.
-- **Always enumerate package names explicitly in verification regexes.** Lazy wildcards like `^nvidia-.*-cu12` match things you didn't mean to match. The verification step is specifically the one place where laziness is most expensive — when it fires, the build fails at the very end, after hours.
+- **Always enumerate package names explicitly in verification regexes.** Lazy wildcards like `^nvidia-.*-cu12` match things you didn't mean to match. The verification step is the one place where laziness is most expensive. When it fires, the build fails at the very end, after hours.
 - **Sandbox-test architectural changes before rebuilding from scratch.** Even a writable sandbox copy that takes 45 min to set up is cheap compared to a 1-hour rebuild that fails at the end.
 - **Verify package names against authoritative sources, not pattern-matching.** CUDA package names on NVIDIA's rhel9 repo are inconsistent: `cuda-cudart-12-8`, `libcublas-12-8`, `libcudnn9-cuda-12`, `libcusparselt0`, `libnccl`. Each library was verified from NVIDIA's own docs (CUDA-Q, cuSPARSELt, NCCL download pages) before adding to the dnf list.
 

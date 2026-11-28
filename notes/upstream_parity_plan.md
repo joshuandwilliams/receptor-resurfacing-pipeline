@@ -1,8 +1,8 @@
 # Upstream parity plan
 
 What to implement here so this repo reaches the state
-`structure-negative-steering` reached across its 43 merged pull requests
-(#1–#33, #35–#44; #34 does not exist), plus the split that produced
+`structure-negative-steering` reached across its 43 merged pull requests. That
+is #1–#33 and #35–#44, since #34 does not exist, plus the split that produced
 `negative-steering-analyses`.
 
 Written 2026-11-27. Every claim below was checked against the file it names.
@@ -21,8 +21,8 @@ visible as `/Volumes/Group-Scratch/Mark-Banfield/...`. It holds a checkout at
 
 That supersedes §4 of this plan. Every one of the six defects §4 lists was
 fixed upstream in PR #16, #18, #22, #28, #30 or #31, all of which are below
-#38, so the installed engine already has them. There is nothing to port. The
-vendored copies get deleted instead.
+#38, so the installed engine already has them. There is nothing to port, so
+the vendored copies get deleted instead.
 
 The engine exposes a versioned tool interface: `negsteer run`, writing
 `negsteer_result.json` at output contract version 1, with five named outputs
@@ -41,7 +41,7 @@ the cluster and has not been made.
 rewritten for this repository's own stages, `contig_utils.py` stays as
 RFDiffusion support, and `compute_metrics.py` folds into
 `compute_interface_metrics.py`. No engine code and no engine imports. The
-coupling to undo is real: `pipeline_thresholds` is imported by 11 files here,
+coupling to undo is real. `pipeline_thresholds` is imported by 11 files here,
 `contig_utils` by 6 and `compute_metrics` by 5.
 
 **The analyses split into their own repository**, with this one as a submodule.
@@ -53,8 +53,8 @@ See the blocker below.
 The twelve numbered analyses read their inputs from
 `experiments/campaigns/pikp1_avrpikf/runs/crystal_full_test_contig/results/`
 and `.../agroinfiltrations/`. Both are matched by `.gitignore:101` and
-`.gitignore:153` and carry **zero tracked files**. They exist on local disk
-only.
+`.gitignore:153` and carry **zero tracked files**, and they exist on local
+disk only.
 
 So `git mv` offers them no protection, a new repository would not receive
 them, and nothing in version control would notice if they were lost. They are
@@ -144,24 +144,24 @@ This is first because nothing else can be measured until the suite is green.
 **2.1 Fix the path-normalisation comparator under pandas 3.**
 `python -m pytest -q -m local_unit` (ignoring the two skimage files) reports
 **2 failed, 410 passed, 7 skipped, 272 deselected**. Both failures are in
-`tests/characterization/helpers/tests/test_csv_compare.py`:
-`test_compare_csv_exact_modulo_paths_normalises_workdir_hash` and
+`tests/characterization/helpers/tests/test_csv_compare.py`. The failing cases
+are `test_compare_csv_exact_modulo_paths_normalises_workdir_hash` and
 `test_compare_csv_exact_modulo_paths_normalises_hpc_home_prefix`.
 
 The mechanism: `tests/characterization/helpers/csv_compare.py:125` guards the
 normalisation with `if df[col].dtype == object`. The installed pandas is 3.0.1,
 where a text column read by `read_csv` has dtype `str`, not `object`. I
-confirmed it directly — `pd.read_csv(...)['home_path'].dtype` prints `str` and
-`dtype == object` is False. So the normaliser at
+confirmed it directly, and `pd.read_csv(...)['home_path'].dtype` prints `str`
+while `dtype == object` is False. So the normaliser at
 `tests/characterization/helpers/path_normalize.py:18` is never applied, and two
 paths that should collapse to `<HOME>` and `<WORKDIR>` are compared raw.
 
 The normaliser itself is correct. The regex at `path_normalize.py:13-15` does
-match `/hpc-home/<user>`. Only the dtype guard is wrong.
+match `/hpc-home/<user>`, so only the dtype guard is incorrect.
 
-The fix is to select string columns by `not is_numeric_dtype(...)`, which
-`csv_compare.py:153` already uses for a different purpose in
-`_string_column_set`, rather than by identity against `object`.
+The fix is to select string columns by `not is_numeric_dtype(...)` rather than
+by identity against `object`. `csv_compare.py:153` already uses that predicate
+for a different purpose in `_string_column_set`.
 `pyproject.toml:14` declares `pandas>=2.0` with no upper bound, so this also
 needs a decision on whether to pin below 3 or support both. Supporting both is
 one predicate.
@@ -169,10 +169,10 @@ one predicate.
 **2.2 Stop `pytest tests/` crashing.** `python -m pytest --collect-only -q
 tests/` ends in `INTERNALERROR`, not a collection error. The cause is
 `tests/negative_steering/test_negsteer_plots.py:37`, which raises `SystemExit`
-at module import because it is a command-line harness rather than a test
-module, and pytest's assertion-rewriting importer does not handle `SystemExit`
-at import. Five files share this shape and contain zero `def test_` functions
-between them:
+at module import. It is a command-line harness rather than a test module, and
+pytest's assertion-rewriting importer does not handle `SystemExit` at import.
+Five files share this shape and contain zero `def test_` functions between
+them:
 
 | file | `def test_` count |
 |:---|---:|
@@ -183,8 +183,8 @@ between them:
 | `tests/rfdiffusion/test_rfdiffusion_plots.py` | 0 |
 | `tests/rosetta_filtering/test_rosetta_filter_plots.py` | 0 |
 
-Renaming them off the `test_*.py` pattern is the fix. They are harnesses, and
-the name is what makes pytest import them.
+Renaming them off the `test_*.py` pattern is the fix, because they are
+harnesses and the name is what makes pytest import them.
 
 **2.3 Rename the markers to what they gate on, as upstream PR1 did.**
 `pyproject.toml:18-27` declares eight markers. Five carry no test:
@@ -239,8 +239,8 @@ The Nextflow pin matters and this repo is where it is defined.
 workflow comment says the pin comes from that file in this repo, which is
 accurate.
 
-**3.3 Adopt ruff with upstream's rule set.** No lint configuration exists here
-— no `[tool.ruff]`, no `.flake8`, no `.pre-commit-config.yaml`. Under
+**3.3 Adopt ruff with upstream's rule set.** No lint configuration exists
+here: no `[tool.ruff]`, no `.flake8`, no `.pre-commit-config.yaml`. Under
 upstream's exact rules (`--select E,F,W,I --ignore E501 --line-length 100`)
 this repo reports **498 errors**, 225 of them auto-fixable:
 
@@ -262,8 +262,8 @@ this repo reports **498 errors**, 225 of them auto-fixable:
 By directory: `scripts/` 183, `bin/` 153, `experiments/` 132, `tests/` 28.
 
 Two of these are worth separating from the mechanical bulk. The six F821
-undefined names are all in analysis helpers and notebooks, not in `bin/` —
-three are `shap` in
+undefined names are all in analysis helpers and notebooks, not in `bin/`.
+Three are `shap` in
 `experiments/campaigns/pikp1_avrpikf/analyses/05-steerability-correlates/helpers.py:297,305,307`
 and three are `design_residues_pdb` in
 `scripts/RFDiffusion_JoshW_v4_incremental_save_2.ipynb`. The F811
@@ -302,8 +302,8 @@ patches.
 monolithic `bin/boltz2_iterate_steering.py` into `negsteer_coldstart.py`,
 `negsteer_aggregate.py`, `pathway_labels.py` and the CLI half of
 `reversion.py`. This repo never took that split. The monolith is still here at
-`bin/boltz2_iterate_steering.py`, and this repo's `bin/reversion.py` is the
-pre-split library half with no `main`, no `build_parser` and no `cmd_*`
+`bin/boltz2_iterate_steering.py`. This repo's `bin/reversion.py` is the
+pre-split library half, with no `main`, no `build_parser` and no `cmd_*`
 functions. So an upstream patch to `reversion.py` or `negsteer_aggregate.py`
 has to be re-aimed at the matching function inside the monolith.
 
@@ -311,8 +311,8 @@ has to be re-aimed at the matching function inside the monolith.
 `bin/boltz2_negative_steering.py:750-761` appends the templates block at
 six-space indent, inside the effector's `- protein:` entry. The comment on
 lines 751-753 asserts that placement is correct. It is not. Boltz 2.2.1 reads
-`templates` only from the schema root, and a chain entry is inspected only for
-the key naming its entity type, so the nested block is dropped with no warning.
+`templates` only from the schema root. A chain entry is inspected only for the
+key naming its entity type, so the nested block is dropped with no warning.
 Upstream verified this from Boltz's own run records, where both committed
 fixtures carry `"templates": []`.
 
@@ -335,8 +335,8 @@ unconditionally with `(n // 2) + 1`.
 
 I checked whether the two agree. At the default `frac=0.5` they agree for
 n=1..5, so there is no live consequence today. At any other fraction they
-diverge — at `frac=0.7, n=3` the conditional gives 3 and the overwrite gives 2;
-at `frac=0.34, n=2` the conditional gives 1 and the overwrite gives 2. So the
+diverge. At `frac=0.7, n=3` the conditional gives 3 and the overwrite gives 2.
+At `frac=0.34, n=2` the conditional gives 1 and the overwrite gives 2. So the
 parameter is dead rather than wrong. All six occurrences of
 `threshold_majority_frac` in the repo are inside `extract_passing.py` itself,
 so nothing passes a non-default value. The fix is deletion, which is what
@@ -344,12 +344,12 @@ upstream did.
 
 **4.4 Index the Boltz sidecars once (upstream PR28).**
 `bin/compute_metrics.py` runs three chained `glob.glob` calls per sidecar kind
-per PDB, inside the `for pdb_path in pdb_files:` loop — confidence at
-1270-1272, pLDDT at 1296-1298, PAE at 1325-1327. The third call in each triple
-is `recursive=True` over `pred_dir`, which is loop-invariant. At the benchmark's
-25 models that is 75 recursive walks of one directory. This repo has no
-`_sidecar_index` and no `_sidecar` function (`grep -c` returns 0). Upstream
-measured 4.2× on `parse_boltz2` end to end.
+per PDB, inside the `for pdb_path in pdb_files:` loop. The call sites are
+confidence at 1270-1272, pLDDT at 1296-1298 and PAE at 1325-1327. The third
+call in each triple is `recursive=True` over `pred_dir`, which is
+loop-invariant. At the benchmark's 25 models that is 75 recursive walks of one
+directory. This repo has no `_sidecar_index` and no `_sidecar` function
+(`grep -c` returns 0). Upstream measured 4.2× on `parse_boltz2` end to end.
 
 The preference order has to be preserved exactly, because the caller takes the
 first hit: beside the PDB, then the sibling category directory, then shallowest
@@ -360,14 +360,14 @@ anywhere.
 `id(rec)`. `list.sort` is already stable and preserves input order, so a third
 key of a memory address replaces that with something that varies between
 processes. Upstream documented this rather than fixing it, because deleting it
-changes committed output. Here the stakes are higher than upstream's: upstream's
+changes committed output. Here the stakes are higher than upstream's. Its
 benchmark has one sequence per target, while a campaign cohort here is 128
 sequences, so ties are reachable. The ranks are columns in
 `cross_sequence_summary.csv`.
 
 **4.6 Write a header-only CSV on zero rows (upstream PR16).**
 In `bin/boltz2_iterate_steering.py` the guard `if rows:` opens at line 4335 at
-four-space indent, its body writes the CSV through line 4381, and the
+four-space indent, and its body writes the CSV through line 4381. The
 `print(f"Wrote {out_csv} ({len(rows)} rows)")` at line 4382 is back at
 four-space indent. So a zero-row aggregate prints that it wrote a file it never
 created, and the next reader gets `FileNotFoundError` having been told
@@ -377,7 +377,7 @@ intersect against.
 
 **4.7 Stop the runner script aborting on its own closing banner.**
 `bin/negative_steering_run_one.sh:37` sets `-uo pipefail` without `-e`. Lines
-286 and 360 then do `set +e`, and lines 291 and 365 do `set -e`, which turns
+286 and 360 then do `set +e`, and lines 291 and 365 do `set -e`. That turns
 errexit **on** for the remainder of the script rather than restoring the
 previous state. Line 291 sits inside the per-design predict loop, which runs
 whenever there is at least one design, so errexit is normally on by the end.
@@ -386,7 +386,7 @@ The last functional line is a cosmetic
 `ls -1 "$WORKDIR_ABS"/*.csv 2>/dev/null | sed 's/^/    /'` with no `|| true`.
 With errexit on and `pipefail` set, a workdir holding no CSV makes that
 pipeline return 1 and aborts the script before its closing banner and its
-`exit 0`. I reproduced the mechanism in isolation: the demo script printed
+`exit 0`. I reproduced the mechanism in isolation. The demo script printed
 `reached tail`, never printed `AFTER ls`, and exited 1.
 
 The exposure is a run that completes with every design failing. Upstream's
@@ -410,7 +410,7 @@ across 29 `withName:` blocks, 27 occurrences of `jic-medium` and 5 of
 `jic-gpu`. Upstream's approach reads `NEGSTEER_PARTITION_GPU`,
 `NEGSTEER_PARTITION_CPU` and `NEGSTEER_GPU_CLUSTER_OPTIONS` from the
 environment, and its CI asserts both the set case and the bare case. A null
-queue is safe: Nextflow 25.10.4's `SlurmExecutor.groovy:98` guards the
+queue is safe. Nextflow 25.10.4's `SlurmExecutor.groovy:98` guards the
 directive with `if( task.config.queue )`, so null omits `-p` rather than
 submitting `-p null`.
 
@@ -429,10 +429,11 @@ and run provenance, which is a record of what executed and should stay:
 | `/nbi/` | 5 | 3 | 2 |
 | `jic-short` | 2 | 0 | 2 |
 
-The infrastructure sites are `run_pipeline.slurm.sh:12` (`--mail-user`) and
-`:38` (`PIPELINE_DIR`), `:46` (`AF2_DATA_DIR`), `nextflow.config:46-47` (the two
-AlphaFold reference-data paths) and `:44` (the AF3 package UUID),
-`params_example.yml:5`, `scripts/clean_all_finished_runs.slurm.sh:9,14`,
+The infrastructure sites in `run_pipeline.slurm.sh` are `:12` (`--mail-user`),
+`:38` (`PIPELINE_DIR`) and `:46` (`AF2_DATA_DIR`). `nextflow.config` adds
+`:46-47` (the two AlphaFold reference-data paths) and `:44` (the AF3 package
+UUID). The remaining sites are `params_example.yml:5`,
+`scripts/clean_all_finished_runs.slurm.sh:9,14`,
 `scripts/check_environment.slurm.sh:57-58`,
 `tests/characterization/run_pytest.slurm.sh:3,12,13,42` and
 `tests/update_example_dataset.slurm.sh:3,11`.
@@ -465,7 +466,7 @@ that MIT is a precondition for nf-core membership.
 | `params_example.yml:2` | `v0.3.0` |
 | `main.nf:5` | `v0.4.0` |
 
-`notes/things_to_fix.md` records three of these. There are four distinct
+`notes/things_to_fix.md` records three of these, but there are four distinct
 values across five sites. Upstream settled on one development version,
 `0.0.0.9000`, written once.
 
@@ -484,7 +485,7 @@ pipeline test, so the README currently directs a reader to a six-month-old
 session brief as orientation.
 
 **6.5 Separate the living notes from the durable ones.** `notes/` holds 72
-tracked files. Roughly 47 are per-session state — `SESSION_HANDOFF.md`,
+tracked files. Roughly 47 are per-session state: `SESSION_HANDOFF.md`,
 `remediation_state.md`, `pipeline_notes/pipeline_notes1-16.md`,
 `negsteer_notes/notes1-11.md`, nine `todo_list*.docx`. Roughly 18 are durable
 reference, including `phase4_architecture_spec.md`, `design_audit.md`,
@@ -494,8 +495,8 @@ point-in-time tool dumps, including `inventory/07_ruff_report.txt`, which §3.3
 supersedes.
 
 README references notes at `:11`, `:15`, `:16`, `:69`, `:71`, `:81`, `:125` and
-`:132-139`, and several `tests/*/README.md` files reference
-`notes/inventory/` directly, so this is a repointing job rather than a deletion.
+`:132-139`. Several `tests/*/README.md` files reference `notes/inventory/`
+directly, so this is a repointing job rather than a deletion.
 
 Upstream hit the same problem from the other side. Its PR20 removed about sixty
 citations of internal notes from code comments, because
@@ -526,11 +527,11 @@ pipeline and the thesis analyses.
 two-line change whose consequence is that every prediction made after it
 differs from every prediction made before it. Upstream made the template
 opt-in and defaulted it off, set all 167 of its configs to `false`, and
-published no rerun, on the grounds that every committed number was produced
-template-free so the results stand. The same route is available here. The AF3
-arm has the same net outcome by a different mechanism —
+published no rerun. Its justification was that every committed number was
+produced template-free, so the results stand. The same route is available
+here. The AF3 arm has the same net outcome by a different mechanism.
 `modules/negsteer_af3_nomsa.nf:192-193` emits `"queryIndices": []` and
-`"templateIndices": []`, and `notes/things_to_fix.md` records that AF3 3.0.0
+`"templateIndices": []`. `notes/things_to_fix.md` records that AF3 3.0.0
 builds template features by iterating that mapping, so an empty one leaves the
 positions and masks zero. Since `things_to_fix.md` also records a decision
 already taken to remove the AF3 stage, fixing its template may be moot.
@@ -570,8 +571,8 @@ is committed and refuses to shrink it, with `--allow-partial` to override.
 Neither exists. The sibling directories are `04-negative-steering-outcomes` and
 `05-steerability-correlates`. Those two names are upstream's analysis names, so
 this file was copied from there and its sibling references were never
-repointed. It does not crash on import — I ran `--help` and it printed its
-usage — so the failure arrives when it reads those paths.
+repointed. It does not crash on import. I ran `--help` and it printed its
+usage, so the failure arrives when it reads those paths.
 
 **8.4 Deduplicate the reference structures (upstream PR2).** There are 207
 tracked `.pdb` files holding 127 distinct contents, so 80 are extra copies. One
@@ -597,10 +598,10 @@ figure regenerated unchanged.
 
 **8.6 Retire the superseded steerability document.**
 `notes/things_to_fix.md` records that
-`05-steerability-correlates.qmd` is the LightGBM and SHAP version, defining a
-hit as `cross_tier` in A/B/C across all 128 designs, and that
-`steerability_features.py` replaced it with a per-feature Mann-Whitney over the
-106 steered designs. The three `shap` F821 errors in §3.3 are in that
+`05-steerability-correlates.qmd` is the LightGBM and SHAP version, which
+defines a hit as `cross_tier` in A/B/C across all 128 designs. It also records
+that `steerability_features.py` replaced it with a per-feature Mann-Whitney
+over the 106 steered designs. The three `shap` F821 errors in §3.3 are in that
 document's `helpers.py`, which is consistent with it being dead code.
 
 ---
@@ -608,7 +609,7 @@ document's `helpers.py`, which is consistent with it being dead code.
 ## 9. Test-fixture weight, recorded rather than proposed
 
 `tests/` holds 2910 tracked files. `tests/negative_steering/` is 2537 of them,
-and `tests/negative_steering/example_output_files/` alone is about 2511 — a
+and `tests/negative_steering/example_output_files/` alone is about 2511, a
 committed copy of eleven per-design run output trees. 624 tracked files under
 `tests/` contain a literal `/hpc-home` or `/nbi/` path, mostly inside captured
 `input.yaml` and `result.json` fixtures.
@@ -616,10 +617,10 @@ committed copy of eleven per-design run output trees. 624 tracked files under
 Upstream's PR16 took the opposite approach, building fixture run trees whose
 answers are stated up front, with the layouts taken from a real run rather than
 from docstrings. Its stated reason was that testing against the real tree ties
-the suite to a 15 GB cluster directory and only proves the code still agrees
-with its own last output.
+the suite to a 15 GB cluster directory. Such a test only proves the code still
+agrees with its own last output.
 
-Whether to follow that here is a larger question than parity, and
+Whether to follow that here is a larger question than parity.
 `notes/inventory/17_storage_bloat_audit.md` already covers the storage side, so
 this section is a record rather than a proposal.
 

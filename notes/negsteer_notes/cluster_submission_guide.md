@@ -53,7 +53,7 @@ extract_passing.  Single SLURM CPU job, ~3 minutes.
 ```
 
 Optional flags:
-- `--force-recompute` — re-run compute-final-metrics on every row,
+- `--force-recompute`: re-run compute-final-metrics on every row,
   ignoring any cached output.  Use when the postprocess code has
   changed and cached rows are stale.  (Default is `--skip-existing`.)
 - `--rmsd-threshold`, `--metric-column`, `--contact-cutoff`,
@@ -94,12 +94,12 @@ with `num_seeds >= 3` by default.
 ## Typical workflow
 
 1. **Edit pipeline scripts locally** (in this chat).
-2. **Copy changed files to the cluster** — scp / rsync
-   the edited files into the working dir.
-3. **Submit the experiment** — one of the submit scripts above.
-4. **Wait for the queue to drain** — check with `squeue -u $USER`.
+2. **Copy changed files to the cluster**: scp or rsync the edited files
+   into the working dir.
+3. **Submit the experiment**: one of the submit scripts above.
+4. **Wait for the queue to drain**: check with `squeue -u $USER`.
    Wait until no `b2ns_*` or `b2is_*` jobs remain.
-5. **Run postprocess** — `./submit_postprocess.sh --experiment-root ...`.
+5. **Run postprocess**: `./submit_postprocess.sh --experiment-root ...`.
 6. **Download the output CSVs** locally for inspection / upload to chat.
 
 ## File deployment reminder

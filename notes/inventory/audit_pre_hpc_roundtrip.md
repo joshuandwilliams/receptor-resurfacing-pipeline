@@ -10,7 +10,7 @@ Verifies the codebase no longer depends on three pieces of pre-git environment
 state that were cleaned up by hand:
 
 - the in-tree `jdk-17.0.2/` directory (moved to `~/singularity/jdk-17.0.2/`)
-- the project-local `nxf_home/` directory (deleted; Nextflow now defaults to `$HOME/.nextflow`)
+- the project-local `nxf_home/` directory (deleted, so Nextflow now defaults to `$HOME/.nextflow`)
 - repo-root symlinks for `slurm` and `java` tools (removed)
 
 Each section grep'd `**/*.nf`, `**/*.config`, `**/*.sh`, `**/*.py`, and
@@ -25,7 +25,7 @@ Each section grep'd `**/*.nf`, `**/*.config`, `**/*.sh`, `**/*.py`, and
 On HPC, the macOS mount `/Volumes/HPC-Home/` corresponds to `/hpc-home/jowillia/`.
 `PIPELINE_DIR` in every slurm launcher resolves to
 `/hpc-home/jowillia/receptor_design/receptor-resurfacing-pipeline`.
-The old in-tree JDK (`${PIPELINE_DIR}/jdk-17.0.2`) is gone; the new
+The old in-tree JDK (`${PIPELINE_DIR}/jdk-17.0.2`) is gone, and the new
 canonical location is `/hpc-home/jowillia/singularity/jdk-17.0.2/`.
 
 1. **`run_pipeline.slurm.sh:50`** — `export JAVA_HOME="${PIPELINE_DIR}/jdk-17.0.2"`
@@ -33,7 +33,7 @@ canonical location is `/hpc-home/jowillia/singularity/jdk-17.0.2/`.
    - Fix: `export JAVA_HOME="/hpc-home/jowillia/singularity/jdk-17.0.2"` (or, more portably, derive it from `$HOME/singularity/jdk-17.0.2`).
 2. **`run_pipeline.slurm.sh:51`** — `export PATH="${JAVA_HOME}/bin:${PATH}"`
    - Inherits the broken `JAVA_HOME` from the line above. **BROKEN** (transitively).
-   - Fix: same as #1; this line is correct once `JAVA_HOME` is fixed.
+   - Fix: same as #1. The line is correct once `JAVA_HOME` is fixed.
 3. **`run_pipeline.slurm.sh:87`** — `echo "JAVA_HOME:       ${JAVA_HOME}"`
    - Diagnostic echo only. Not broken on its own, but will print the wrong path until #1 is fixed.
 4. **`tests/rfdiffusion/run_test_rfdiffusion.slurm.sh:26`** — `export JAVA_HOME="${PIPELINE_DIR}/jdk-17.0.2"` — **BROKEN**.
@@ -69,12 +69,12 @@ A second case-insensitive sweep on `jdk` / `JDK` confirmed there are no other ma
 
 ### Findings
 
-The project-local `nxf_home/` directory was deleted, but every slurm
+The project-local `nxf_home/` directory was deleted. But every slurm
 launcher still computes `NXF_HOME="${PIPELINE_DIR}/nxf_home"`, then runs
 `mkdir -p "${NXF_HOME}"` and seeds the directory from the Nextflow
 container. Net effect on first HPC run: the deleted directory is
 **recreated in-tree** rather than Nextflow defaulting to `$HOME/.nextflow`.
-Nothing breaks per se, but the cleanup is silently undone.
+Nothing breaks, but the cleanup is silently undone.
 
 1. **`run_pipeline.slurm.sh:56`** — `export NXF_HOME="${PIPELINE_DIR}/nxf_home"` — **NEEDS-CHECK** (will recreate the deleted dir).
 2. **`run_pipeline.slurm.sh:60`** — `mkdir -p "${NXF_HOME}" "${NXF_WORK}" "${NXF_TEMP}"` — recreates `nxf_home/`.
@@ -96,8 +96,8 @@ No code references `NXF_HOME` outside slurm shell scripts and the container def.
 
 ### Action items
 
-- **Decision required, not a blocker for the round-trip.** The slurm launchers will recreate the project-local `nxf_home/` on first run. If the cleanup was intentional (use Nextflow's default `$HOME/.nextflow`), redirect `NXF_HOME` accordingly in the launchers (and update the binary-extraction + plugin-seed blocks to match). If the cleanup was just to keep the repo tidy in git but you're fine with it being recreated at runtime, no change needed — just ensure `nxf_home/` is in `.gitignore`.
-- The Wave 1 round-trip will work either way; flag for follow-up.
+- **Decision required, not a blocker for the round-trip.** The slurm launchers will recreate the project-local `nxf_home/` on first run. If the cleanup was intentional (use Nextflow's default `$HOME/.nextflow`), redirect `NXF_HOME` accordingly in the launchers, and update the binary-extraction + plugin-seed blocks to match. If the cleanup was only to keep the repo tidy in git, and runtime recreation is acceptable, no change is needed. Just ensure `nxf_home/` is in `.gitignore`.
+- The Wave 1 round-trip will work either way, so this is flagged for follow-up.
 
 ---
 
@@ -146,7 +146,7 @@ No issues found.
 ### Findings
 
 1. **`run_pipeline.slurm.sh:88`** — `echo "Java:            $(java -version 2>&1 | head -1)"`
-   - Bare `java` on `$PATH`. After the JDK fix in Part 1, this resolves via `${JAVA_HOME}/bin/java`. **OK after Part 1 is fixed; currently BROKEN-ADJACENT** (it'll print whatever the system Java is, or fail silently if there is none).
+   - Bare `java` on `$PATH`. After the JDK fix in Part 1, this resolves via `${JAVA_HOME}/bin/java`. **OK after Part 1 is fixed, currently BROKEN-ADJACENT** (it'll print whatever the system Java is, or fail silently if there is none).
 2. **`containers/NextFlow.def:7`** — `export JAVA_HOME=/usr/lib/jvm/java-17-openjdk` — in-container env. **OK**.
 3. **`containers/NextFlow.def:13`** — `yum install -y java-17-openjdk-headless ...` — in-container provisioning. **OK**.
 4. **`containers/NextFlow.def:16`** — `export JAVA_HOME=/usr/lib/jvm/java-17-openjdk` (`%post`) — **OK**.
@@ -188,7 +188,7 @@ No invocations of `javac` or `jar` anywhere. No project-relative `./java` etc. N
          Channel.value(file("${projectDir}/bin/rfdiffusion_contigs.py"))
      )
      ```
-   - Pattern is identical. `${projectDir}` resolves to the repo root in both contexts (the production `projectDir` for `main.nf`, the test workflow's own `projectDir` for the test — but `bin/` exists under both because of the symlink, so `file("${projectDir}/bin/rfdiffusion_contigs.py")` resolves either way).
+   - Pattern is identical. `${projectDir}` resolves to the repo root in both contexts, the production `projectDir` for `main.nf` and the test workflow's own `projectDir` for the test. `bin/` exists under both because of the symlink, so `file("${projectDir}/bin/rfdiffusion_contigs.py")` resolves either way.
 
 3. No inconsistencies observed in the spot check.
 
@@ -201,7 +201,7 @@ No issues found.
 ## Overall verdict
 
 **Blocker present.** The 7 slurm launchers all set `JAVA_HOME` to the
-deleted in-tree path (`${PIPELINE_DIR}/jdk-17.0.2`); fix that before the
+deleted in-tree path (`${PIPELINE_DIR}/jdk-17.0.2`). Fix that before the
 HPC round-trip. The `nxf_home` recreation behaviour is non-blocking but
-warrants a follow-up decision; the `sbatch` and Part-5 path-resolution
-checks are clean.
+warrants a follow-up decision, while the `sbatch` and Part-5
+path-resolution checks are clean.

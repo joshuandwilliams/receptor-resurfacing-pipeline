@@ -23,13 +23,13 @@ point-mutants the construct can carry."
 ### Why that was wrong
 
 The wet-lab construct is synthesised from the original ProteinMPNN sequence. It
-does not carry *any* steering mutations — not at protected positions, not at
-unprotected positions, not anywhere. A steering mutation at position 9 (native
-scaffold, outside the design region, outside the true interface) that contacts the
-effector is exactly as invalidating as a mutation at position 44 (inside the design
-region): neither residue will exist in the expressed protein. The binding metrics
-measured in the presence of that contact are describing a structure that will never
-exist.
+does not carry *any* steering mutations, not at protected positions, not at
+unprotected positions, not anywhere. Consider a steering mutation at position 9,
+which is native scaffold, outside the design region and outside the true
+interface. If it contacts the effector, it is exactly as invalidating as a
+mutation at position 44, inside the design region. Neither residue will exist in
+the expressed protein. The binding metrics measured in the presence of that
+contact describe a structure that will never exist.
 
 ### Evidence from the v1 run data
 
@@ -75,13 +75,13 @@ The entire protected-set machinery:
 ### What was added
 
 - `steered_mutated_contact_positions` — comma-separated list of positions where a
-  steering mutation contacts the effector (the contamination receipt; the exact
+  steering mutation contacts the effector (the contamination receipt, the exact
   positions that get reverted)
 - `reverted_mutated_contact_positions` — same for the reverted prediction (should
-  be empty for `pose_holds` by definition; populated for `new_contamination`)
-- `classify_mutation_reliance` now returns `(count, list)` — the list is the
+  be empty for `pose_holds` by definition, and populated for `new_contamination`)
+- `classify_mutation_reliance` now returns `(count, list)`, where the list is the
   authoritative contamination identifier
-- `steered_mutation_reliance_flag` was also removed as redundant —
+- `steered_mutation_reliance_flag` was also removed as redundant, because
   `n_contacts_on_mutated_positions > 0` is the contamination signal
 
 ## Additional bug: build-contaminated filtering on intact only, not ra_eff
@@ -93,8 +93,8 @@ regardless of their `steered_ra_eff_vs_truth`. A design with ra_eff = 28 Å but
 intact = 1 (both chains fold fine, just docked completely wrong) would be sent
 through the full reversion pipeline. If the reversion prediction happened to
 find the correct interface by Boltz stochasticity, it would be marked
-`pose_holds` — but this is not validating a steered rescue, it's just a lucky
-re-roll of the dice on the same (or similar) sequence.
+`pose_holds`. That does not validate a steered rescue. It is a lucky re-roll
+of the dice on the same (or similar) sequence.
 
 The v2 run had one such case: cycle 0 design_31 with `steered_ra_eff = 28.354`
 ended up as `pose_holds` with `reverted_ra_eff = 3.599`.
@@ -116,13 +116,13 @@ The `--allow-no-reversion` guard added in this session (before the root cause wa
 understood) forced users to use `--n-cycles 2`, but that was a workaround, not a
 fix.
 
-Reversion is not a "next cycle" feature — it validates cycle 0's own results.
+Reversion is not a "next cycle" feature. It validates cycle 0's own results.
 It should always run.
 
 ### The fix
 
 - Reversion chain always submits, regardless of `--n-cycles`
-- `kickoff-finalize` receives `--max-cycles $((N_CYCLES - 1))` — when
+- `kickoff-finalize` receives `--max-cycles $((N_CYCLES - 1))`. With
   `--n-cycles 1`, max-cycles = 0, so no further cycles are spawned but
   reversion still runs
 - Workdir always uses nested layout (`<workdir>/cycle_0/`) so reversion paths
@@ -135,7 +135,7 @@ It should always run.
 
 `_row_is_clean_steered` only checked `steered_receptor_intact == 1` and
 `reversion_verdict == ""`. Designs with intact chains but terrible ra_eff
-(25+ Å) were being ranked by `rank_by_ra_eff`, then `extract_passing.py`
+(25+ Å) were being ranked by `rank_by_ra_eff`. Then `extract_passing.py`
 included any row with either `rank_by_ra_eff` or `rank_by_ipsae_min`.
 This produced 13 junk rows in `passing_summary.csv` with ra_eff values of
 5–34 Å and no confidence metrics.
@@ -173,14 +173,14 @@ This produced 13 junk rows in `passing_summary.csv` with ra_eff values of
 
 ### New file: `extract_passing.py`
 
-Standalone script that reads `all_results_multicycle_with_metrics.csv` and produces
-`passing_summary.csv` — a clean, flat table of only the ranked survivors with
-unified columns (no `steered_`/`reverted_` prefix split). The `reverted` column
-(0/1) indicates the source. For `pose_holds` rows, metrics come from the reverted
-prediction; for clean steered rows, from the steered prediction. Computes
-`confidence_flag` on the fly when the steered flag is blank (e.g. rows where the
-steered ra_eff was too high for compute-final-metrics but the reverted ra_eff
-passed).
+Standalone script that reads `all_results_multicycle_with_metrics.csv` and
+produces `passing_summary.csv`. That output is a clean, flat table of only the
+ranked survivors with unified columns (no `steered_`/`reverted_` prefix split).
+The `reverted` column (0/1) indicates the source. For `pose_holds` rows, metrics
+come from the reverted prediction. For clean steered rows, they come from the
+steered prediction. Computes `confidence_flag` on the fly when the steered flag
+is blank (e.g. rows where the steered ra_eff was too high for
+compute-final-metrics but the reverted ra_eff passed).
 
 Usage:
 ```bash
@@ -193,8 +193,8 @@ python3 extract_passing.py \
 
 ### v1 smoke test (4 designs, 2 mutations, 2 cycles)
 
-All 3 intact designs had mutation at position 44 contacting the effector →
-all 3 sent to reversion → all 3 `pose_collapses` (reverted ra_eff 27–29 Å) →
+All 3 intact designs had a mutation at position 44 contacting the effector.
+All 3 went to reversion → all 3 `pose_collapses` (reverted ra_eff 27–29 Å) →
 0 survivors → cycle 1 never launched. Pipeline correctly killed all candidates.
 
 ### v2 full run (50 designs, 6 mutations, 2 cycles)
@@ -230,7 +230,7 @@ Results:
 - **Rank 1 (design_24):** Clean steered (no contamination). K5E M22E L36D.
   ipsae = 0.895, iptm = 0.91, pae_pass_frac = 0.97, ipae = 3.4 Å. Strongest
   rescue signal seen across all runs. These 3 mutations don't contact the
-  effector — the interface is held entirely by native MPNN residues.
+  effector. The interface is held entirely by native MPNN residues.
 - **Ranks 2–4 (designs 73, 64, 04):** pose_holds with 0 remaining mutations.
   ipsae 0.38–0.49, iptm 0.77–0.79, pae_pass_frac > 0.8. Good confidence,
   but the scored sequence is identical to the cold start / MPNN sequence.
@@ -242,18 +242,18 @@ Many designs in v3 had all 3 mutations contacting the effector → all 3 reverte
 reverted sequence = original MPNN sequence. Combined with the cold start, the
 MPNN sequence was predicted ~45 times (each with 5 diffusion samples = ~225 Boltz
 trajectories). Of those, ~4 found the correct interface and ~41 didn't. This
-gives a ~10% hit rate for the MPNN sequence finding the true interface —
-it's accessible but not the dominant Boltz solution.
+gives a ~10% hit rate for the MPNN sequence finding the true interface. It is
+accessible but not the dominant Boltz solution.
 
 This redundancy is wasteful and should be deduplicated in future runs.
 
 ### Key observation: diffusion-samples vs seeds
 
 `--diffusion-samples 5` generates 5 structure samples within a single Boltz
-prediction; Boltz picks its top-ranked model (model_0) and the pipeline uses
+prediction. Boltz picks its top-ranked model (model_0) and the pipeline uses
 that. This is NOT the same as running 5 independent predictions with different
-seeds — it's Boltz's internal diversity within one run. The user expected
-multiple independent cold starts; this was clarified.
+seeds. It is Boltz's internal diversity within one run. The user expected
+multiple independent cold starts. This was clarified.
 
 ## What to build next
 
@@ -263,15 +263,15 @@ multiple independent cold starts; this was clarified.
 sequence multiple times with different seeds to measure confidence reproducibility.
 
 **Why:** A single Boltz prediction (even with diffusion-samples > 1) gives one
-confidence measurement. Two designs with ipsae 0.9 and 0.4 might both reproduce
-at those levels across 10 seeds, or the 0.9 might scatter between 0.1–0.9 and
-the 0.4 might be stable at 0.4. Without multi-seed data, we can't distinguish a
-reliable prediction from a lucky trajectory.
+confidence measurement. Take two designs with ipsae 0.9 and 0.4. Both might
+reproduce at those levels across 10 seeds. Alternatively the 0.9 might scatter
+between 0.1–0.9 while the 0.4 stays stable at 0.4. Without multi-seed data, we
+can't distinguish a reliable prediction from a lucky trajectory.
 
 **Design:**
 - Input: `passing_summary.csv` (or a list of sequences to validate)
-- Deduplicate sequences — e.g. all 0-mutation pose_holds rows are the same
-  MPNN sequence; only predict it once
+- Deduplicate sequences. For example, all 0-mutation pose_holds rows are the
+  same MPNN sequence, so predict it once
 - Run each unique sequence N times (e.g. 10) with different seeds
 - Collect ipSAE, iPTM, ipAE, ra_eff from each run
 - Report: mean, std, and distribution of confidence metrics per sequence
@@ -298,8 +298,8 @@ designs each triggering a fresh Boltz prediction of the same sequence is pure wa
 - If two designs produce the same reverted sequence, predict it once and share
   the result
 - The reversion metadata (which positions were reverted, which design it came
-  from) stays per-design; only the Boltz prediction is deduplicated
-- Care needed around the `predict-reversion-one` array job structure: currently
+  from) stays per-design. Only the Boltz prediction is deduplicated
+- Care needed around the `predict-reversion-one` array job structure. Currently
   each array task predicts one design's reversion. With dedup, the array size
   shrinks to the number of unique sequences, and a mapping file tells
   `harvest-reversions` which designs share which prediction.
@@ -310,7 +310,7 @@ The column is blank for all reversion rows in the aggregate CSV. The
 `_populate_reverted_mutations` function reads `positions_to_revert` from
 `reversion_results.json` but `steered_mutated_contact_positions` should come from
 `contaminated.json`. The code to surface it was added but appears not to be
-working — needs debugging. Low priority since `reversion_verdict` and
+working, so it needs debugging. Low priority since `reversion_verdict` and
 `reverted_total_mutations` carry the essential information, but the column should
 be populated for audit completeness.
 
@@ -358,6 +358,6 @@ singularity exec $CONTAINER python3 extract_passing.py \
     --input ./resurface_pipeline_test/runs/design_N_vX/all_results_multicycle_with_metrics.csv
 ```
 
-Note: `--n-cycles 1` now works correctly — reversion runs as part of cycle 0's
+`--n-cycles 1` now works correctly, because reversion runs as part of cycle 0's
 finalization. `--design-region-positions-file` is no longer needed on
 compute-final-metrics (the protected-set machinery is gone).

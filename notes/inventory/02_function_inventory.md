@@ -1,8 +1,8 @@
 # 02 — Function Inventory
 
-Per-file enumeration of top-level functions, classes, processes and workflows. Function summaries are derived from signatures, surrounding code, and docstrings. Module-level constants of structural significance are noted parenthetically. Duplication is called out inline; deeper findings live in `05_findings.md`.
+Per-file enumeration of top-level functions, classes, processes and workflows. Function summaries come from signatures, surrounding code, and docstrings. Module-level constants of structural significance are noted parenthetically. Duplication is called out inline. Deeper findings live in `05_findings.md`.
 
-The two largest files (`boltz2_iterate_steering.py` 5854 LOC, `boltz2_negative_steering.py` 3416 LOC) were sampled at function granularity. Bodies of long `cmd_*` subcommands were not read line-by-line; their summaries reflect docstrings and surrounding comments.
+The two largest files (`boltz2_iterate_steering.py` 5854 LOC, `boltz2_negative_steering.py` 3416 LOC) were sampled at function granularity. Bodies of long `cmd_*` subcommands were not read line-by-line. Their summaries reflect docstrings and surrounding comments.
 
 ---
 
@@ -75,7 +75,7 @@ Multi-cycle negsteer orchestrator. Single argparse dispatch over 14 subcommands.
 
 ### bin/boltz2_negative_steering.py (3416 LOC)
 
-Single-cycle negsteer core; ALSO the central library that every other negsteer Python file imports from (`get_chain_sequence`, `run_boltz`, `find_contact_residues_heavy`, `jaccard`, `binding_rmsds`, `write_boltz_yaml`, `compute_effector_interface_residues`).
+Single-cycle negsteer core. ALSO the central library that every other negsteer Python file imports from. The exported symbols are `get_chain_sequence`, `run_boltz`, `find_contact_residues_heavy`, `jaccard`, `binding_rmsds`, `write_boltz_yaml` and `compute_effector_interface_residues`.
 
 **Module-level constants**: `RECEPTOR_INTACT_CUTOFF=5.0`, `EFFECTOR_INTACT_CUTOFF=5.0`, `THREE_TO_ONE`, `_THREE_TO_ONE_RMSD`, `STEERING_SETS`, `CONSERVATIVE_SUBSTITUTIONS`, `PRED_REC_CHAIN="A"`, `PRED_EFF_CHAIN="B"`.
 
@@ -184,7 +184,7 @@ Per-row interface metrics for `NEGSTEER_INTERFACE_METRICS`. Imports `compute_ips
 
 ### bin/compute_metrics.py (1657 LOC)
 
-Boltz output metrics. Run via subprocess by `boltz2_iterate_steering.py` (`compute-final-metrics`, `iterate-collect-finalize`) and `reversion.py` (`harvest_reversion_results`); imported directly by `compute_interface_metrics.py`, `derive_input_design_region.py`, and `boltz2_negative_steering.py`.
+Boltz output metrics. Run via subprocess by `boltz2_iterate_steering.py` (`compute-final-metrics`, `iterate-collect-finalize`) and `reversion.py` (`harvest_reversion_results`). Imported directly by `compute_interface_metrics.py`, `derive_input_design_region.py`, and `boltz2_negative_steering.py`.
 
 **iPSAE / actifPTM / iPAE / PAE-pass-frac**
 - `_ipsae_d0(n)`, `compute_ipsae_one_direction(pae_ij, cutoff)`.
@@ -200,7 +200,7 @@ Boltz output metrics. Run via subprocess by `boltz2_iterate_steering.py` (`compu
 - `compute_effector_interface_residues(...)` — exported, called by `boltz2_negative_steering.py`.
 - `compute_effector_interface_atom_mask(...)`.
 - `compute_interface_contacts(...)`.
-- `find_contact_residues_heavy(...)` — exported. **Distinct from `boltz2_negative_steering.find_contact_residues_heavy` despite the same name; both exist (see `05_findings.md`).**
+- `find_contact_residues_heavy(...)` — exported. **Distinct from `boltz2_negative_steering.find_contact_residues_heavy` despite the same name. Both exist (see `05_findings.md`).**
 
 **Mutation reliance / position parsing**
 - `parse_mutated_positions(spec)`, `parse_position_list(spec)`, `load_positions_file(path)`.
@@ -250,7 +250,7 @@ Cohort aggregator run by `NEGSTEER_CROSS_SEQUENCE`. Imports `extract_passing.ext
 - `_infer_seq_name(path, mode)`.
 - `_parse_passing_summary_arg(arg, seq_name_mode)`.
 - `_pick_representative(rows)` — pick best tier-A/B/C row.
-- `_pick_rep_from_aggregated(...)` — Bug-3 fallback for tier-none sequences with empty passing_summary; reads aggregated_results.csv directly and uses `extract_passing.extract_row` to shape the output.
+- `_pick_rep_from_aggregated(...)` — Bug-3 fallback for tier-none sequences with empty passing_summary. Reads aggregated_results.csv directly and uses `extract_passing.extract_row` to shape the output.
 - `aggregate(...)` — main aggregation.
 - `main()`.
 
@@ -300,7 +300,7 @@ Used by `EXTRACT_HOTSPOTS`. Imports `extract_heavy_atoms`, `find_interface_resid
 
 ### bin/extract_passing.py (678 LOC)
 
-Used by `negative_steering_run_one.sh`; also imported by `cross_sequence_summary.py`.
+Used by `negative_steering_run_one.sh`. Also imported by `cross_sequence_summary.py`.
 
 - `OUTPUT_FIELDS` — explicit ordered field list.
 - `_get(row, key, fallback_key)` — column lookup with fallback.
@@ -308,7 +308,7 @@ Used by `negative_steering_run_one.sh`; also imported by `cross_sequence_summary
 - `_summarize_mutations_across_seeds(...)`.
 - `_muts_aa_for_positions(...)` — convert position list to mutation strings.
 - `extract_row(r, per_seed_rows)` — translate one aggregated row → passing-summary row. **Stage selection rule (Bug 4 fix in pipeline_notes14): use reverted_* whenever reversion was attempted, steered_* only for no_reversion.**
-- `main()` — CLI; filters input to PASSING_VERDICTS.
+- `main()` — CLI that filters input to PASSING_VERDICTS.
 
 ### bin/extract_survivor_manifest.py (174 LOC)
 
@@ -321,7 +321,7 @@ Used by `EXTRACT_SURVIVOR_MANIFEST`.
 
 ### bin/haddock_utils.py (283 LOC)
 
-Shared helpers; imported by `collect_haddock3_dock.py`, `haddock3_plots.py`, `extract_hotspots.py`.
+Shared helpers. Imported by `collect_haddock3_dock.py`, `haddock3_plots.py`, `extract_hotspots.py`.
 
 - `parse_capri_tsv(capri_file)` — CAPRI scoring table.
 - `parse_clustfcc_tsv(clust_file, min_cluster_size=4)` — cluster table.
@@ -419,7 +419,7 @@ Used by `SEQUENCE_QC`.
 
 7-plot cohort suite for negsteer. **Verbatim copy of the test script** modulo header and `_resolve_csv_path` fallback.
 
-- Module-level constants: `COMPOSITE_RA_EFF_WEIGHT=0.05`, `MUT_IMPACT_MIN_N=3`, `COLOUR_TIER`, `COLOUR_DESIGN_REGION`, `_AGG_FINAL_FIELD_MAP`, `_VERDICTS_WITH_REVERSION`, `OUTCOME_COLOUR`, `OUTCOME_LABEL`, `OUTCOME_ORDER`, `STAGE_MARKER`, `STAGE_COLOUR`.
+- Module-level constants: `COMPOSITE_RA_EFF_WEIGHT=0.05`, `MUT_IMPACT_MIN_N=3`, `COLOUR_TIER`, `COLOUR_DESIGN_REGION`, `_AGG_FINAL_FIELD_MAP`, `_VERDICTS_WITH_REVERSION`. Outcome and stage constants: `OUTCOME_COLOUR`, `OUTCOME_LABEL`, `OUTCOME_ORDER`, `STAGE_MARKER`, `STAGE_COLOUR`.
 - `_final_prediction_value(agg_row, dest_field)`, `_project_agg_row(...)`, `_pick_best_agg_row(...)`.
 - `load_unified_cohort(...)` — cohort CSV loader.
 - `_try_float`, `_try_int`, `_parse_chimerax_positions`, `_composite_from_row`, `_row_type`, `_is_steered`, `_make_empty_plot`, `_short_name`.
@@ -601,11 +601,11 @@ Never imported, never invoked from .nf or .sh. Already flagged as dead in pipeli
 
 ### tests/orthogonal_metrics/test_orthogonal_metrics_plots.py (1170 LOC)
 
-Source of truth for `bin/orthogonal_metrics_plots.py`. Same function set; only diff is the `_resolve_csv_path` fallback (test-path defaults). Includes a dual-csv arg parser.
+Source of truth for `bin/orthogonal_metrics_plots.py`. Same function set. The only diff is the `_resolve_csv_path` fallback (test-path defaults). Includes a dual-csv arg parser.
 
 ### tests/proteinmpnn/test_mpnn_plots.py (625 LOC)
 
-Iteration script for `bin/mpnn_plots.py`. Same plot functions (`plot_score_distribution`, `plot_aa_composition`, `plot_sequence_diversity`, `plot_physicochem`) and same constants (`AA_ORDER`, `KD_HYDROPHOBICITY`, `CHARGE`, `COLOUR_*`); test version takes `out_path` per-plot rather than relying on cwd.
+Iteration script for `bin/mpnn_plots.py`. Same plot functions (`plot_score_distribution`, `plot_aa_composition`, `plot_sequence_diversity`, `plot_physicochem`). Same constants (`AA_ORDER`, `KD_HYDROPHOBICITY`, `CHARGE`, `COLOUR_*`). The test version takes `out_path` per-plot rather than relying on cwd.
 
 - `_design_label`, `plot_score_distribution`, `_aa_composition_pct`, `plot_aa_composition`, `plot_sequence_diversity`, `_mean_hydrophobicity`, `_net_charge`, `plot_physicochem`, `_make_empty_plot`, `_resolve_metadata_path`, `_parse_args`, `main`.
 
@@ -614,7 +614,7 @@ Iteration script for `bin/mpnn_plots.py`. Same plot functions (`plot_score_distr
 Iteration script. Imports the production module to render the three "good" plots (specificity_coverage, design_lengths, com_displacement) and reimplements the two iteration-target plots locally.
 
 - `_import_production_plots(prod_path)` — runtime import of `rfdiffusion_plots.py`.
-- All same `_design_label`, `_get_per_design_residues`, `_get_per_region_lengths`, `_label_with_region_len`, `_get_dendrogram_order`, `_per_region_clustering_data`, `_n_regions`, `_build_contact_map_data`, `_build_effector_freq`, `_build_design_labels`, `_draw_contact_heatmap_content`, `_set_contact_xticks`, `_draw_effector_freq_bar`, `_contact_legend_handles`, `_draw_clustering_heatmap_content`, `_measure_label_width_inches`, `plot_contact_map`, `plot_design_clustering`, `plot_design_lengths`, `plot_com_displacement` functions as production. **Roughly 80% identical code that was lifted.**
+- Carries the same functions as production. Label and region helpers: `_design_label`, `_get_per_design_residues`, `_get_per_region_lengths`, `_label_with_region_len`, `_get_dendrogram_order`, `_per_region_clustering_data`, `_n_regions`. Data builders: `_build_contact_map_data`, `_build_effector_freq`, `_build_design_labels`. Drawing helpers: `_draw_contact_heatmap_content`, `_set_contact_xticks`, `_draw_effector_freq_bar`, `_contact_legend_handles`, `_draw_clustering_heatmap_content`, `_measure_label_width_inches`. Plot entry points: `plot_contact_map`, `plot_design_clustering`, `plot_design_lengths`, `plot_com_displacement`. **Roughly 80% identical code that was lifted.**
 - `_resolve_metrics_path(supplied)`, `_parse_args`, `main`.
 
 ### tests/rosetta_filtering/test_rosetta_filtering_plots.py (224 LOC)
@@ -624,7 +624,7 @@ Iteration script. Imports the production module to render the three "good" plots
 
 ### tests/negative_steering/test_negsteer_plots.py (1916 LOC)
 
-**Source of truth for `bin/negsteer_plots.py`.** Same constants, same functions, same logic; production differs only in header and `_resolve_csv_path` fallback.
+**Source of truth for `bin/negsteer_plots.py`.** Same constants, same functions, same logic. Production differs only in header and `_resolve_csv_path` fallback.
 
 ### tests/negative_steering/test_negsteer_within_sequence_plots.py (981 LOC)
 
@@ -636,7 +636,7 @@ Iteration script. Imports the production module to render the three "good" plots
 
 ### modules/preprocessing.nf
 
-- `process EXTRACT_SEQUENCES` — extract receptor/effector sequences + lengths from input PDB; emit `sequences.json`.
+- `process EXTRACT_SEQUENCES` — extract receptor/effector sequences + lengths from input PDB, then emit `sequences.json`.
 - `process RESOLVE_CONTIGS` — invoke `bin/rfdiffusion_contigs.py` to resolve `N-N` contig ranges against the PDB.
 - `process WRITE_DUMMY_MAPPING` — emit a 2-byte `{}` JSON for downstream consumers that need a mapping file.
 
@@ -731,5 +731,5 @@ Each test `.nf` re-uses the production `process` blocks (via include), wires the
 - `tests/rfdiffusion/test_rfdiffusion.nf` — RFDIFFUSION + FILTER + PLOTS.
 - `tests/rosetta_filtering/test_rosetta_filtering.nf` — ROSETTA_SC + FILTER + PLOTS.
 - `tests/proteinmpnn/test_proteinmpnn.nf` — full MPNN sub-chain incl. preprocessing.
-- `tests/negative_steering/test_negative_steering.nf` — negsteer chain incl. controls + plots; defines a local `EMPTY_DESIGN_REGION_PLACEHOLDER` process for when controls are off.
+- `tests/negative_steering/test_negative_steering.nf` — negsteer chain incl. controls + plots. Defines a local `EMPTY_DESIGN_REGION_PLACEHOLDER` process for when controls are off.
 - `tests/orthogonal_metrics/test_orthogonal_metrics.nf` — manifest + AF3 + biophysical + Rosetta + merge.

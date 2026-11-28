@@ -1,13 +1,13 @@
 # Pipeline Notes 10 — Session 26 Apr 2026
 
-Orthogonal-metrics test closed; first end-to-end production run staged for resume.
+Orthogonal-metrics test closed. First end-to-end production run staged for resume.
 
 ## Headline
 
 Two big things landed this session.
 
 - Orthogonal-metrics test (Step 2 of the 1–15 plan) is now closed. AF3, Rosetta, biophysical, DockQ all populate cleanly for the two test survivors.
-- First production run on the PikP1 + AvrPikF target ran end-to-end through negsteer, but produced an empty survivor manifest because of a chain-param wiring bug. Patches written and staged; resume blocked on GPU queue contention.
+- First production run on the PikP1 + AvrPikF target ran end-to-end through negsteer, but produced an empty survivor manifest because of a chain-param wiring bug. Patches written and staged. Resume is blocked on GPU queue contention.
 
 Net effect: pipeline is structurally complete from input PDB through orthogonal metrics. Step 3 (plot scripts, Tasks 43+44) is unblocked and starts in the next session.
 
@@ -21,7 +21,7 @@ Net effect: pipeline is structurally complete from input PDB through orthogonal 
 
 Three sub-bugs in `extract_effector_template_cif` surfaced sequentially in AF3:
 
-- **(a)** Missing `_entity_poly_seq` block + `?` for `pdbx_seq_one_letter_code` + `.` for every `label_seq_id`. Root cause: `setup_entities()` identifies polymer chains but does NOT populate `Entity.full_sequence` or `Residue.label_seq` from PDB input. Fix: prune-and-rename approach (start from parsed structure, remove unwanted chains rather than building from scratch); explicitly populate `entity.full_sequence = [r.name for r in polymer]` and `r.label_seq = i`.
+- **(a)** Missing `_entity_poly_seq` block + `?` for `pdbx_seq_one_letter_code` + `.` for every `label_seq_id`. Root cause: `setup_entities()` identifies polymer chains but does NOT populate `Entity.full_sequence` or `Residue.label_seq` from PDB input. Fix: prune-and-rename approach (start from parsed structure, remove unwanted chains rather than building from scratch). Then explicitly populate `entity.full_sequence = [r.name for r in polymer]` and `r.label_seq = i`.
 - **(b)** HETATM water rows in effector chain (controls' input PDB has waters in chain C) caused validation to fail. Fix: use gemmi's built-in `st.remove_waters()`.
 - **(c)** AF3's `templates.py:get_polymer_features` requires `release_date`. AF3 reads ONLY `_pdbx_audit_revision_history.revision_date` (confirmed by reading source: `alphafold3/structure/mmcif.py:225` — function `get_release_date`). Initial fix appended raw text `loop_` block after `gemmi.write` but parser didn't see it. Final fix: use `block.init_mmcif_loop("_pdbx_audit_revision_history.", [...])` to add loop INSIDE the CIF document, then `loop.add_row(["1", "'Structure model'", "1", "0", "2024-01-01"])`.
 
@@ -29,17 +29,17 @@ Validation block re-parses written CIF with `gemmi.cif.read()` and confirms `fin
 
 ### 3. Regenerated CIFs in 22 negsteer work directories
 
-Avoided full negsteer rerun (~12 GPU-hr) by regenerating all `effector_template.cif` files in place. Used `singularity exec /hpc-home/jowillia/singularity/Boltz1_Boltz2_Chai1_ColabFold/boltz2_negsteer.img /usr/local/bin/python3.11` (NOT `/usr/bin/python3` — that lacks numpy/gemmi). 18 design CIFs regenerated using rfdiffusion split outputs as source with chain B; 4 control CIFs regenerated using `tests/negative_steering/receptor_resurfacing_results/negative_steering/controls_inputs/af3_pikp1_native_avrpikf_complex.pdb` with chain C→B remap.
+Avoided full negsteer rerun (~12 GPU-hr) by regenerating all `effector_template.cif` files in place. Used `singularity exec /hpc-home/jowillia/singularity/Boltz1_Boltz2_Chai1_ColabFold/boltz2_negsteer.img /usr/local/bin/python3.11` (NOT `/usr/bin/python3` — that lacks numpy/gemmi). 18 design CIFs regenerated using rfdiffusion split outputs as source with chain B. 4 control CIFs regenerated using `tests/negative_steering/receptor_resurfacing_results/negative_steering/controls_inputs/af3_pikp1_native_avrpikf_complex.pdb` with chain C→B remap.
 
 Verification: all CIFs have 82 `_entity_poly_seq` rows, full one-letter sequence, zero `.` in `label_seq_id`.
 
 ### 4. Nextflow input file collision in NEGSTEER_ORTHOGONAL_METRICS
 
-Each upstream module emitted fixed-name CSVs (`af3_nomsa_summary.csv`, `biophysical_summary.csv`, `rosetta_summary.csv`); collecting across 2 survivors caused name collision. Fix: tag outputs with `${seq_name}`. Three modules patched; `merge_orthogonal_metrics.py` uses globs (`*.csv`) so no script change needed.
+Each upstream module emitted fixed-name CSVs (`af3_nomsa_summary.csv`, `biophysical_summary.csv`, `rosetta_summary.csv`). Collecting across 2 survivors caused a name collision. Fix: tag outputs with `${seq_name}`. Three modules patched. `merge_orthogonal_metrics.py` uses globs (`*.csv`) so no script change needed.
 
 ### 5. Rosetta InterfaceAnalyzer crash (exit 255)
 
-`ROSETTA_CRASH.log`: "Option matching `-compute_separated_dG` not found in command line top-level context". Rosetta 2025.37 dropped that flag (now default behaviour). Fix in `bin/run_rosetta_metrics.py`: mirror working invocation from `modules/rosetta_filtering.nf:ROSETTA_SC`. Added `-database /opt/rosetta/main/database`; dropped `-compute_separated_dG`, `-compute_packstat`, `-tracer_data_print`, `-out:file:silent_struct_type binary`, `-unmute`, `-interface A_B`; used `-pack_separated -pack_input -compute_interface_sc true -add_regular_scores_to_scorefile -use_input_sc -no_optH false -ignore_unrecognized_res -out:file:score_only`.
+`ROSETTA_CRASH.log`: "Option matching `-compute_separated_dG` not found in command line top-level context". Rosetta 2025.37 dropped that flag (now default behaviour). Fix in `bin/run_rosetta_metrics.py`: mirror working invocation from `modules/rosetta_filtering.nf:ROSETTA_SC`. Added `-database /opt/rosetta/main/database`. Dropped `-compute_separated_dG`, `-compute_packstat`, `-tracer_data_print`, `-out:file:silent_struct_type binary`, `-unmute`, `-interface A_B`. Used `-pack_separated -pack_input -compute_interface_sc true -add_regular_scores_to_scorefile -use_input_sc -no_optH false -ignore_unrecognized_res -out:file:score_only`.
 
 ### 6. Biophysical script (FreeSASA + H-bond)
 
@@ -100,7 +100,7 @@ Per `main.nf:680-695`, the `rfdiff_output_receptor_chain` (A) and `rfdiff_output
 - `modules/negsteer_biophysical_metrics.nf` — line 48-49
 - `modules/negsteer_rosetta_metrics.nf` — line 43-44
 
-All four staged at `/mnt/user-data/outputs/`. Drop into `modules/`, resume — content-keyed cache invalidates only those four processes (plus the merge step). All upstream stages cached.
+All four staged at `/mnt/user-data/outputs/`. Drop into `modules/`, then resume. The content-keyed cache invalidates only those four processes, plus the merge step. All upstream stages cached.
 
 ### Resume command
 
@@ -126,7 +126,7 @@ Latest version of each, ready to deploy:
 
 ## Next session — Step 3: plot scripts
 
-Per the 1–15 execution plan, Step 3 is plot scripts (Tasks 43 + 44). Stated approach: develop Python scripts standalone against existing test output CSVs outside Nextflow; iterate freely; integrate into pipeline only when happy.
+Per the 1–15 execution plan, Step 3 is plot scripts (Tasks 43 + 44). Stated approach: develop Python scripts standalone against existing test output CSVs outside Nextflow. Iterate freely. Integrate into the pipeline only when happy.
 
 ### Inputs available for plot development
 
@@ -154,7 +154,7 @@ Per the 1–15 execution plan, Step 3 is plot scripts (Tasks 43 + 44). Stated ap
 
 - Login node has stdlib only. Anything importing numpy, gemmi, freesasa, MDAnalysis MUST run inside the boltz container.
 - Container has TWO pythons: `/usr/bin/python3` (system, no scientific stack) and `/usr/local/bin/python3.11` (has numpy/gemmi/etc — use this).
-- AF3 image: `/software/e8edb411-7374-4342-b9f1-408da41fc197/e8edb411-7374-4342-b9f1-408da41fc197.img`. Internal package path: `/alphafold3_venv/lib/python3.11/site-packages/alphafold3/`. Source package via `source package e8edb411-...` does NOT make `alphafold3` importable from login-node python — must read source via singularity exec.
-- Chain conventions: `params.effector_chain` describes input PDB; `params.rfdiff_output_effector_chain` describes split / prediction output (always B); receptor=A throughout.
+- AF3 image: `/software/e8edb411-7374-4342-b9f1-408da41fc197/e8edb411-7374-4342-b9f1-408da41fc197.img`. Internal package path: `/alphafold3_venv/lib/python3.11/site-packages/alphafold3/`. Source package via `source package e8edb411-...` does NOT make `alphafold3` importable from login-node python. Read the source via singularity exec instead.
+- Chain conventions: `params.effector_chain` describes the input PDB. `params.rfdiff_output_effector_chain` describes split / prediction output (always B). Receptor=A throughout.
 - Production outdir: `${projectDir}/${params.project_name}_results` — NOT `${params.outdir}` from `params.yml` (config overrides).
-- Production run launches from `tests/full_test_run/` — `work/` and `.nextflow.log` live there, not in project root.
+- Production run launches from `tests/full_test_run/`. Its `work/` and `.nextflow.log` live there, not in project root.

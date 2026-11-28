@@ -110,7 +110,7 @@ These are either Nextflow-direct entry points (one-shot CLIs) or genuine orphans
 Each `.nf` process either runs Python via `python ${projectDir}/bin/<script>.py` or shells out via `bash ${projectDir}/bin/<script>.sh`. Listed by source file.
 
 ### main.nf
-- Pure orchestration (no direct script calls of its own — all script invocations happen inside the included process bodies). Passes `Channel.value(file("${projectDir}/bin/parse_af3_output.py"))`, `Channel.value(file("${projectDir}/bin/orthogonal_metrics_plots.py"))`, `Channel.value(file("${projectDir}/bin/fastrelax_for_ia.xml"))` into downstream processes (Bug 7 cache-invalidation pattern from pipeline_notes14).
+- Pure orchestration (no direct script calls of its own, since all script invocations happen inside the included process bodies). Passes `Channel.value(file("${projectDir}/bin/parse_af3_output.py"))`, `Channel.value(file("${projectDir}/bin/orthogonal_metrics_plots.py"))`, `Channel.value(file("${projectDir}/bin/fastrelax_for_ia.xml"))` into downstream processes (Bug 7 cache-invalidation pattern from pipeline_notes14).
 
 ### modules/preprocessing.nf
 - `EXTRACT_SEQUENCES` — inline Python (no bin/ script).
@@ -195,17 +195,17 @@ Several Python scripts invoke other `bin/` scripts via `subprocess.run`. These a
 
 ## D. Test-tree → bin/ relationships
 
-Test workflows include the production process bodies directly (so they exercise the same code paths) — no test-only Python is wired into production. But two test Python files duplicate production scripts:
+Test workflows include the production process bodies directly, so they exercise the same code paths. No test-only Python is wired into production. But two test Python files duplicate production scripts:
 
 - `tests/orthogonal_metrics/merge_orthogonal_metrics.py` is a divergent copy of `bin/merge_orthogonal_metrics.py` (see `05_findings.md`).
-- `tests/proteinmpnn/test_mpnn_plots.py` ↔ `bin/mpnn_plots.py`, `tests/rfdiffusion/test_rfdiffusion_plots.py` ↔ `bin/rfdiffusion_plots.py`, `tests/rosetta_filtering/test_rosetta_filtering_plots.py` ↔ `bin/rosetta_filter_plots.py`, `tests/negative_steering/test_negsteer_plots.py` ↔ `bin/negsteer_plots.py`, `tests/negative_steering/test_negsteer_within_sequence_plots.py` ↔ `bin/negsteer_within_sequence_plots.py`, `tests/orthogonal_metrics/test_orthogonal_metrics_plots.py` ↔ `bin/orthogonal_metrics_plots.py`. These pairs are the documented "test-iterates-fast, production-mirrors-after-signoff" workflow established in pipeline_notes11.
+- Six plot scripts have a test-tree twin. `tests/proteinmpnn/test_mpnn_plots.py` ↔ `bin/mpnn_plots.py`. `tests/rfdiffusion/test_rfdiffusion_plots.py` ↔ `bin/rfdiffusion_plots.py`. `tests/rosetta_filtering/test_rosetta_filtering_plots.py` ↔ `bin/rosetta_filter_plots.py`. `tests/negative_steering/test_negsteer_plots.py` ↔ `bin/negsteer_plots.py`. `tests/negative_steering/test_negsteer_within_sequence_plots.py` ↔ `bin/negsteer_within_sequence_plots.py`. `tests/orthogonal_metrics/test_orthogonal_metrics_plots.py` ↔ `bin/orthogonal_metrics_plots.py`. These pairs are the documented "test-iterates-fast, production-mirrors-after-signoff" workflow established in pipeline_notes11.
 
 ---
 
 ## E. Cycle / coupling notes
 
-**No import cycles**: the lazy-import pattern in `boltz2_iterate_steering.py` (`_lazy_bns()` and per-function `from boltz2_negative_steering import …`) is in place explicitly to avoid an import-time round-trip with `boltz2_negative_steering` (which pulls heavy third-party packages and is slow to import). With those guards, the static graph is a DAG.
+**No import cycles**. `boltz2_iterate_steering.py` uses a lazy-import pattern, both `_lazy_bns()` and per-function `from boltz2_negative_steering import …`. It exists to avoid an import-time round-trip with `boltz2_negative_steering`, which pulls heavy third-party packages and is slow to import. With those guards, the static graph is a DAG.
 
-**The `boltz2_negative_steering.py` hub problem**: 4 other bin/ files import named symbols from it. That makes the file's exported API surface implicit (no `__all__`), so any rename or signature change ripples — and because `boltz2_iterate_steering.py` does `from boltz2_negative_steering import get_chain_sequence` and `import run_boltz` from inside specific function bodies (lines 2560 + 2644), the rippling is invisible at the top of the file.
+**The `boltz2_negative_steering.py` hub problem**: 4 other bin/ files import named symbols from it. That makes the file's exported API surface implicit (no `__all__`), so any rename or signature change ripples. `boltz2_iterate_steering.py` does `from boltz2_negative_steering import get_chain_sequence` and `import run_boltz` from inside specific function bodies (lines 2560 + 2644). The rippling is therefore invisible at the top of the file.
 
-**The `compute_metrics.py` dual-mode problem**: it's both a library (3 importers via `from compute_metrics import …`) and a subprocess target (2 callers via `subprocess.run`, with the path passed as a CLI flag `--compute-metrics-script`). This means rename or move of the file requires touching not just import sites but also CLI default paths in two callers' argparse setups.
+**The `compute_metrics.py` dual-mode problem**: it is both a library and a subprocess target. 3 importers pull it in via `from compute_metrics import …`. 2 callers invoke it via `subprocess.run`, with the path passed as the CLI flag `--compute-metrics-script`. Renaming or moving the file therefore means touching both the import sites and the CLI default paths in two callers' argparse setups.
