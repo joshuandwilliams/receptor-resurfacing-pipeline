@@ -103,7 +103,8 @@ def test_fasta_entries_keep_their_headers_and_join_wrapped_lines(tmp_path):
 
 @pytest.mark.logic
 def test_an_empty_fasta_yields_no_entries(tmp_path):
-    f = tmp_path / "empty.fa"; f.write_text("")
+    f = tmp_path / "empty.fa"
+    f.write_text("")
     assert pcs.parse_mpnn_fasta(f) == []
 
 
