@@ -1,5 +1,30 @@
 # Containers
 
+## Docker, for the images that can be built that way
+
+`containers/Dockerfile.test` builds the logic-tier test image. It replaces the
+self-contained build that `pytest_runner.def` used to carry, which could only
+run inside the JIC network because it bootstrapped from
+`http://yum-repos.hpccluster/`.
+
+```bash
+docker build -t rrp-test:dev -f containers/Dockerfile.test .
+apptainer build pytest_runner.img docker-daemon://rrp-test:dev
+```
+
+Build from the repository root, not from `containers/`, because `pyproject.toml`
+is copied in. The image installs the `test` extra, so pyproject is the only
+place the dependency list is written. Verified by building it and running the
+suite inside: 559 passed, 7 skipped, the same counts as on the host. 826 MB.
+
+`pytest_runner.def` now bootstraps from that image rather than building its own.
+
+The other four `.def` files are not ported. `boltz2_negsteer.def` builds the
+Boltz-2 image, and the negative-steering engine it was built for is a separate
+repository now with its own published image. `HADDOCK_RFDiffusion_ProteinMPNN_MMseqs2.def`,
+`Rosetta.def` and `NextFlow.def` build images that are large, rarely rebuilt
+and currently working.
+
 This directory holds the Singularity definition (`.def`) files that build the
 container images used by the pipeline. The `.def` files are version-controlled.
 The built images themselves are **not**, because they are large binary build

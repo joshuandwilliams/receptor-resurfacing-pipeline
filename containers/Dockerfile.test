@@ -1,0 +1,104 @@
+# =============================================================================
+# Test-suite image: the logic tier, with none of the pipeline runtime.
+#
+#   docker build -t rrp-test:dev -f containers/Dockerfile.test .
+#   apptainer build pytest_runner.img docker-daemon://rrp-test:dev
+#
+# Build from the REPOSITORY ROOT, not from containers/, because pyproject.toml
+# is copied in to install the `test` extra.
+#
+# This is a port of containers/pytest_runner.def. Two things are deliberately
+# different, and both remove a reason the def could fail:
+#
+#   1. The base is rockylinux:9 from a public registry, replacing the def's
+#      `MirrorURL: http://yum-repos.hpccluster/AlmaLinux/9/...`. That mirror
+#      resolves only inside the JIC network, so the def cannot be built
+#      anywhere else. Rocky 9 and AlmaLinux 9 are both RHEL 9 rebuilds, so
+#      the package set is the same.
+#
+#   2. Python 3.11 comes from AppStream, not from a source build. The def
+#      compiled 3.11.9 with --enable-optimizations to match
+#      boltz2_negsteer.def's toolchain. Rocky 9 ships python3.11 built with
+#      sqlite, which is what that compile was for, and the test suite imports
+#      no 3.11-only syntax that a distro build lacks. pyproject's floor is
+#      3.10.
+#
+# THE DEPENDENCY LIST IS NOT REPEATED HERE. The def listed nine packages with
+# version floors, which then had to be kept in step with pyproject.toml by
+# hand. This installs `.[test]`, so the extra is the single declaration. A
+# dependency added to pyproject arrives here with no edit to this file, which
+# is how the gemmi omission that made seven tests skip silently would have
+# been caught sooner.
+#
+# NOT included, and why: no PyTorch, no CUDA, no Boltz-2, RFDiffusion,
+# ProteinMPNN, Rosetta or MMseqs2. No test in the logic tier loads a model or
+# executes a kernel. They read committed fixtures and files written by earlier
+# stages, and they build their own structures from reference PDBs.
+# =============================================================================
+FROM rockylinux:9
+
+# Fail a RUN on its first error rather than its last.
+SHELL ["/bin/bash", "-euo", "pipefail", "-c"]
+
+# matplotlib and any transitive numba importer need a writable config
+# directory on a read-only image. Agg because nothing here opens a display.
+ENV MPLCONFIGDIR=/tmp \
+    NUMBA_CACHE_DIR=/tmp \
+    MPLBACKEND=Agg \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+# PIP_NO_CACHE_DIR is set from the first layer on purpose. Setting it later
+# cannot shrink a layer that already holds the wheel cache.
+RUN dnf install -y python3.11 python3.11-pip git \
+ && dnf clean all \
+ && rm -rf /var/cache/dnf \
+ && ln -sf /usr/bin/python3.11 /usr/local/bin/python \
+ && ln -sf /usr/bin/pip3.11 /usr/local/bin/pip \
+ && python -V
+
+WORKDIR /opt/pipeline
+
+# Only the files pip needs to resolve the extra. Copying the whole repository
+# would put every fixture in the image and invalidate this layer on any edit.
+COPY pyproject.toml README.md ./
+
+# `.[test]` rather than a hand-written package list, so pyproject stays the
+# single declaration of what the suite needs. --no-build-isolation is not used:
+# the build backend is setuptools and the isolated build is the supported path.
+RUN pip install --upgrade pip setuptools wheel \
+ && pip install '.[test]'
+
+# Import every third-party package the suite uses, through the exact entry
+# point it uses, so a wheel that does not match this Python fails the build
+# rather than a test run. gemmi and Pillow ship compiled extensions, which is
+# why a bare `import` of those two is not enough on its own.
+RUN python - <<'PY'
+import importlib, sys
+checks = [
+    ("pytest",       lambda m: m.__version__),
+    ("pandas",       lambda m: m.__version__),
+    ("numpy",        lambda m: m.__version__),
+    ("scipy",        lambda m: m.__version__),
+    ("gemmi",        lambda m: (m.read_structure, m.__version__)[1]),
+    ("PIL",          lambda m: (__import__("PIL.Image", fromlist=["Image"]), m.__version__)[1]),
+    ("skimage",      lambda m: (__import__("skimage.metrics", fromlist=["structural_similarity"]), m.__version__)[1]),
+    ("Bio",          lambda m: (__import__("Bio.Align", fromlist=["PairwiseAligner"]), m.__version__)[1]),
+    ("matplotlib",   lambda m: (m.use("Agg"), m.__version__)[1]),
+]
+bad = 0
+for name, probe in checks:
+    try:
+        print(f"  {name:12s} {probe(importlib.import_module(name))}")
+    except Exception as exc:
+        print(f"  FAIL {name}: {exc}"); bad += 1
+if bad:
+    sys.exit(f"{bad} dependency import(s) failed")
+print("all test dependencies import")
+PY
+
+# The repository is bind-mounted at run time rather than baked in, so the
+# image does not go stale every time a test changes.
+#
+#   apptainer exec -B "$PWD:$PWD" --pwd "$PWD" pytest_runner.img pytest -m logic
+CMD ["pytest", "-m", "logic"]
