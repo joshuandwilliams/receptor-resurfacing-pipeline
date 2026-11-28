@@ -20,7 +20,13 @@ that `classify_seed` must return for it. The metric values are chosen to sit
 on the correct side of every threshold in extract_passing, so the expected
 classification is a property of the call site, not of the numbers.
 
-`cohort_tree` assembles all three into the runs/ layout the two scripts walk.
+`passing_row` builds a passing_summary.csv row, the per-sequence file the
+cohort aggregation reads. Its column set comes from
+`extract_passing.OUTPUT_FIELDS`, which is the code that writes the file.
+
+`cohort_tree` assembles the first three into the runs/ layout the two scripts
+walk, and `write_passing_summary` writes one sequence's passing_summary.csv
+for the aggregation to read.
 
 Column names are taken from the committed reference set under
 tests/negative_steering/example_output_files/, never from docstrings. Each
@@ -30,8 +36,15 @@ cannot quietly invent a column that the production code would never read.
 from __future__ import annotations
 
 import csv
+import sys
 from pathlib import Path
 from typing import Dict, Iterable, List
+
+_BIN = Path(__file__).resolve().parents[2] / "bin"
+if str(_BIN) not in sys.path:
+    sys.path.insert(0, str(_BIN))
+
+from extract_passing import OUTPUT_FIELDS as PASSING_SUMMARY_COLUMNS  # noqa: E402
 
 # ── cross_sequence_summary.csv ───────────────────────────────────────────
 # Subset of the 63-column header in
@@ -159,6 +172,33 @@ _SEED_DEFAULTS: Dict[str, str] = {
     "reverted_ipsae_min_15": "",
 }
 
+# ── passing_summary.csv ──────────────────────────────────────────────────
+# The full header, taken from the module that writes the file rather than
+# restated here. The populated subset below is what decides a sequence's tier
+# and composite rank in the cross-sequence aggregation:
+#
+#   n_pass == n_seeds       tier A, so 3 of 3 is the default
+#   ra_eff / true_jaccard   the composite score, true_jaccard - 0.05 * ra_eff
+#   outcome                 which prediction counts as the sequence's final
+#
+# Every other column is blank, which is what the writer emits for a metric a
+# run did not produce.
+_PASSING_DEFAULTS: Dict[str, str] = {col: "" for col in PASSING_SUMMARY_COLUMNS}
+_PASSING_DEFAULTS.update({
+    "rank_by_composite_score": "1",
+    "rank_by_ra_eff": "1",
+    "cycle": "0",
+    "pathway": "cycle_0",
+    "sequence_group": "0",
+    "design": "initial",
+    "n_seeds": "3",
+    "n_pass": "3",
+    "outcome": "no_reversion",
+    "ra_eff_vs_truth_median": "2.0",
+    "true_jaccard_median": "0.80",
+    "confidence_flag": "ok",
+})
+
 # Metric blocks, one per outcome `classify_seed` can return. Each sits on the
 # stated side of every threshold in extract_passing (ra_eff < 5 Å, receptor
 # intact, complex_plddt >= 0.70, ipae <= 15, pae_pass_frac >= 0.10,
@@ -230,6 +270,21 @@ def cross_row(name: str, **overrides) -> Dict[str, str]:
     """One cross_sequence_summary.csv row for MPNN sequence `name`."""
     overrides.setdefault("mpnn_sequence", name)
     return _checked(_CROSS_DEFAULTS, overrides, "cross_row")
+
+
+def passing_row(**overrides) -> Dict[str, str]:
+    """One passing_summary.csv row, every OUTPUT_FIELDS column present.
+
+    The default is a tier-A sequence: 3 of 3 seeds passed, ra_eff 2.0 A and
+    true Jaccard 0.80, so a test that wants a different tier says so by
+    naming `n_pass`.
+    """
+    return _checked(_PASSING_DEFAULTS, overrides, "passing_row")
+
+
+def write_passing_summary(path: Path, rows: List[Dict[str, str]]) -> Path:
+    """One sequence's passing_summary.csv at `path`, parents created."""
+    return write_csv(path, rows, PASSING_SUMMARY_COLUMNS)
 
 
 def agg_row(**overrides) -> Dict[str, str]:
