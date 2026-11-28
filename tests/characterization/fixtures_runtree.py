@@ -92,6 +92,65 @@ def complex_pdb(
     return path
 
 
+def lattice_pdb(
+    path: Path,
+    *,
+    chain: str = "A",
+    origin: tuple[float, float, float] = (0.0, 0.0, 0.0),
+    shape: tuple[int, int, int] = (3, 3, 3),
+    step: float = 4.0,
+    start: int = 1,
+    res: str = "ALA",
+    append: bool = False,
+) -> Path:
+    """One CA per point of an axis-aligned cuboid lattice.
+
+    `complex_pdb` places each chain on a straight line, which is the right
+    shape for a contact count and the wrong shape for anything that takes a
+    convex hull. Qhull rejects a collinear point set, so the pose solver's
+    hull depth, validity and interpenetration terms cannot be driven by it.
+
+    This builder gives a non-degenerate point cloud whose geometry is still
+    arithmetic. Point (i, j, k) sits at `origin + (i, j, k) * step` and
+    carries residue number `start + i*ny*nz + j*nz + k`, so a residue number
+    and a coordinate convert into each other without reading the file.
+
+    The hull of a full lattice is the cuboid
+    `[origin, origin + (nx-1, ny-1, nz-1) * step]`, and interior points are
+    inside it by a known depth.
+
+    `append=True` adds a second chain to an existing file, which is how a
+    two-chain complex with two hulls is built.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    kept: list[str] = []
+    if append and path.exists():
+        kept = [ln for ln in path.read_text().splitlines()
+                if ln.startswith("ATOM")]
+
+    lines, serial, resnum = [], len(kept) + 1, start
+    for i in range(shape[0]):
+        for j in range(shape[1]):
+            for k in range(shape[2]):
+                lines.append(ca_line(serial, chain, resnum,
+                                     origin[0] + i * step,
+                                     origin[1] + j * step,
+                                     origin[2] + k * step, res=res))
+                serial += 1
+                resnum += 1
+
+    path.write_text("\n".join(kept + lines) + "\nEND\n")
+    return path
+
+
+def lattice_resnum(i: int, j: int, k: int, *,
+                   shape: tuple[int, int, int] = (3, 3, 3),
+                   start: int = 1) -> int:
+    """The residue number `lattice_pdb` gives to lattice point (i, j, k)."""
+    _, ny, nz = shape
+    return start + i * ny * nz + j * nz + k
+
+
 def rfdiffusion_tree(
     root: Path,
     *,

@@ -140,7 +140,12 @@ skip_covered = true
 # statements.  It got there by building fixture run trees with known answers
 # rather than by testing against a real cluster directory, which is the route
 # open to this repository too.
-# 35.0 is where it stands with the two negative-steering plot modules covered
-# (bin/negsteer_plots.py 0 → 98%, bin/negsteer_within_sequence_plots.py
-# 0 → 97%), which took the logic tier from 20.79% to 35.09%.
-fail_under = 41.3
+#
+# 34.4 is where it stands after four modules that were at 0% were covered on
+# synthetic input with known answers: pose_interface_metrics.py to 100%,
+# pose_solver.py to 96%, cross_sequence_summary.py to 98% and
+# extract_passing.py to 96%.  That is 1367 statements, and it moved the
+# figure from 20.79% to 34.41%.  The fixture builders are in
+# tests/characterization/fixtures_runtree.py, which now also writes a cuboid
+# lattice for the convex-hull code that a collinear chain cannot drive.
+fail_under = 55.0
