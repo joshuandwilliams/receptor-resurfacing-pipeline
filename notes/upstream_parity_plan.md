@@ -122,7 +122,10 @@ workflows and `params.negsteer_rehydrate_from`), nine `bin/` modules, and
 uncommitted changes of that size, because a failed test then has two candidate
 causes.
 
-**1.2 Decide what happens to `main`.** `phase4-impl` is 71 commits ahead of
+**1.2 Decide what happens to `main`. DONE.** `main` was fast-forwarded and is
+now the only branch.
+
+Original note: `phase4-impl` is 71 commits ahead of
 `main` and 0 behind, and `git merge-base --is-ancestor main phase4-impl`
 succeeds, so it fast-forwards cleanly. Upstream did all 43 PRs against its
 `main`. Doing the same here means merging `phase4-impl` to `main` first, or

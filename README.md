@@ -23,8 +23,9 @@ by the `check_test_run` tier. That tier requires a completed pipeline run, so
 it cannot contribute to a laptop or CI figure. Raising it is tracked in
 [`notes/upstream_parity_plan.md`](notes/upstream_parity_plan.md).
 
-Active work is on the `phase4-impl` branch. `main` is the pre-Phase-4
-baseline.
+All work is on `main`. It is the only branch. The `phase4-impl` and
+`remediation` branches were deleted once every one of their commits was on
+`main`.
 
 [`notes/codebase_remediation_plan.md`](notes/codebase_remediation_plan.md)
 plans the remediation this codebase is going through.
