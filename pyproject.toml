@@ -148,4 +148,4 @@ skip_covered = true
 # figure from 20.79% to 34.41%.  The fixture builders are in
 # tests/characterization/fixtures_runtree.py, which now also writes a cuboid
 # lattice for the convex-hull code that a collinear chain cannot drive.
-fail_under = 77.6
+fail_under = 78.4
