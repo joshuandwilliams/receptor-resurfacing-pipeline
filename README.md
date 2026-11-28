@@ -31,17 +31,17 @@ Test coverage over `bin/` is **10.81%**, gated as a ratchet in `pyproject.toml`
 so it can only go up. Coverage is low because most of `bin/` is reached only
 by the `check_test_run` tier. That tier requires a completed pipeline run, so
 it cannot contribute to a laptop or CI figure. Raising it is tracked in
-[`notes/upstream_parity_plan.md`](notes/upstream_parity_plan.md).
+[`notes/upstream_parity_plan.md`](https://github.com/joshuandwilliams/resurfacing-experiments/blob/main/notes/upstream_parity_plan.md).
 
 All work is on `main`. It is the only branch. The `phase4-impl` and
 `remediation` branches were deleted once every one of their commits was on
 `main`.
 
-[`notes/codebase_remediation_plan.md`](notes/codebase_remediation_plan.md)
+[`notes/codebase_remediation_plan.md`](https://github.com/joshuandwilliams/resurfacing-experiments/blob/main/notes/codebase_remediation_plan.md)
 plans the remediation this codebase is going through.
-[`notes/upstream_parity_plan.md`](notes/upstream_parity_plan.md) covers the
+[`notes/upstream_parity_plan.md`](https://github.com/joshuandwilliams/resurfacing-experiments/blob/main/notes/upstream_parity_plan.md) covers the
 work to bring it in line with the engine repository.
-[`notes/things_to_fix.md`](notes/things_to_fix.md) lists the known defects
+[`notes/things_to_fix.md`](https://github.com/joshuandwilliams/resurfacing-experiments/blob/main/notes/things_to_fix.md) lists the known defects
 that would change results.
 
 `notes/SESSION_HANDOFF.md` and `notes/remediation_state.md` are per-session
@@ -100,9 +100,9 @@ Jaccard). The output is a ranked cohort table of candidate binder
 sequences with their quality metrics.
 
 For the full stage-by-stage breakdown, see
-[`notes/inventory/04_functional_categorization.md`](notes/inventory/04_functional_categorization.md).
+[`notes/inventory/04_functional_categorization.md`](https://github.com/joshuandwilliams/resurfacing-experiments/blob/main/notes/inventory/04_functional_categorization.md).
 For domain vocabulary, see
-[`notes/inventory/06_ubiquitous_language.md`](notes/inventory/06_ubiquitous_language.md).
+[`notes/inventory/06_ubiquitous_language.md`](https://github.com/joshuandwilliams/resurfacing-experiments/blob/main/notes/inventory/06_ubiquitous_language.md).
 
 ## Repo layout
 
@@ -173,21 +173,21 @@ RECEPTOR_OUTPUT_ROOT=<run-output-dir> pytest -m check_test_run
 See [`tests/characterization/README.md`](tests/characterization/README.md)
 for the comparator framework, marker tiers, and how to update reference
 outputs after intentional behaviour changes.
-[`notes/inventory/14_phase_2_revision_per_module_tests.md`](notes/inventory/14_phase_2_revision_per_module_tests.md)
+[`notes/inventory/14_phase_2_revision_per_module_tests.md`](https://github.com/joshuandwilliams/resurfacing-experiments/blob/main/notes/inventory/14_phase_2_revision_per_module_tests.md)
 covers the per-module testing strategy in full.
 
 ## Where to look for what
 
 | Question | Document |
 |---|---|
-| How does the pipeline work? | [`notes/inventory/04_functional_categorization.md`](notes/inventory/04_functional_categorization.md) |
-| What does *\<term\>* mean? | [`notes/inventory/06_ubiquitous_language.md`](notes/inventory/06_ubiquitous_language.md) |
-| Where is the remediation at? | [`notes/remediation_state.md`](notes/remediation_state.md) |
-| What's the testing strategy? | [`notes/inventory/14_phase_2_revision_per_module_tests.md`](notes/inventory/14_phase_2_revision_per_module_tests.md) |
-| Why these test fixtures? | [`notes/inventory/15_discovery_run_path_coverage.md`](notes/inventory/15_discovery_run_path_coverage.md) |
+| How does the pipeline work? | [`notes/inventory/04_functional_categorization.md`](https://github.com/joshuandwilliams/resurfacing-experiments/blob/main/notes/inventory/04_functional_categorization.md) |
+| What does *\<term\>* mean? | [`notes/inventory/06_ubiquitous_language.md`](https://github.com/joshuandwilliams/resurfacing-experiments/blob/main/notes/inventory/06_ubiquitous_language.md) |
+| Where is the remediation at? | [`notes/remediation_state.md`](https://github.com/joshuandwilliams/resurfacing-experiments/blob/main/notes/remediation_state.md) |
+| What's the testing strategy? | [`notes/inventory/14_phase_2_revision_per_module_tests.md`](https://github.com/joshuandwilliams/resurfacing-experiments/blob/main/notes/inventory/14_phase_2_revision_per_module_tests.md) |
+| Why these test fixtures? | [`notes/inventory/15_discovery_run_path_coverage.md`](https://github.com/joshuandwilliams/resurfacing-experiments/blob/main/notes/inventory/15_discovery_run_path_coverage.md) |
 | How do I sync to HPC? | [`scripts/sync_to_hpc.sh`](scripts/sync_to_hpc.sh) |
 | How are containers built? | [`containers/README.md`](containers/README.md) |
-| What are the known issues? | [`notes/inventory/05_findings.md`](notes/inventory/05_findings.md) |
+| What are the known issues? | [`notes/inventory/05_findings.md`](https://github.com/joshuandwilliams/resurfacing-experiments/blob/main/notes/inventory/05_findings.md) |
 
 ## Development workflow
 
