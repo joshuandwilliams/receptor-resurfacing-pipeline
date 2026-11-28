@@ -303,3 +303,329 @@ class TestImmutability:
             cold_start=cs, truth=truth)
         with pytest.raises((AttributeError, Exception)):
             run.mpnn_sequence_id = "new"  # type: ignore
+
+
+# ── What the stage dictionaries are allowed to hold ────────────────
+#
+# Every verdict, outcome and tier on this type is computed by walking
+# `cold_start`, `steered` and `reversion`.  A stage filed under the wrong
+# key silently changes which rule is applied to it — a steered stage read
+# as a reversion would turn `contaminated` into `new_contamination` — so
+# the checks run at construction rather than at first use.
+
+
+@pytest.mark.logic
+class TestStageDictValidation:
+    def test_a_cold_start_that_is_not_a_stage_result_is_rejected(self, tmp_path, truth):
+        with pytest.raises(TypeError, match="cold_start must be a StageResult"):
+            nsr.NegativeSteeringRun(
+                mpnn_sequence_id="x", workdir=tmp_path, row_type="steered",
+                cold_start="cycle_0/initial", truth=truth)
+
+    def test_a_steered_entry_that_is_not_a_stage_result_is_rejected(
+        self, tmp_path, truth
+    ):
+        cs = _make_cold_start([_fake_pred(2.0, 1.0)])
+        with pytest.raises(TypeError, match="steered\\['design_03'\\]"):
+            nsr.NegativeSteeringRun(
+                mpnn_sequence_id="x", workdir=tmp_path, row_type="steered",
+                cold_start=cs, steered={"design_03": "design_03_s0"},
+                truth=truth)
+
+    def test_a_non_steered_stage_filed_under_steered_is_rejected(
+        self, tmp_path, truth
+    ):
+        """A cold-start stage in the steered dict would be scored with the
+        steered vocabulary (clean_steered / contaminated) instead of its
+        own."""
+        cs = _make_cold_start([_fake_pred(2.0, 1.0)])
+        other = _make_cold_start([_fake_pred(2.0, 1.0)])
+        with pytest.raises(ValueError, match="stage_type='steered'"):
+            nsr.NegativeSteeringRun(
+                mpnn_sequence_id="x", workdir=tmp_path, row_type="steered",
+                cold_start=cs, steered={"design_03": other}, truth=truth)
+
+    def test_a_reversion_entry_that_is_not_a_stage_result_is_rejected(
+        self, tmp_path, truth
+    ):
+        cs = _make_cold_start([_fake_pred(2.0, 1.0)])
+        with pytest.raises(TypeError, match="reversion\\['rev_design_03_s0'\\]"):
+            nsr.NegativeSteeringRun(
+                mpnn_sequence_id="x", workdir=tmp_path, row_type="steered",
+                cold_start=cs, reversion={"rev_design_03_s0": None},
+                truth=truth)
+
+    def test_a_steered_stage_filed_under_reversion_is_rejected(self, tmp_path, truth):
+        """Mis-filing here is the dangerous direction: a steered stage read as
+        a reversion would report pose_holds for a seed that was never
+        reverted."""
+        cs = _make_cold_start([_fake_pred(2.0, 1.0)])
+        steered_stage = _make_steered([_fake_pred(2.0, 1.0)])
+        with pytest.raises(ValueError, match="stage_type='reversion'"):
+            nsr.NegativeSteeringRun(
+                mpnn_sequence_id="x", workdir=tmp_path, row_type="steered",
+                cold_start=cs, reversion={"rev_design_03_s0": steered_stage},
+                truth=truth)
+
+
+# ── Truth is required before any verdict ───────────────────────────
+
+
+@pytest.mark.logic
+def test_a_run_without_truth_raises_rather_than_scoring_against_nothing(tmp_path):
+    """Every verdict is a comparison against the RFDiffusion design that was
+    being reproduced.  Without it ra_eff and the intact-receptor RMSD are both
+    None, which would read as no_data for every seed and report tier none for
+    a run nobody could score."""
+    run = nsr.NegativeSteeringRun(
+        mpnn_sequence_id="x", workdir=tmp_path, row_type="steered",
+        cold_start=_make_cold_start([_fake_pred(2.0, 1.0)] * 3))
+    t = pt.PipelineInternalThresholds.default()
+    with pytest.raises(ValueError, match="require a 'truth'"):
+        run.per_seed_final_verdicts(t)
+    with pytest.raises(ValueError, match="require a 'truth'"):
+        run.n_pass(t)
+
+
+# ── A reversion that did not cover every steered seed ──────────────
+
+
+@pytest.mark.logic
+def test_a_seed_the_reversion_skipped_keeps_its_steered_verdict(tmp_path, truth, contam):
+    """The engine reverts per (design, source seed), so a reversion can come
+    back with fewer seeds than the steered stage it answers.  Seeds 0 and 1
+    were reverted and hold the pose; seed 2 has no reversion, so its steered
+    verdict stands and it stays clean_steered.  3 of 3 pass-equivalent, which
+    is tier A.
+    """
+    cs = _make_cold_start([_fake_pred(10.0, 1.0)] * 3)
+    steered = {
+        "design_03": sr.StageResult(
+            stage_type="steered", config_id="design_03",
+            predictions=[
+                _fake_pred(2.0, 1.0, contact_positions=[5]),    # contaminated
+                _fake_pred(2.0, 1.0, contact_positions=[5]),    # contaminated
+                _fake_pred(2.0, 1.0, contact_positions=[100]),  # clean_steered
+            ],
+            confidences=[_fake_conf() for _ in range(3)],
+            seed_indices=[0, 1, 2],
+            mutated_positions=PositionSet([5, 7, 12], chain="A",
+                                          frame="prediction")),
+    }
+    reversion = {
+        "rev_design_03_s0": sr.StageResult(
+            stage_type="reversion", config_id="rev_design_03_s0",
+            predictions=[_fake_pred(2.0, 1.0, contact_positions=[100])] * 2,
+            confidences=[_fake_conf() for _ in range(2)],
+            seed_indices=[0, 1],                       # seed 2 is absent
+            mutated_positions=PositionSet([5, 7, 12], chain="A",
+                                          frame="prediction"),
+            applies_to_designs=["design_03"]),
+    }
+    run = nsr.NegativeSteeringRun(
+        mpnn_sequence_id="x", workdir=tmp_path, row_type="steered",
+        cold_start=cs, steered=steered, reversion=reversion,
+        truth=truth, contamination_positions=contam)
+    t = pt.PipelineInternalThresholds.default()
+
+    by_seed = {e["seed_index"]: e for e in run.per_seed_final_verdicts(t)}
+    assert by_seed[0]["stage_run"] == "reverted"
+    assert by_seed[1]["stage_run"] == "reverted"
+    assert by_seed[2]["stage_run"] == "steered"
+    assert by_seed[2]["verdict"] == "clean_steered"
+    assert run.n_pass(t) == 3
+    assert run.tier(t) == "A"
+
+
+# ── outcome: the failure branches ──────────────────────────────────
+
+
+@pytest.mark.logic
+def test_every_seed_collapsing_after_reversion_is_pose_collapses(
+    tmp_path, truth, contam
+):
+    """Nothing held and nothing was newly contaminated, so the only verdict
+    left is pose_collapses: 3 collapses, 0 holds, 0 new contamination."""
+    cs = _make_cold_start([_fake_pred(10.0, 1.0)] * 3)
+    steered = {"design_03": _make_steered(
+        [_fake_pred(2.0, 1.0, contact_positions=[5])] * 3)}
+    reversion = {"rev_design_03_s0": _make_reversion(
+        [_fake_pred(10.0, 1.0, contact_positions=[100])] * 3,
+        applies_to=("design_03",))}
+    run = nsr.NegativeSteeringRun(
+        mpnn_sequence_id="x", workdir=tmp_path, row_type="steered",
+        cold_start=cs, steered=steered, reversion=reversion,
+        truth=truth, contamination_positions=contam)
+    t = pt.PipelineInternalThresholds.default()
+    assert run.outcome(t) == "pose_collapses"
+    assert run.n_pass(t) == 0
+    assert run.tier(t) == "none"
+
+
+# ── outcome_reason ─────────────────────────────────────────────────
+#
+# The reason string is what a reader sees next to an outcome in the cohort
+# table.  An outcome of no_reversion has two quite different causes, and
+# only this string separates them.
+
+
+@pytest.mark.logic
+def test_the_reason_for_a_cold_start_run_says_steering_never_ran(tmp_path, truth):
+    run = nsr.NegativeSteeringRun(
+        mpnn_sequence_id="x", workdir=tmp_path, row_type="steered",
+        cold_start=_make_cold_start([_fake_pred(2.0, 1.0)] * 3), truth=truth)
+    t = pt.PipelineInternalThresholds.default()
+    assert run.outcome(t) == "no_reversion"
+    assert run.outcome_reason(t) == "cold-start path: no steering ran"
+
+
+@pytest.mark.logic
+def test_the_reason_separates_steering_without_reversion_from_a_cold_start(
+    tmp_path, truth, contam
+):
+    """Both report outcome no_reversion, and they are not the same thing.
+    Here steering ran and no design had a majority of its correctly-placed
+    seeds contaminated, so no reversion was triggered."""
+    cs = _make_cold_start([_fake_pred(10.0, 1.0)] * 3)
+    steered = {"design_03": _make_steered(
+        [_fake_pred(2.0, 1.0, contact_positions=[100])] * 3)}
+    run = nsr.NegativeSteeringRun(
+        mpnn_sequence_id="x", workdir=tmp_path, row_type="steered",
+        cold_start=cs, steered=steered, truth=truth,
+        contamination_positions=contam)
+    t = pt.PipelineInternalThresholds.default()
+    assert run.outcome(t) == "no_reversion"
+    reason = run.outcome_reason(t)
+    assert "no reversion" in reason
+    assert reason != "cold-start path: no steering ran"
+
+
+@pytest.mark.logic
+def test_the_reason_for_a_reverted_run_is_the_verdict_breakdown(
+    tmp_path, truth, contam
+):
+    """2 seeds hold and 1 is newly contaminated, so the breakdown reads
+    'new_contamination=1; pose_holds=2' — sorted by verdict name."""
+    cs = _make_cold_start([_fake_pred(10.0, 1.0)] * 3)
+    steered = {"design_03": _make_steered(
+        [_fake_pred(2.0, 1.0, contact_positions=[5])] * 3)}
+    reversion = {"rev_design_03_s0": _make_reversion(
+        [
+            _fake_pred(2.0, 1.0, contact_positions=[100]),
+            _fake_pred(2.0, 1.0, contact_positions=[100]),
+            _fake_pred(2.0, 1.0, contact_positions=[5]),
+        ],
+        applies_to=("design_03",))}
+    run = nsr.NegativeSteeringRun(
+        mpnn_sequence_id="x", workdir=tmp_path, row_type="steered",
+        cold_start=cs, steered=steered, reversion=reversion,
+        truth=truth, contamination_positions=contam)
+    t = pt.PipelineInternalThresholds.default()
+    assert run.outcome_reason(t) == "new_contamination=1; pose_holds=2"
+
+
+# ── tier arithmetic ────────────────────────────────────────────────
+
+
+@pytest.mark.logic
+def test_tier_C_is_exactly_one_passing_seed_out_of_more_than_one(
+    tmp_path, truth, contam
+):
+    """1 of 3 is tier C.  2 of 3 would be B and 3 of 3 A, so C is the only
+    tier that pins n_pass == 1 rather than a fraction."""
+    cs = _make_cold_start([_fake_pred(10.0, 1.0)] * 3)
+    steered = {"design_03": _make_steered([
+        _fake_pred(2.0, 1.0, contact_positions=[100]),  # clean_steered
+        _fake_pred(2.0, 1.0, contact_positions=[5]),    # contaminated
+        _fake_pred(10.0, 1.0),                          # pose_collapses
+    ])}
+    run = nsr.NegativeSteeringRun(
+        mpnn_sequence_id="x", workdir=tmp_path, row_type="steered",
+        cold_start=cs, steered=steered, truth=truth,
+        contamination_positions=contam)
+    t = pt.PipelineInternalThresholds.default()
+    assert run.n_pass(t) == 1
+    assert run.n_seeds_total() == 3
+    assert run.tier(t) == "C"
+
+
+@pytest.mark.logic
+def test_the_steered_path_totals_seeds_across_designs(tmp_path, truth, contam):
+    """Two designs of 3 seeds each is 6 seeds, not 3.  Tiering is per MPNN
+    sequence over that product, so 3 passing of 6 is tier B."""
+    cs = _make_cold_start([_fake_pred(10.0, 1.0)] * 3)
+    steered = {
+        "design_03": _make_steered(
+            [_fake_pred(2.0, 1.0, contact_positions=[100])] * 3,
+            design_id="design_03"),
+        "design_04": _make_steered(
+            [_fake_pred(2.0, 1.0, contact_positions=[5])] * 3,
+            design_id="design_04"),
+    }
+    run = nsr.NegativeSteeringRun(
+        mpnn_sequence_id="x", workdir=tmp_path, row_type="steered",
+        cold_start=cs, steered=steered, truth=truth,
+        contamination_positions=contam)
+    t = pt.PipelineInternalThresholds.default()
+    assert run.n_seeds_total() == 6
+    assert run.n_pass(t) == 3
+    assert run.tier(t) == "B"
+
+
+class _ZeroSeedRun(nsr.NegativeSteeringRun):
+    """A run reporting no seeds at all.
+
+    No workdir can produce one: StageResult requires at least one prediction,
+    and n_seeds_total is a sum of those counts, so it is always >= 1.  The
+    `n_seeds <= 0` guard in tier() is therefore only reachable through a
+    subclass, and it is worth keeping covered because a zero there would
+    otherwise make `n_pass == n_seeds` read as tier A.
+    """
+
+    def n_seeds_total(self) -> int:
+        return 0
+
+
+@pytest.mark.logic
+def test_a_run_with_no_seeds_is_tier_none_not_tier_A(tmp_path, truth):
+    cs = _make_cold_start([_fake_pred(2.0, 1.0)] * 3)
+    run = _ZeroSeedRun(
+        mpnn_sequence_id="x", workdir=tmp_path, row_type="steered",
+        cold_start=cs, truth=truth)
+    t = pt.PipelineInternalThresholds.default()
+    assert run.n_pass(t) == 3          # the seeds exist in the stage
+    assert run.n_seeds_total() == 0     # but the total reports none
+    assert run.tier(t) == "none"
+
+
+@pytest.mark.logic
+def test_no_real_run_can_report_zero_seeds(tmp_path, truth):
+    """The companion to the test above: the guard is unreachable from data,
+    because a constructible run always carries at least one prediction."""
+    run = nsr.NegativeSteeringRun(
+        mpnn_sequence_id="x", workdir=tmp_path, row_type="steered",
+        cold_start=_make_cold_start([_fake_pred(2.0, 1.0)]), truth=truth)
+    assert run.n_seeds_total() >= 1
+
+
+# ── Identification ─────────────────────────────────────────────────
+
+
+@pytest.mark.logic
+def test_the_repr_names_the_sequence_and_counts_the_stages(tmp_path, truth, contam):
+    """The repr is what appears in a pytest failure and in a cohort log line,
+    so it has to say which sequence and how much of the chain ran."""
+    cs = _make_cold_start([_fake_pred(10.0, 1.0)] * 3)
+    steered = {
+        "design_03": _make_steered([_fake_pred(2.0, 1.0)], design_id="design_03"),
+        "design_04": _make_steered([_fake_pred(2.0, 1.0)], design_id="design_04"),
+    }
+    reversion = {"rev_design_03_s0": _make_reversion([_fake_pred(2.0, 1.0)])}
+    run = nsr.NegativeSteeringRun(
+        mpnn_sequence_id="design_03_seq_01", workdir=tmp_path,
+        row_type="control_polyA", cold_start=cs, steered=steered,
+        reversion=reversion, truth=truth, contamination_positions=contam)
+    assert repr(run) == (
+        "NegativeSteeringRun(mpnn_sequence_id='design_03_seq_01', "
+        "row_type='control_polyA', n_steered_designs=2, n_reversions=1)"
+    )

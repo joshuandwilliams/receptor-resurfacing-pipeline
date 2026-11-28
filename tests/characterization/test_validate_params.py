@@ -373,3 +373,139 @@ class TestPoseSolverPairDistanceBoundsOrdered:
         })
         assert any("min_pair_distance" in e and "max_pair_distance" in e
                    for e in errors)
+
+    def test_unusable_bounds_are_left_to_the_per_param_spec(self):
+        """The ordering rule cannot compare two values it cannot read.
+        Reporting "min must be less than max" on top of the two type errors
+        would be a third message about the same mistake, so the rule stands
+        down and only the float_range errors are raised.
+        """
+        errors = vp.validate_params({
+            "receptor_input": "/tmp/r.pdb",
+            "effector_input": "/tmp/e.pdb",
+            "pose_solver_pairs": "A25-C42",
+            "pose_solver_min_pair_distance": "close",
+            "pose_solver_max_pair_distance": "far",
+        })
+        assert len(errors) == 2
+        assert all("expected number" in e for e in errors)
+
+
+# ── A value of the wrong type, kind by kind ─────────────────────────
+#
+# Nextflow serialises params with JsonOutput.toJson, so a param can
+# arrive as null, as a number where a string was meant, or as a list.
+# Every validator has to name the type it got rather than raise, because
+# validate_params reports the whole list at once and a raise would hide
+# every error after the first.
+
+
+@pytest.mark.logic
+@pytest.mark.parametrize("value", [None, [1.0], {"min": 1}])
+def test_a_float_range_reports_an_uncoercible_value(value):
+    err = vp._validate_float_range(value, {"min": 0.0, "max": 1.0})
+    assert err and "expected number" in err
+    assert type(value).__name__ in err
+
+
+@pytest.mark.logic
+def test_a_non_empty_str_reports_a_non_string():
+    err = vp._validate_non_empty_str(42, {})
+    assert err == "expected string, got int"
+
+
+@pytest.mark.logic
+def test_an_optional_path_reports_a_value_that_is_neither_none_nor_a_string():
+    """None is the "not supplied" case and passes.  A number is a mistake, and
+    it must not be coerced into a path."""
+    err = vp._validate_optional_path(42, {})
+    assert err == "expected None or string path, got int"
+
+
+@pytest.mark.logic
+def test_a_regex_reports_a_non_string():
+    """re.fullmatch would raise TypeError on a non-string, which would abort
+    the whole validation run partway through its error list."""
+    err = vp._validate_regex(42, {"pattern": r"[A-Za-z]"})
+    assert err == "expected string, got int"
+
+
+# ── The `any` escape hatch ──────────────────────────────────────────
+
+
+@pytest.mark.logic
+def test_the_any_validator_accepts_whatever_it_is_given():
+    """`any` is the marker for a param whose valid range the threshold audit
+    has not decided.  It must accept every shape, because an unspecced param
+    does not block the pipeline."""
+    for value in ("A1-5/10-10/A16-20 B", 7, None, [1, 2, 3], {"a": 1}):
+        assert vp._validate_any(value, {}) is None
+
+
+@pytest.mark.logic
+def test_a_param_specced_as_any_produces_no_error():
+    """contigs carries a free-form RFDiffusion contig string, listed as a
+    coverage gap rather than left unknown, so the coverage report surfaces
+    it."""
+    assert vp.validate_params({"contigs": "A1-5/10-10/A16-20 B"}) == []
+    assert "contigs" in vp.coverage_report()
+
+
+# ── main(): the argument and file-shape paths ───────────────────────
+#
+# main() is invoked from the top of workflow MAIN_PIPELINE before any
+# process is dispatched, and its exit code is the whole gate.  Each
+# non-zero code has to be reachable for the right reason.
+
+
+@pytest.mark.logic
+def test_report_prints_the_coverage_report_and_exits_zero(capsys):
+    assert vp.main(["--report"]) == 0
+    out = capsys.readouterr().out
+    assert "Total spec entries" in out
+    assert "Coverage gaps" in out
+
+
+@pytest.mark.logic
+def test_neither_report_nor_params_json_is_an_argparse_error():
+    """argparse exits 2 for a usage error, which is distinct from the 2 that
+    a missing or malformed params file returns.  Both are non-zero, so the
+    pipeline is blocked either way."""
+    with pytest.raises(SystemExit) as exc:
+        vp.main([])
+    assert exc.value.code == 2
+
+
+@pytest.mark.logic
+def test_malformed_params_json_returns_two(tmp_path, capsys):
+    """Nextflow writes this file itself, so malformed JSON means the harness
+    is broken rather than a param being wrong.  It must not read as "no
+    params set", which would pass with an empty error list."""
+    bad = tmp_path / "params.json"
+    bad.write_text('{"num_designs": 10,')
+    assert vp.main(["--params-json", str(bad)]) == 2
+    assert "malformed params JSON" in capsys.readouterr().err
+
+
+@pytest.mark.logic
+@pytest.mark.parametrize("payload", ["[1, 2, 3]", '"a string"', "null"])
+def test_params_json_that_is_not_an_object_returns_two(tmp_path, payload, capsys):
+    """JsonOutput.toJson(params) always yields a flat object.  Anything else
+    would make `k in params` a membership test on the wrong container, and
+    every spec would silently be skipped."""
+    f = tmp_path / "params.json"
+    f.write_text(payload)
+    assert vp.main(["--params-json", str(f)]) == 2
+    assert "must be an object" in capsys.readouterr().err
+
+
+@pytest.mark.logic
+def test_a_valid_run_reports_the_spec_and_param_counts(tmp_path, capsys):
+    """The success line is the only record in the Nextflow log that validation
+    happened at all, so it carries both counts."""
+    f = tmp_path / "params.json"
+    f.write_text(json.dumps({"num_designs": 10, "negsteer_num_seeds": 3}))
+    assert vp.main(["--params-json", str(f)]) == 0
+    err = capsys.readouterr().err
+    assert f"{len(vp.PARAM_SPECS)} specs checked" in err
+    assert "2 params provided" in err

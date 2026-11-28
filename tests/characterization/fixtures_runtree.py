@@ -5,7 +5,7 @@ its own last output. These builders state the answer first, then construct the
 input that must produce it, so a wrong result is a failure rather than a new
 blessed reference.
 
-Two kinds of builder:
+Three kinds of builder:
 
 `complex_pdb` places a receptor and an effector at a geometry you specify, so
 a contact count, a chain split and a centre-of-mass displacement are all known
@@ -15,6 +15,11 @@ in advance.
 with the metrics JSON and the design PDBs agreeing with each other, so the
 readers and the filters can be driven end to end without a cluster.
 
+`negsteer_workdir` and `boltz_prediction_dir` write the per-sequence workdir
+the negative-steering engine leaves behind. The engine itself is an installed
+Singularity container and is not part of this repository, so its output tree
+on disk is the only stand-in `NegativeSteeringRun.from_workdir` needs.
+
 Layouts are taken from the committed reference sets under
 `tests/<module>/example_output_files/`, not from docstrings.
 """
@@ -22,6 +27,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Mapping, Sequence
 
 # One CA per residue is enough for every metric in rfdiffusion_filter, which
 # reads only CA records. Writing full backbones would make the fixtures larger
@@ -202,4 +208,134 @@ def rfdiffusion_tree(
         "contigs": contigs,
     }, indent=2))
     (d / "passing_designs.txt").write_text("\n".join(passing) + "\n")
+    return root
+
+
+# ══════════════════════════════════════════════════════════════════════
+# The negative-steering engine's per-sequence workdir
+# ══════════════════════════════════════════════════════════════════════
+#
+# Layout copied from
+# tests/negative_steering/example_output_files/negative_steering/runs/
+#     design_42_seq_0/cycle_0/...
+# and from the layout `NegativeSteeringRun.from_workdir` documents:
+#
+#     <workdir>/row_type.txt
+#     <workdir>/run_one_runtime_sec.txt
+#     <workdir>/cycle_<C>/initial[_sN]/                    cold-start seeds
+#     <workdir>/cycle_<C>/steered/design_NN_sS/            steered
+#     <workdir>/cycle_<C>/reversions/rev_design_NN_sS_sR/  reversion
+
+# The fields a confidence sidecar carries in the committed reference set. The
+# values are arbitrary but well-formed, so a test that cares about a number
+# passes its own payload instead.
+BOLTZ_CONFIDENCE_FIELDS = {
+    "confidence_score": 0.6,
+    "ptm": 0.5,
+    "iptm": 0.4,
+    "complex_plddt": 0.7,
+}
+
+
+def boltz_prediction_dir(
+    parent: Path,
+    *,
+    model_sample: int = 0,
+    write_pdb: bool = True,
+    write_confidence: bool = True,
+    flat_pdb: bool = False,
+    confidence: Mapping[str, object] | None = None,
+    mutations: Sequence[tuple[int, str, str]] | str | None = None,
+    n_receptor: int = 6,
+    n_effector: int = 4,
+) -> Path:
+    """One Boltz prediction directory, as the engine writes it.
+
+        <parent>/boltz_results_input/predictions/input/pdb/input_model_<M>.pdb
+        <parent>/boltz_results_input/predictions/input/confidence_input_model_<M>.json
+        <parent>/mutations.tsv
+
+    `_find_boltz_outputs` needs the PDB and its confidence sidecar together
+    and reports None for either that is absent, so `write_pdb=False` and
+    `write_confidence=False` build the two half-written directories a killed
+    GPU job leaves behind.
+
+    `flat_pdb=True` writes the PDB beside the sidecar instead of under `pdb/`,
+    which is the older engine layout `_find_boltz_outputs` falls back to.
+
+    `mutations` writes mutations.tsv, either as (pos1, wt, mut) triples or as
+    a string written verbatim for the malformed-file cases. pos1 is 1-based on
+    the designed-frame receptor. It is NOT the engine plan.json's
+    `mutated_positions`, which are 0-based.
+    """
+    pred_root = parent / "boltz_results_input" / "predictions" / "input"
+    pred_root.mkdir(parents=True, exist_ok=True)
+
+    if write_pdb:
+        name = f"input_model_{model_sample}.pdb"
+        dest = pred_root / name if flat_pdb else pred_root / "pdb" / name
+        complex_pdb(dest, n_receptor=n_receptor, n_effector=n_effector)
+
+    if write_confidence:
+        payload = dict(BOLTZ_CONFIDENCE_FIELDS if confidence is None
+                       else confidence)
+        (pred_root / f"confidence_input_model_{model_sample}.json").write_text(
+            json.dumps(payload))
+
+    if mutations is not None:
+        if isinstance(mutations, str):
+            text = mutations
+        else:
+            rows = "".join(f"{pos}\t{wt}\t{mut}\n" for pos, wt, mut in mutations)
+            text = "pos1\twt\tmut\n" + rows
+        (parent / "mutations.tsv").write_text(text)
+
+    return parent
+
+
+def negsteer_workdir(
+    root: Path,
+    *,
+    cycle: int = 0,
+    cold_start: Sequence[int] | Mapping[int, Mapping] = (0, 1, 2),
+    steered: Mapping[str, Mapping] | None = None,
+    reversions: Mapping[str, Mapping] | None = None,
+    row_type: str | None = "steered",
+    runtime_sec: object | None = None,
+) -> Path:
+    """One MPNN sequence's finished negsteer workdir.
+
+    `cold_start` names the seed indices to write. Seed 0 goes in `initial/`
+    and seed N in `initial_sN/`, which is the engine's naming. Pass a mapping
+    instead to give a seed its own `boltz_prediction_dir` keywords.
+
+    `steered` and `reversions` are keyed by the subdirectory name, so the
+    engine's `design_NN_sS` and `rev_design_NN_sS_sR` conventions stay visible
+    at the call site rather than being assembled here. Each value is the
+    keywords for that directory's `boltz_prediction_dir`.
+
+    `row_type=None` omits row_type.txt, which is the sidecar-absent case.
+    `runtime_sec` is written verbatim, so a test can pass a string that does
+    not parse as a float.
+    """
+    cycle_dir = root / f"cycle_{cycle}"
+    cycle_dir.mkdir(parents=True, exist_ok=True)
+
+    seeds = (cold_start if isinstance(cold_start, Mapping)
+             else {s: {} for s in cold_start})
+    for seed_idx, kwargs in seeds.items():
+        sub = "initial" if seed_idx == 0 else f"initial_s{seed_idx}"
+        boltz_prediction_dir(cycle_dir / sub, **dict(kwargs))
+
+    for group, entries in (("steered", steered), ("reversions", reversions)):
+        if entries is None:
+            continue
+        (cycle_dir / group).mkdir(parents=True, exist_ok=True)
+        for name, kwargs in entries.items():
+            boltz_prediction_dir(cycle_dir / group / name, **dict(kwargs))
+
+    if row_type is not None:
+        (root / "row_type.txt").write_text(row_type)
+    if runtime_sec is not None:
+        (root / "run_one_runtime_sec.txt").write_text(str(runtime_sec))
     return root
