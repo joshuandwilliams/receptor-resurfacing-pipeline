@@ -149,18 +149,14 @@ skip_covered = true
 # tests/characterization/fixtures_runtree.py, which now also writes a cuboid
 # lattice for the convex-hull code that a collinear chain cannot drive.
 #
-# 83.0 is where it stands after the six orthogonal-metric stages had their
-# main() driven rather than only their helpers: compute_interface_metrics.py
-# 23% to 99%, extract_survivor_manifest.py 31% to 100%, run_rosetta_metrics.py
-# 41% to 100%, run_biophysical_metrics.py 32% to 97%, rosetta_filter_collect.py
-# 31% to 100% and merge_orthogonal_metrics.py 50% to 100%.  That is 827
-# statements, and it moved the figure from 77.6% to 83.0%.  The route for a
-# stage that shells out to a tool nobody has installed is in
-# tests/characterization/test_orthogonal_runner_mains.py: an executable stub
-# named like the real binary, written into tmp_path with that directory as the
-# whole PATH, plus a stub module on sys.modules where the library is imported
-# rather than executed.  The four statements still uncovered in
-# run_biophysical_metrics.py and the two in compute_interface_metrics.py are
-# `except ImportError` around `import gemmi`, which cannot be reached while the
-# test extra installs gemmi.
-fail_under = 84.0
+# 79.3 is where it stands after five modules whose helpers were covered but
+# whose main() and long paths were not were driven end to end:
+# pipeline_correct_sequences.py 48% to 98%, protein_structure_prediction.py
+# 49% to 98%, derive_design_region.py 47% to 96%, derive_true_interface.py
+# 62% to 96% and af3_confidence.py 66% to 99%.  That is 945 statements, and it
+# moved the figure from 75.01% to 79.33%.  The seven structure tests in
+# test_protein_structure_prediction.py that need a committed Boltz output
+# still skip; the same accessors are now driven on structures built by
+# fixtures_runtree instead, which state the expected geometry at the call
+# site rather than blessing a real output.
+fail_under = 87.5
