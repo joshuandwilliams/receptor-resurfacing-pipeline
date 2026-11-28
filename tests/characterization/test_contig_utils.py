@@ -204,3 +204,136 @@ def test_absent_receptor_chain_gives_empty_sets_rather_than_raising():
 @pytest.mark.logic
 def test_unparseable_contig_gives_empty_sets():
     assert cu.parse_design_region("not a contig at all ???", "A") == (set(), set())
+
+
+# ── De novo length resolution ────────────────────────────────────────
+
+@pytest.mark.logic
+def test_one_variable_segment_absorbs_whatever_is_left():
+    """The PDB's residue count is the budget. A fixed total of 20 against a
+    30-residue chain leaves 10 for the single variable segment, whatever its
+    declared range said."""
+    descs = [("fixed", "A", 1, 10), ("denovo", "5-20"), ("fixed", "A", 21, 30)]
+    assert cu._resolve_denovo_lengths(descs, 30) == {1: 10}
+
+
+@pytest.mark.logic
+def test_a_fixed_length_denovo_segment_is_not_resolved():
+    """5-5 is already decided, so it is subtracted from the budget rather
+    than being handed the remainder."""
+    descs = [("fixed", "A", 1, 10), ("denovo", "5-5"), ("fixed", "A", 16, 25)]
+    assert cu._resolve_denovo_lengths(descs, 25) == {}
+
+
+@pytest.mark.logic
+def test_two_variable_segments_each_take_their_minimum():
+    """With more than one unknown the split is underdetermined, so each takes
+    its minimum rather than the remainder being guessed between them."""
+    descs = [("fixed", "A", 1, 5), ("denovo", "3-9"),
+             ("fixed", "A", 10, 14), ("denovo", "4-8")]
+    assert cu._resolve_denovo_lengths(descs, 40) == {1: 3, 3: 4}
+
+
+@pytest.mark.logic
+def test_a_fixed_segment_is_subtracted_before_the_remainder():
+    descs = [("fixed", "A", 1, 10), ("denovo", "2-2"), ("denovo", "1-50")]
+    assert cu._resolve_denovo_lengths(descs, 30) == {2: 18}
+
+
+# ── Remapping onto real PDB numbering ────────────────────────────────
+
+@pytest.mark.logic
+def test_segments_already_matching_the_pdb_are_left_alone(tmp_path):
+    """No remap means no change. Rewriting numbers that already resolve would
+    be a silent no-op at best and a shift at worst."""
+    pdb = _pdb(tmp_path, {"A": (1, 30)})
+    descs = [("fixed", "A", 1, 10), ("denovo", "5-5"), ("fixed", "A", 16, 30)]
+    assert cu.remap_segments_to_pdb(descs, "A", pdb) == descs
+
+
+@pytest.mark.logic
+def test_segments_are_walked_onto_the_pdb_when_the_numbers_do_not_exist(tmp_path):
+    """A contig written against 1..30 applied to a structure numbered
+    101..130. The fixed stretches must land on real residues, keeping their
+    lengths, or RFDiffusion fails with '(A, 1) is not in pdb file!' which says
+    nothing about the contig that caused it.
+    """
+    pdb = _pdb(tmp_path, {"A": (101, 130)})
+    descs = [("fixed", "A", 1, 10), ("denovo", "5-5"), ("fixed", "A", 16, 30)]
+    out = cu.remap_segments_to_pdb(descs, "A", pdb)
+    assert out[0] == ("fixed", "A", 101, 110)
+    assert out[1] == ("denovo", "5-5")
+    assert out[2][0] == "fixed"
+    assert out[2][2] == 116, "the second anchor starts after the 5-residue gap"
+
+
+@pytest.mark.logic
+def test_remapping_preserves_every_fixed_length(tmp_path):
+    pdb = _pdb(tmp_path, {"A": (501, 540)})
+    descs = [("fixed", "A", 1, 12), ("denovo", "4-4"), ("fixed", "A", 17, 40)]
+    out = cu.remap_segments_to_pdb(descs, "A", pdb)
+    for before, after in zip(descs, out):
+        if before[0] == "fixed":
+            assert after[3] - after[2] == before[3] - before[2]
+
+
+@pytest.mark.logic
+def test_a_contig_naming_an_absent_chain_exits_with_the_reason(tmp_path):
+    """RFDiffusion's own failure for this does not mention the contig, so the
+    message here has to name the chain and the segments that referenced it."""
+    pdb = _pdb(tmp_path, {"A": (1, 20)})
+    descs = [("fixed", "Z", 1, 10)]
+    with pytest.raises(SystemExit) as exc:
+        cu.remap_segments_to_pdb(descs, "Z", pdb)
+    assert "Z" in str(exc.value)
+
+
+@pytest.mark.logic
+def test_an_absent_chain_with_no_fixed_segments_passes_through(tmp_path):
+    """Nothing references a residue number, so there is nothing to validate."""
+    pdb = _pdb(tmp_path, {"A": (1, 20)})
+    descs = [("denovo", "5-5")]
+    assert cu.remap_segments_to_pdb(descs, "Z", pdb) == descs
+
+
+@pytest.mark.logic
+def test_no_block_chain_means_nothing_to_remap(tmp_path):
+    pdb = _pdb(tmp_path, {"A": (1, 20)})
+    descs = [("denovo", "5-5")]
+    assert cu.remap_segments_to_pdb(descs, None, pdb) == descs
+
+
+# ── resolve_contigs, end to end ──────────────────────────────────────
+
+@pytest.mark.logic
+def test_a_bare_chain_resolves_to_its_real_range(tmp_path):
+    pdb = _pdb(tmp_path, {"A": (1, 30), "B": (7, 96)})
+    assert cu.resolve_contigs("B", pdb) == "B7-96"
+
+
+@pytest.mark.logic
+def test_a_bare_chain_that_is_absent_is_passed_through_with_a_warning(tmp_path, capsys):
+    """Passing it through keeps the failure where the user can see it, rather
+    than inventing a range."""
+    pdb = _pdb(tmp_path, {"A": (1, 30)})
+    assert cu.resolve_contigs("Z", pdb) == "Z"
+    assert "WARNING" in capsys.readouterr().err
+
+
+@pytest.mark.logic
+def test_a_full_contig_resolves_both_blocks(tmp_path):
+    pdb = _pdb(tmp_path, {"A": (1, 30), "B": (1, 12)})
+    out = cu.resolve_contigs("A1-10/5-5/A16-30 B", pdb)
+    assert out.endswith("B1-12")
+    assert out.split()[0].count("/") == 2
+    assert "," not in out
+
+
+@pytest.mark.logic
+def test_commas_and_colons_are_accepted_as_block_separators(tmp_path):
+    """Tolerated for back-compatibility. The canonical form is a space, and
+    the output is canonical either way."""
+    pdb = _pdb(tmp_path, {"A": (1, 30), "B": (1, 12)})
+    space = cu.resolve_contigs("A1-30 B", pdb)
+    assert cu.resolve_contigs("A1-30,B", pdb) == space
+    assert cu.resolve_contigs("A1-30:B", pdb) == space
