@@ -202,10 +202,6 @@ def _make_empty_plot(message: str, out_path: str) -> None:
     plt.close(fig)
 
 
-def _is_control(seq_name: str) -> bool:
-    return seq_name.startswith("input_control_")
-
-
 def _grid_shape(n: int) -> Tuple[int, int]:
     """Pick a reasonable (n_rows, n_cols) for a small-multiples grid
     of `n` panels.  Aim for landscape-ish shape, max 4 columns."""

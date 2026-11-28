@@ -65,40 +65,6 @@ def parse_contig_segments(contigs, receptor_chain="A"):
     return segments
 
 
-def get_fixed_residue_set(segments, receptor_start_pdb=1):
-    """Get the set of 0-indexed receptor positions that are fixed (not de novo).
-
-    Only works for fixed-length contigs (all de novo segments have min_len == max_len).
-    For variable-length contigs, returns None to signal that PDB-based detection is needed.
-    """
-    has_variable = any(
-        s['type'] == 'denovo' and s['min_len'] != s['max_len']
-        for s in segments
-    )
-    if has_variable:
-        return None
-
-    fixed_positions = set()
-    for seg in segments:
-        if seg['type'] == 'fixed':
-            for r in range(seg['start'], seg['end'] + 1):
-                fixed_positions.add(r - receptor_start_pdb)
-    return fixed_positions
-
-
-def get_native_anchor_regions(segments):
-    """Return list of (native_start_0idx, native_end_0idx) for each fixed segment.
-
-    These are 0-indexed positions within the native receptor sequence corresponding
-    to each fixed segment (derived from PDB numbering minus receptor_start_pdb).
-    """
-    anchors = []
-    for seg in segments:
-        if seg['type'] == 'fixed':
-            anchors.append((seg['start'], seg['end']))
-    return anchors
-
-
 # ---------------------------------------------------------------------------
 # PDB utilities
 # ---------------------------------------------------------------------------

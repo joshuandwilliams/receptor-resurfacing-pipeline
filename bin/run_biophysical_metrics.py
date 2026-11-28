@@ -159,48 +159,6 @@ def _compute_bsa(pdb_path: Path,
         return None, f"freesasa_failed:{type(e).__name__}:{e}"
 
 
-def _compute_interface_plddt(
-    pdb_path: Path,
-    interface: Set[Tuple[str, int]],
-) -> Tuple[Optional[float], Optional[str]]:
-    """
-    Mean per-residue pLDDT (from B-factor col) over interface residues.
-    Averages over Cα atoms only, matching compute_metrics.plddt_from_pdb.
-    """
-    try:
-        import gemmi
-    except ImportError as e:
-        return None, f"gemmi_import_failed:{e}"
-
-    try:
-        st = gemmi.read_structure(str(pdb_path))
-    except Exception as e:  # noqa: BLE001
-        return None, f"structure_load_failed:{type(e).__name__}"
-
-    plddts: List[float] = []
-    for model in st:
-        for chain in model:
-            for res in chain:
-                key = (chain.name, res.seqid.num)
-                if key not in interface:
-                    continue
-                for atom in res:
-                    if atom.name == "CA":
-                        plddts.append(atom.b_iso)
-                        break
-        break
-
-    if not plddts:
-        return None, "no_interface_cas"
-
-    mean_plddt = float(np.mean(plddts))
-    # Boltz writes pLDDT as 0-100 in B-factor; some tooling expects 0-1.
-    # Normalise to 0-1 so downstream thresholds (0.75) compare correctly.
-    if mean_plddt > 1.5:
-        mean_plddt /= 100.0
-    return round(mean_plddt, 4), None
-
-
 def _compute_hbonds(
     pdb_path: Path,
     receptor_chain: str,

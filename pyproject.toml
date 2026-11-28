@@ -140,4 +140,4 @@ skip_covered = true
 # statements.  It got there by building fixture run trees with known answers
 # rather than by testing against a real cluster directory, which is the route
 # open to this repository too.
-fail_under = 20.4
+fail_under = 20.7
