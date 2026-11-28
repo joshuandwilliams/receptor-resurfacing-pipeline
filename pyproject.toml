@@ -163,4 +163,4 @@ skip_covered = true
 # run_biophysical_metrics.py and the two in compute_interface_metrics.py are
 # `except ImportError` around `import gemmi`, which cannot be reached while the
 # test extra installs gemmi.
-fail_under = 83.0
+fail_under = 84.0
