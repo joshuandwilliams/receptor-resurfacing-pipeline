@@ -115,6 +115,24 @@ def compare_png_exists(reference: Path, actual: Path) -> ComparisonResult:
     )
 
 
+def count_distinct_colours(path: Path) -> int:
+    """How many distinct RGB values a PNG contains.
+
+    A plot script that caught an exception half way through, or wrote an axes
+    with nothing on it, still leaves a file on disk, so "the PNG exists" does
+    not mean "the PNG has a figure in it". A single-colour image is blank;
+    anything a matplotlib figure draws — axes, text, a bar — puts a second
+    colour in the file.
+    """
+    with Image.open(path) as img:
+        rgb = np.asarray(img.convert("RGB"), dtype=np.uint32)
+    # Pack each pixel into one integer first. np.unique over the three channels
+    # as rows sorts a structured view of several million records and costs
+    # seconds per figure; over a flat integer array it costs milliseconds.
+    packed = (rgb[..., 0] << 16) | (rgb[..., 1] << 8) | rgb[..., 2]
+    return int(np.unique(packed).size)
+
+
 def _file_check(reference: Path, actual: Path, strategy: str) -> ComparisonResult | None:
     if not Path(reference).exists():
         return ComparisonResult(
