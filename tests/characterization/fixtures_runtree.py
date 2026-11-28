@@ -15,6 +15,10 @@ in advance.
 with the metrics JSON and the design PDBs agreeing with each other, so the
 readers and the filters can be driven end to end without a cluster.
 
+`af3_output_tree` writes the directory layout an AlphaFold3-no-MSA run
+produces, with a ground truth beside it, so each prediction's receptor-aligned
+effector RMSD is a number stated at the call site.
+
 Layouts are taken from the committed reference sets under
 `tests/<module>/example_output_files/`, not from docstrings.
 """
@@ -90,6 +94,69 @@ def complex_pdb(
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(lines) + "\n")
     return path
+
+
+def complex_cif(path: Path, **kwargs) -> Path:
+    """`complex_pdb`'s geometry written as a real mmCIF.
+
+    The AF3 walk globs for `.cif`, and gemmi chooses its parser from the
+    extension, so a `.cif` file holding PDB text raises instead of loading.
+    Going through gemmi rather than renaming the file keeps the fixture honest
+    about that.
+
+    gemmi is imported here rather than at module scope so the PDB builders
+    stay usable in an environment without it.
+    """
+    import gemmi
+
+    scratch = path.parent / f".{path.stem}.pdb"
+    complex_pdb(scratch, **kwargs)
+    st = gemmi.read_pdb_string(scratch.read_text())
+    scratch.unlink()
+    st.setup_entities()
+    st.make_mmcif_document().write_file(str(path))
+    return path
+
+
+def af3_output_tree(
+    path: Path,
+    *,
+    predictions,
+    truth_separation: float = 4.0,
+    n_receptor: int = 8,
+    n_effector: int = 5,
+    seed: int = 1,
+) -> tuple[Path, Path]:
+    """The AF3-no-MSA layout `af3_confidence` walks, with known ra_eff values.
+
+    Returns `(ground_truth_pdb, output_dir)`:
+
+        <path>/ground_truth.pdb
+        <path>/output/seed-<seed>_sample-<m>/model.cif
+        <path>/output/seed-<seed>_sample-<m>/summary_confidences.json
+
+    `predictions` is a sequence of `(separation, iptm)` pairs, one per
+    seed x diffusion sample. The ground truth is `complex_pdb` at
+    `truth_separation` and each prediction is the same complex with the
+    effector moved to its own separation along z, the receptor untouched. A
+    rigid displacement of the effector alone means the receptor alignment is
+    the identity, so that prediction's receptor-aligned effector RMSD is
+    exactly `abs(separation - truth_separation)` angstroms.
+
+    `iptm=None` omits that prediction's summary_confidences.json, which is how
+    a prediction whose confidence write never landed looks on disk.
+    """
+    path.mkdir(parents=True, exist_ok=True)
+    truth = complex_pdb(path / "ground_truth.pdb", n_receptor=n_receptor,
+                        n_effector=n_effector, separation=truth_separation)
+    out = path / "output"
+    for sample, (separation, iptm) in enumerate(predictions):
+        d = out / f"seed-{seed}_sample-{sample}"
+        complex_cif(d / "model.cif", n_receptor=n_receptor,
+                    n_effector=n_effector, separation=separation)
+        if iptm is not None:
+            (d / "summary_confidences.json").write_text(json.dumps({"iptm": iptm}))
+    return truth, out
 
 
 def lattice_pdb(
