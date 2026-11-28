@@ -11,12 +11,12 @@ files so that future Claude sessions (and future humans) can find
 authoritative information without spelunking through 25+ session
 logs.
 
-The trigger is accumulation.  The repo now holds enough notes,
-one-off scripts and superseded design docs that "what is the current
-truth about X" has no fast answer.  The `notes/` directory mixes
-timeless reference material with session-by-session handover
-narratives.  Frontmatter and a directory shape will fix this without
-losing history.
+The trigger for this document is accumulation.  The repo now holds
+enough notes, one-off scripts and superseded design docs that "what
+is the current truth about X" has no fast answer.  The `notes/`
+directory mixes timeless reference material with session-by-session
+handover narratives.  Frontmatter and a directory shape will fix
+this without losing history.
 
 **No deletions.**  Every move proposed below is `git mv` into an
 archive subtree so history and `git log --follow` survive intact.
@@ -234,7 +234,7 @@ convention in `experiments/README.md`.
 ## 3. Inventory of every file in `notes/` with proposed action
 
 The table covers everything currently in `notes/`.  "Action" is the
-single move recommended; "rationale" is the one-line reason.
+single move recommended.  "Rationale" is the one-line reason.
 
 ### Top level
 
@@ -321,9 +321,9 @@ it, this category will grow without bound.
 
 In order of impact-per-effort:
 
-1. **Add `CLAUDE.md` at the repo root** (~30 min).  Highest leverage:
-   every future Claude session reads it for free.  No risk; can be
-   updated freely.
+1. **Add `CLAUDE.md` at the repo root** (~30 min).  Highest leverage,
+   because every future Claude session reads it for free.  No risk,
+   and it can be updated freely.
 2. **Add frontmatter to the seven top-level `notes/*.md`** that
    exist today (~15 min).  Makes role machine-detectable.
 3. **Add a header to `notes/design_audit.md`** explicitly flagging
@@ -353,7 +353,7 @@ In order of impact-per-effort:
 11. **Move both `.docx` lab handbooks** to
     `notes/reference/lab_handbooks/` (~3 min).
 12. **Set up `experiments/campaigns/pikp1_avrpia/analyses/`** with
-    YAML sidecars for the two existing analysis scripts; document
+    YAML sidecars for the two existing analysis scripts, and document
     the convention in `experiments/README.md` (~30 min).
 13. **Refresh `inventory/01_module_map.md` + `02_function_inventory.md`
     post-Phase-4** (~60 min: re-run tooling, audit outputs).  Lower
@@ -361,11 +361,12 @@ In order of impact-per-effort:
 14. **Audit `inventory/05_findings.md`** entry-by-entry against
     current code: mark RESOLVED / OPEN / OBSOLETE (~30 min).
 15. **Defer:** writing `subsystems/pose_solver.md`.  Wait until the
-    avrpia campaign closes; the pose_solver is still iterating.
+    avrpia campaign closes, because the pose_solver is still
+    iterating.
 
-Items 1-12 together: ~2.5 h of `git mv` + small writes; eliminates
-~30 stale files from the top-level `notes/` view; gives every future
-Claude session an unambiguous "read this first" path.
+Items 1-12 together cost ~2.5 h of `git mv` plus small writes.  They
+remove ~30 stale files from the top-level `notes/` view and give
+every future Claude session an unambiguous "read this first" path.
 
 ---
 

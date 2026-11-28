@@ -1,10 +1,10 @@
 # pipeline_notes9.md
 
-Session handover — succeeds todo_list8 / pipeline_notes8. Documents
-what landed in the long debugging session that ran the v7 test
-cascade end-to-end for the first time, performed a major architectural
-refactor of the metric-computation path, and submitted both an
-overnight test_negative_steering rerun (with controls) and a parallel
+Session handover — succeeds todo_list8 / pipeline_notes8. Covers a
+long debugging session that ran the v7 test cascade end-to-end for
+the first time and performed a major architectural refactor of the
+metric-computation path. That session also submitted an overnight
+test_negative_steering rerun (with controls) and a parallel
 production main.nf run. Written 2026-04-25 evening.
 
 ---
@@ -12,21 +12,21 @@ production main.nf run. Written 2026-04-25 evening.
 ## Session outcome in one paragraph
 
 Ran the v7 test cascade (rfdiffusion → rosetta → mpnn → negsteer)
-end-to-end for the first time, hitting and fixing ~13 bugs along the
-way (cascading chaining defaults, AF3 mmCIF format issues, missing
-function `find_contact_residues_heavy`, malformed input PDB with
-chains in separate MODEL blocks, chain-convention confusion between
-input-PDB and RFDiffusion-output conventions). Performed a major
-architectural refactor: four metric families (15 Å iPSAE,
-interface_plddt, intact_core, weighted_jaccard) moved from post-hoc
-orthogonal-metrics into per-prediction computation inside negative-
-steering. This avoids the sidecar-file path-resolution issues that
-had been silently leaving columns blank, and surfaces all
-per-prediction metrics at the same aggregation level
-(`representative_*_median`). Submitted overnight: a
+end-to-end for the first time, fixing ~13 bugs along the way. Those
+were cascading chaining defaults, AF3 mmCIF format issues, and a
+missing `find_contact_residues_heavy` function. The remainder were a
+malformed input PDB with chains in separate MODEL blocks, and
+chain-convention confusion between input-PDB and RFDiffusion-output
+conventions. Also performed a major architectural refactor, moving
+four metric families (15 Å iPSAE, interface_plddt, intact_core,
+weighted_jaccard) from post-hoc orthogonal-metrics into
+per-prediction computation inside negative-steering. This avoids the
+sidecar-file path-resolution issues that had been silently leaving
+columns blank, and surfaces all per-prediction metrics at the same
+aggregation level (`representative_*_median`). Submitted overnight: a
 test_negative_steering rerun with controls ON + the metric refactor
 patches deployed, plus a parallel production main.nf run on PikP1 +
-AvrPikF. User asleep at write time; both runs expected complete by
+AvrPikF. User asleep at write time. Both runs expected complete by
 morning.
 
 ---
@@ -34,12 +34,13 @@ morning.
 ## Reference documents
 
 - **`todo_list8.docx`** — authoritative task list going forward.
-- **`todo_list7.docx`** — predecessor (created this session — was
-  described in pipeline_notes8 but never actually saved on disk,
-  reconstructed from the spec).
-- **`pipeline_notes8.md`** — predecessor; documented the v7 staging.
+- **`todo_list7.docx`** — predecessor, created this session.
+  pipeline_notes8 described it, but it was never saved on disk, so it
+  was reconstructed from the spec.
+- **`pipeline_notes8.md`** — predecessor, which documented the v7
+  staging.
 - **All 6 patched files at `/mnt/user-data/outputs/`** from this
-  session — these are the metric-refactor patches plus the
+  session. These are the metric-refactor patches plus the
   `find_contact_residues_heavy` fix. Should already be live in `bin/`
   by morning.
 
@@ -81,22 +82,22 @@ Listed in roughly the order they were hit:
    `/hpc-home/jowillia/singularity/AlphaFold3` in container) — fixed
    in nextflow.config.
 
-7. **AF3 input format `mmcifPath` → `mmcif` inline**: rewrote
+7. **AF3 input format `mmcifPath` → `mmcif` inline**. Rewrote
    `negsteer_af3_nomsa.nf` to inline the mmCIF text in the JSON via a
-   Python heredoc rather than the file-path form (which AF3 expected
-   in a different schema version).
+   Python heredoc. The file-path form is what AF3 expected in a
+   different schema version.
 
 8. **gemmi minimal mmCIF missing `_entity_poly_seq` block**:
    `boltz2_negative_steering.py:extract_effector_template_cif` now
    uses `gemmi.MmcifOutputGroups(True)` to emit a complete mmCIF
    document.
 
-9. **Chain convention architectural fix**: introduced
+9. **Chain convention architectural fix**. Introduced
    `params.rfdiff_output_receptor_chain="A"` and
    `params.rfdiff_output_effector_chain="B"` alongside the existing
    `params.effector_chain` (which describes the input PDB
    convention). RFDiffusion's `write_split_pdb` hardcodes A/B
-   regardless of input — that's the convention used by everything
+   regardless of input. That is the convention used by everything
    downstream of `split/`. Updated `main.nf` (NEGSTEER_RUN_ONE call)
    and `test_negative_steering.nf`.
 
@@ -109,17 +110,16 @@ Listed in roughly the order they were hit:
 12. **Missing function `find_contact_residues_heavy`** in
     `compute_metrics.py`. Pre-existing latent bug. Function was
     imported by `derive_input_design_region.py` but had never been
-    written. Only fired when controls actually ran for the first
-    time (controls are the only path that exercises
-    DERIVE_INPUT_INDICES). Wrote ~60 lines, unit-tested on synthetic
-    PDB.
+    written. Only fired when controls first ran, because controls are
+    the only path that exercises DERIVE_INPUT_INDICES. Wrote ~60
+    lines, unit-tested on synthetic PDB.
 
-13. **Input PDB had non-standard MODEL/ENDMDL structure**:
+13. **Input PDB had non-standard MODEL/ENDMDL structure**.
     `af3_pikp1_native_avrpikf_complex.pdb` had chains A and C in
     separate MODEL blocks. AF3 emits PDBs this way by default.
-    `extract_sequences_gemmi` does `break  # first model only`, so
-    only saw chain A; my plain-text `_parse_heavy_atoms_by_chain`
-    ignored MODEL boundaries, so saw both. User fixed in place
+    `extract_sequences_gemmi` does `break  # first model only`, so it
+    only saw chain A. My plain-text `_parse_heavy_atoms_by_chain`
+    ignored MODEL boundaries, so it saw both. User fixed in place
     (stripped MODEL/ENDMDL/END, kept ATOM and TER, re-added END).
     Backup saved as `.original_2model`.
 
@@ -143,10 +143,10 @@ computation:
 - Rosetta `sc`, `rosetta_ddg` — needs Rosetta InterfaceAnalyzer
 
 **Why the refactor**: the post-hoc path was failing to find sidecar
-`pae_*.npz` files for the non-DockQ metrics, leaving columns blank in
-`cross_sequence_summary_with_interface_metrics.csv`. Per-prediction
-computation runs at the moment the PAE matrix is already loaded — the
-metric is essentially free. The new metrics flow through the existing
+`pae_*.npz` files for the non-DockQ metrics. That left columns blank
+in `cross_sequence_summary_with_interface_metrics.csv`. Per-prediction
+computation runs at the moment the PAE matrix is already loaded, so
+the metric is almost free. The new metrics flow through the existing
 aggregator → passing_summary → cross_sequence_summary chain as
 `representative_*_median` columns.
 
@@ -156,8 +156,8 @@ aggregator → passing_summary → cross_sequence_summary chain as
 - `boltz2_iterate_steering.py` — added 6 new keys to `METRIC_KEYS_RAW`
   + `_AGG_CONTINUOUS_METRICS` (5) + `_AGG_BINARY_METRICS` (intact_core)
   + passes `--native-pdb` to compute_metrics.py subprocess
-- `compute_interface_metrics.py` — trimmed to DockQ family only;
-  failures column renamed `dockq_failures`; old CLI flags kept as
+- `compute_interface_metrics.py` — trimmed to DockQ family only. The
+  failures column is renamed `dockq_failures`. Old CLI flags kept as
   deprecated for backward compat
 - `run_biophysical_metrics.py` — removed `interface_plddt` from output
 - `extract_passing.py` — added 6 median + 1 majority columns
@@ -187,7 +187,7 @@ GPU-hours for 8 sequences + 2 controls).
    `-resume` capable for morning recovery.
 
 If both runs complete cleanly, Tasks 6 / 29 / 31 / 34 / 38 all flip
-to DONE and the v9 revision can move on to step 3 of the 1–15 plan
+to DONE. The v9 revision can then move on to step 3 of the 1–15 plan
 (plots refresh — Tasks 43 + 44).
 
 ---
@@ -208,7 +208,7 @@ to DONE and the v9 revision can move on to step 3 of the 1–15 plan
 
 ### Action items if either run fails
 
-1. Diagnose against the staged code — the metric refactor changed a
+1. Diagnose against the staged code. The metric refactor changed a
    lot of column names, so most failure modes will be DictReader/
    DictWriter mismatches in the aggregator chain.
 2. If DERIVE_INPUT_INDICES failed: check the
@@ -218,28 +218,28 @@ to DONE and the v9 revision can move on to step 3 of the 1–15 plan
    `cross_sequence_summary.py` correctly reads `row_type.txt`
    sidecars from each per-sequence workdir.
 4. AF3 fix re-validation: if an orthogonal-metrics run hit AF3, check
-   that the `mmcif` inline format works on the cluster's AF3 build
-   (the fix worked in isolation; cluster build version not verified
-   end-to-end).
+   that the `mmcif` inline format works on the cluster's AF3 build.
+   The fix worked in isolation, but the cluster build version is not
+   verified end-to-end.
 
 ### Items the next chat will likely need to know
 
 1. **Patched files at `/mnt/user-data/outputs/`** are the source of
-   truth — these should be live in `bin/` by morning. There are 6 of
-   them.
+   truth. All 6 of them should be live in `bin/` by morning.
 
 2. **Chain conventions**: `params.effector_chain` describes the
    INPUT PDB. `params.rfdiff_output_effector_chain` describes
    RFDiffusion split-output PDBs (always A/B because
    `write_split_pdb` hardcodes them). Most processes consume the
-   input convention; only NEGSTEER_RUN_ONE consumes the rfdiff_output
-   convention. Don't mix them up — this caused real confusion and
-   required the architectural fix in this session.
+   input convention. Only NEGSTEER_RUN_ONE consumes the rfdiff_output
+   convention. Don't mix them up, since that caused real confusion
+   and required the architectural fix in this session.
 
 3. **AF3 PDB output format**: AF3 emits PDBs with chains in separate
-   MODEL blocks. gemmi parsers see only the first model; plain-text
-   parsers see everything. This is the bug class flagged for Task 46
-   audit. Standardising to one convention would prevent a recurrence.
+   MODEL blocks. gemmi parsers see only the first model, while
+   plain-text parsers see everything. This is the bug class flagged
+   for Task 46 audit. Standardising to one convention would prevent a
+   recurrence.
 
 4. **`find_contact_residues_heavy` is positional-index based**, NOT
    seqid-based. It walks receptor residues in PDB order and returns
@@ -287,10 +287,10 @@ to DONE and the v9 revision can move on to step 3 of the 1–15 plan
 
 ## Closing note
 
-v8 / pipeline_notes9 is a stabilisation revision — no new methodology,
+v8 / pipeline_notes9 is a stabilisation revision. No new methodology,
 no new metrics, just running what was staged in v7 and fixing what
-broke. The metric refactor is the substantive architectural change:
-it cleans up a sidecar-path-resolution issue that would have re-
-surfaced repeatedly, and it surfaces all per-prediction metrics at
-the same aggregation level. Once the overnight runs land cleanly,
-v9 can move on to plots.
+broke. The metric refactor is the substantive architectural change.
+It cleans up a sidecar-path-resolution issue that would have
+re-surfaced repeatedly, and it surfaces all per-prediction metrics at
+the same aggregation level. Once the overnight runs land cleanly, v9
+can move on to plots.

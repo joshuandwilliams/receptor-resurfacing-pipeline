@@ -1,6 +1,6 @@
 # 01 — Module Map
 
-A complete inventory of every code file in the project, grouped by directory. Line counts are wc -l. One-line summaries describe what the file actually does (not what notes claim it should do — see `05_findings.md` for code/notes discrepancies).
+A complete inventory of every code file in the project, grouped by directory. Line counts are wc -l. One-line summaries describe what each file actually does, not what notes claim it should do (see `05_findings.md` for code/notes discrepancies).
 
 Skipped: `notes/` (used for context, not inventoried), data files (`.pdb`, `.csv`, data `.yml`), and the `.git/` tree.
 

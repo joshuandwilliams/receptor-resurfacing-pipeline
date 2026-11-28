@@ -2,7 +2,7 @@
 
 Date: 2026-05-19
 Branch: phase4-impl
-Predecessor: pipeline_notes15.md (cold-start RMSD analysis, proposed Pia sidechain/misfold analyses — those analyses are deferred)
+Predecessor: pipeline_notes15.md (cold-start RMSD analysis, plus proposed Pia sidechain/misfold analyses that are deferred)
 
 ---
 
@@ -10,16 +10,16 @@ Predecessor: pipeline_notes15.md (cold-start RMSD analysis, proposed Pia sidecha
 
 - `pose_solved_5a_2` (pikp1_avrpia, hotspot removed, sc_threshold 0.3) **gave no improvement** in hitrate over 5a or 3a. Hotspot and SC filter stringency are not the Pia bottleneck.
 - Investigation pivoted from "RFDiffusion params" to "input pose geometry".
-- Diagnosed the pose_solver as **over-packing the interface**: its objective is CA-only (no sidechain awareness), and `--max-pair-distance 4.0` is unrealistically tight relative to natural interface CA-CAs (which cluster at 4.5–7 Å).
-- Fixed: re-solved PikF at `--max-pair-distance 6.0`, replacing the user's third pair (A35-B44, 6.58 Å on the AF3 ground truth) with A38-B42. Resulting pose's gap-index = 3.45 Å (vs AF3 3.41 — within 1 %). Stored at `tests/haddock/pose_solver/Pikp-1_HMA_PikF_v2/`.
-- Added pair-residue sidechain-clash penalty (CLI: `--pair-sc-clash-cutoff`); fixed a pre-existing 2-pair crash bug. The pair-only sidechain penalty is necessary but not sufficient to prevent global over-packing.
+- Diagnosed the pose_solver as **over-packing the interface**, because its objective is CA-only with no sidechain awareness. `--max-pair-distance 4.0` is also unrealistically tight relative to natural interface CA-CAs, which cluster at 4.5–7 Å.
+- Fixed: re-solved PikF at `--max-pair-distance 6.0`, replacing the user's third pair (A35-B44, 6.58 Å on the AF3 ground truth) with A38-B42. Resulting pose's gap-index = 3.45 Å (vs AF3 3.41, within 1 %). Stored at `tests/haddock/pose_solver/Pikp-1_HMA_PikF_v2/`.
+- Added pair-residue sidechain-clash penalty (CLI: `--pair-sc-clash-cutoff`), and fixed a pre-existing 2-pair crash bug. The pair-only sidechain penalty is necessary but not sufficient to prevent global over-packing.
 - Built **2 × 3 factorial campaign for PikF**: {CRYSTAL, POSED v2} × {full_test_run contig, auto-5 Å contig, auto-3 Å contig} = 6 runs. All cloned from `pose_solved_5a/params.yml` with `hotspot=""`, `sc_threshold=0.3`. Ready for submission on the HPC.
 
 ---
 
 ## 1. 5a_2 outcome — RFDiffusion knobs are not the bottleneck
 
-`pose_solved_5a_2` (pikp1_avrpia, hotspot="" instead of B22,B24,B31,B33; sc_threshold=0.3 instead of 0.5; otherwise identical to 5a) produced **no improvement in hitrate** over `pose_solved_5a` or `pose_solved_3a`.
+`pose_solved_5a_2` (pikp1_avrpia) produced **no improvement in hitrate** over `pose_solved_5a` or `pose_solved_3a`. It set hotspot="" instead of B22,B24,B31,B33, and sc_threshold=0.3 instead of 0.5, but was otherwise identical to 5a.
 
 This rules out:
 - hotspot mis-specification
@@ -41,7 +41,7 @@ Added `tests/haddock/pose_solver/interface_metrics.py` for systematic comparison
 - Interface residue count per chain
 - Composition fractions (hydrophobic / polar / charged / aromatic) per side
 - BSA via Shrake-Rupley (biopython SASA)
-- **Gap-index**: mean nearest-other-chain heavy-atom distance over interface atoms — captures global packing density
+- **Gap-index**: mean nearest-other-chain heavy-atom distance over interface atoms, which captures global packing density
 - H-bond candidates (donor-acceptor heavy-atom pairs ≤ 3.5 Å, geometric only)
 
 CLI:
@@ -57,7 +57,7 @@ Outputs at `tests/haddock/pose_solver/interface_metrics_out/`.
 
 ### 3.1 Benchmark choice
 
-The "natural" reference is `tests/full_test_run/af3_pikp1_native_avrpikf_complex.pdb` — the AF3-predicted PikP1+AvrPikF complex used as input to the original successful full pipeline test run (`PikP1_AvrPikF_full_test`). User confirmation:
+The "natural" reference is `tests/full_test_run/af3_pikp1_native_avrpikf_complex.pdb`. This is the AF3-predicted PikP1+AvrPikF complex used as input to the original successful full pipeline test run (`PikP1_AvrPikF_full_test`). User confirmation:
 
 > The PikF complex used as input was just created by aligning with PikD from PDB 6G10 (and also the AF3 Pikp-1 with the 6G10 Pikp-1 because it has a few extra residues). The pose exactly matches a solved structure.
 
@@ -76,7 +76,7 @@ Confirmed identical (atom-coordinate diff: one trivial `-0.000`/`0.000` sign) to
 
 Initial reading: BSA much smaller, packing tighter, aromatics absent.
 
-**User correction:** "Pia lacks an important loop region that forms a large part of the binding interface with PikF, so it's natural that the BSA might be smaller." The BSA gap is partly explained by Pia geometry; gap-index and aromatic absence are still informative signals.
+**User correction:** "Pia lacks an important loop region that forms a large part of the binding interface with PikF, so it's natural that the BSA might be smaller." The BSA gap is partly explained by Pia geometry. Gap-index and aromatic absence are still informative signals.
 
 ### 3.3 Apples-to-apples PikF solve
 
@@ -94,7 +94,7 @@ Metrics vs AF3 PikF:
 | BSA total | 2717 | 2373 (−13 %) |
 | Aromatic on chain A | 4 % | 0 % |
 
-The over-packing was real and consistent across Pia and PikF — not a Pia-specific artefact.
+The over-packing was real and consistent across Pia and PikF, not a Pia-specific artefact.
 
 ---
 
@@ -135,14 +135,14 @@ Of the 4 pairs ≤ 4 Å on the AF3 input, three (A77/78–B49/50/51 at 1.83–3.
 
 ### 4.2 AF3 sub-2 Å clashes are localised to the disordered C-terminus
 
-The AF3 ground truth has 55 atomic clashes < 2 Å — looks like the natural complex is also clashy. Closer look:
+The AF3 ground truth has 55 atomic clashes < 2 Å, so the natural complex looks clashy too. Closer look:
 
 - A76 contacts B71: 17 atom-pairs < 2 Å
 - A77 contacts B50: 16
 - A78 contacts B51/B50/B52: 19
 - All other A-residue clashes: 3 atom-pairs (A43-B66 ×2, A3-B49 ×1)
 
-**52 of 55 sub-2 Å AF3 clashes are at the A76-78 disordered C-terminus.** The natural complex has effectively no atomic clashes elsewhere. So a "good" pose should have very few clashes at non-disordered residues — the pose_solver v1 (44 such clashes, none in disorder) is way over.
+**52 of 55 sub-2 Å AF3 clashes are at the A76-78 disordered C-terminus.** The natural complex has effectively no atomic clashes elsewhere. So a "good" pose should have very few clashes at non-disordered residues. The pose_solver v1 has 44 such clashes, none in disorder, which is way over.
 
 ### 4.3 Closest realistic AF3 pairs for choosing anchors
 
@@ -159,7 +159,7 @@ The AF3 ground truth has 55 atomic clashes < 2 Å — looks like the natural com
 | A37 – B42 | 5.62 |
 | A70 – B78 | 5.63 |
 
-A38-B42 (5.52 Å) is the closest realistic anchor in the N-terminal half of the interface — replacement candidate for the bad A35-B44.
+A38-B42 (5.52 Å) is the closest realistic anchor in the N-terminal half of the interface, and the replacement candidate for the bad A35-B44.
 
 ---
 
@@ -177,18 +177,18 @@ Added in `pose_solver.py`:
   - `W_PAIR_SC_CLASH = 1e4`
   - `PAIR_SC_CLASH_TOL = 2.0`  (Å)
   - `_BACKBONE_ATOMS = frozenset({'N', 'CA', 'C', 'O', 'OXT'})`
-- New function `read_sidechain_heavy(pdb, chain)` — returns `{resnum: np.ndarray}` of sidechain heavy atoms only.
-- New CLI arg `--pair-sc-clash-cutoff` (default 2.0; set 0 to disable).
-- `_obj()` extended: for each pair, computes min heavy-atom distance between the binder pair-residue sidechain and the target pair-residue sidechain; quadratic penalty if below cutoff.
+- New function `read_sidechain_heavy(pdb, chain)`, which returns `{resnum: np.ndarray}` of sidechain heavy atoms only.
+- New CLI arg `--pair-sc-clash-cutoff` (default 2.0, set 0 to disable).
+- `_obj()` extended: for each pair, computes min heavy-atom distance between the binder pair-residue sidechain and the target pair-residue sidechain. A quadratic penalty applies if that distance is below the cutoff.
 - `solve()` extended: builds flat sidechain arrays + per-pair offsets, passes through to `_obj()`. GLY pairs are silently skipped (with a printed warning when active).
 - Progress printout now reports `Pair sidechain-clash: W=1e+04 cutoff=2.00Å (active pairs: N/N)` when active.
 
 ### 5.3 Limitation noted
 
-The pair-only sidechain check protects only the constraint residues — surrounding residues can still over-pack. Demonstrated in v3 (see § 6) where the local check was satisfied but global metrics were worse than v1.
+The pair-only sidechain check protects only the constraint residues, so surrounding residues can still over-pack. v3 demonstrates this (see § 6), where the local check was satisfied but global metrics were worse than v1.
 
 A future change would either:
-- extend the penalty to all interface heavy-atom pairs (O(N×M) per iteration; ~10–30 s extra at 1000 restarts), or
+- extend the penalty to all interface heavy-atom pairs (O(N×M) per iteration, ~10–30 s extra at 1000 restarts), or
 - switch pair constraints to heavy-atom min-distance (LogSumExp soft-min) instead of CA-CA.
 
 Not implemented this session.
@@ -201,9 +201,9 @@ All under `tests/haddock/pose_solver/`. Same binder (`../data/Pikp-1_HMA.pdb`), 
 
 | Dir | Pairs | min / max (Å) | sidechain-clash | Outcome |
 |---|---|---|---|---|
-| `Pikp-1_HMA_PikF/` | A73-B76, A71-B78, A35-B44 | 3.5 / 4.0 | off (CA-only) | v1: over-packed; A35-B44 pulled effector around |
-| `Pikp-1_HMA_PikF_v2/` | A73-B76, A71-B78, A38-B42 | 3.5 / 6.0 | off | **Best pose** — gap-index 3.45 Å (vs AF3 3.41); used as POSED input in factorial |
-| `PikF_2pair_min4_max6_scclash/` | A73-B76, A71-B78 | 4.0 / 6.0 | on, 2.0 Å | v3 — worse over-packing than v1 (gap-index 3.08, 67 sub-2 Å clashes); confirms 2 pairs underconstrained |
+| `Pikp-1_HMA_PikF/` | A73-B76, A71-B78, A35-B44 | 3.5 / 4.0 | off (CA-only) | v1: over-packed, and A35-B44 pulled effector around |
+| `Pikp-1_HMA_PikF_v2/` | A73-B76, A71-B78, A38-B42 | 3.5 / 6.0 | off | **Best pose**, gap-index 3.45 Å (vs AF3 3.41), used as POSED input in factorial |
+| `PikF_2pair_min4_max6_scclash/` | A73-B76, A71-B78 | 4.0 / 6.0 | on, 2.0 Å | v3, worse over-packing than v1 (gap-index 3.08, 67 sub-2 Å clashes), confirms 2 pairs underconstrained |
 
 Full metrics:
 
@@ -228,7 +228,7 @@ Copied to `experiments/campaigns/pikp1_avrpikf/inputs/pikp1_avrpikf_pose_solved_
 
 ## 7. New contig deriver
 
-Added `tests/haddock/pose_solver/derive_contigs.py` — re-runs the auto-contig logic on an already-saved pose at any heavy-atom contact cutoff. Replicates the strategy-4a length-range scaling used in `pose_solved_5a/params.yml` (`int(N*0.7 + 0.5)` to `int(N*1.5 + 0.5)`, with N=1 → 1-1). Join-gap = 1 (segments separated by a single fixed residue merge).
+Added `tests/haddock/pose_solver/derive_contigs.py`, which re-runs the auto-contig logic on an already-saved pose at any heavy-atom contact cutoff. It replicates the strategy-4a length-range scaling used in `pose_solved_5a/params.yml` (`int(N*0.7 + 0.5)` to `int(N*1.5 + 0.5)`, with N=1 → 1-1). Join-gap = 1 (segments separated by a single fixed residue merge).
 
 Usage:
 ```
@@ -261,17 +261,17 @@ Auto-derived contigs are per-input (not shared) so each input's design region ma
 
 Observations worth flagging when interpreting:
 
-- **FULL is the only contig that keeps A3 fixed.** All four auto-derived contigs flag A3 (LYS — long sidechain) as a contact at 3 Å and 5 Å. FULL was hand-designed without it; that may be under-designing in retrospect.
-- **3 Å contigs are fragmented** (6 segments, several length-1 stretches). Length-1 segments give RFDiffusion essentially zero geometric flexibility — just a residue substitution.
+- **FULL is the only contig that keeps A3 fixed.** All four auto-derived contigs flag A3 (LYS, a long sidechain) as a contact at 3 Å and 5 Å. FULL was hand-designed without it, which may be under-designing in retrospect.
+- **3 Å contigs are fragmented** (6 segments, several length-1 stretches). Length-1 segments give RFDiffusion near-zero geometric flexibility, allowing only a residue substitution.
 - **5 Å contigs are large** (27–29 residues redesigned, de novo up to 45). More freedom to fix clashes, but slower and more failure modes (ROG, contact loss).
-- **CRYSTAL and POSED diverge most at 5 Å** in the middle of the receptor — CRYSTAL uses A50-67 / A40-42 fixed; POSED uses A48-68 / A41-42 fixed. Reflects the slightly different effector positioning in the two poses.
-- **CRYSTAL and POSED converge at 3 Å** — same 13 residues, slightly different placements.
+- **CRYSTAL and POSED diverge most at 5 Å** in the middle of the receptor. CRYSTAL uses A50-67 / A40-42 fixed, POSED uses A48-68 / A41-42 fixed. This reflects the slightly different effector positioning in the two poses.
+- **CRYSTAL and POSED converge at 3 Å**, with the same 13 residues at slightly different placements.
 
 ### 8.3 Shared parameter overrides
 
 All six clone `experiments/campaigns/pikp1_avrpia/runs/pose_solved_5a/params.yml` with:
 
-- `pdb_file`, `project_name`, `outdir`, `contigs` — per cell
+- `pdb_file`, `project_name`, `outdir`, `contigs`: per cell
 - `hotspot: ""` (was `B22,B24,B31,B33`)
 - `sc_threshold: 0.3` (was 0.5)
 - `effector_chain: "B"`
@@ -293,21 +293,21 @@ sbatch run_pipeline.slurm.sh ./experiments/campaigns/pikp1_avrpikf/runs/posed_au
 
 | Observation | Implies |
 |---|---|
-| `posed_full` hitrate ≈ `crystal_full` hitrate | Pose_solver v2 geometry is fit for purpose; pose itself is not the bottleneck |
-| `crystal_*` ≫ `posed_*` across the row | Pose_solver v2 geometry still imperfect — over-packing residual is meaningful |
-| `crystal_full` ≫ `crystal_auto*` | Full_test_run contig is well-tuned; auto-derivation is not enough |
+| `posed_full` hitrate ≈ `crystal_full` hitrate | Pose_solver v2 geometry is fit for purpose, and the pose itself is not the bottleneck |
+| `crystal_*` ≫ `posed_*` across the row | Pose_solver v2 geometry still imperfect, so the over-packing residual is meaningful |
+| `crystal_full` ≫ `crystal_auto*` | Full_test_run contig is well-tuned, and auto-derivation is not enough |
 | `*_full` < `*_auto5A` | The hand-designed contig is missing important contact residues (e.g. A3) |
-| `*_auto3A` ≪ `*_auto5A` | Fragmented short segments hurt RFDiffusion; broader design region needed |
+| `*_auto3A` ≪ `*_auto5A` | Fragmented short segments hurt RFDiffusion, so a broader design region is needed |
 | All cells low hitrate | Something further upstream (e.g. Boltz folding the receptor) is broken |
 
 ---
 
 ## 9. What's deferred
 
-- **Pia analyses 1 (sidechain clashes) and 2 (misfold localisation)** from `pipeline_notes15.md` — files `experiments/campaigns/pikp1_avrpia/analysis1_sidechain_clashes.py` and `analysis2_misfold_localisation.py` exist (created in a prior session) but not yet run / not integrated here.
+- **Pia analyses 1 (sidechain clashes) and 2 (misfold localisation)** from `pipeline_notes15.md`. The files `experiments/campaigns/pikp1_avrpia/analysis1_sidechain_clashes.py` and `analysis2_misfold_localisation.py` exist, created in a prior session. They are not yet run and not integrated here.
 - **Re-solving Pia at max-pair-distance 6.0** to give Pia its v2 pose equivalent. The current pose_solved Pia is still over-packed. Worth doing if the PikF factorial implicates pose quality.
 - **Heavy-atom-aware pair constraints** (LogSumExp min-distance instead of CA-CA). Would close the over-packing loophole structurally. Larger code change.
-- **Global sidechain-clash penalty** (vs only on pair residues). The current pair-only check is necessary but not sufficient — see v3 result.
+- **Global sidechain-clash penalty** (vs only on pair residues). The current pair-only check is necessary but not sufficient, as the v3 result shows.
 
 ---
 
@@ -321,8 +321,8 @@ New / modified this session:
 | `tests/haddock/pose_solver/interface_metrics.py` | new |
 | `tests/haddock/pose_solver/derive_contigs.py` | new |
 | `tests/haddock/pose_solver/Pikp-1_HMA_PikF/` | new (v1 PikF pose, 3-pair max 4 Å, over-packed) |
-| `tests/haddock/pose_solver/Pikp-1_HMA_PikF_v2/` | new (v2 PikF pose, 3-pair max 6 Å, A38-B42 — used in factorial) |
-| `tests/haddock/pose_solver/PikF_2pair_min4_max6_scclash/` | new (v3 PikF pose, 2-pair with sc-clash; worse) |
+| `tests/haddock/pose_solver/Pikp-1_HMA_PikF_v2/` | new (v2 PikF pose, 3-pair max 6 Å, A38-B42, used in factorial) |
+| `tests/haddock/pose_solver/PikF_2pair_min4_max6_scclash/` | new (v3 PikF pose, 2-pair with sc-clash, worse) |
 | `tests/haddock/pose_solver/interface_metrics_out/` | new (comparison json/txt outputs) |
 | `tests/haddock/data/PikF.pdb` | new (effector for solver, chain B of pik_interface_complex) |
 | `experiments/campaigns/pikp1_avrpikf/inputs/pikp1_avrpikf_pose_solved_v2.pdb` | new (POSED input for factorial) |

@@ -39,9 +39,9 @@ reported.
 **Shape complementarity filter scores bare backbone.** RFdiffusion writes
 N, CA, C and O only, with de novo positions labelled glycine. InterfaceAnalyzer
 therefore builds side chains for the retained scaffold and scores the design
-region on backbone alone. The threshold had to drop from the 0.62
-default to 0.3, and across the AVR-PikF campaign Sc ran 0.444 to 0.611, so the
-gate never fired. Either drop the gate and keep the value as a diagnostic, or
+region on backbone alone. The threshold had to drop from the 0.62 default to
+0.3, and across the AVR-PikF campaign Sc ran 0.444 to 0.611, so the gate never
+fired. Either drop the gate and keep the value as a diagnostic, or
 replace it with something that works on backbones.
 
 **Two RMSD thresholds.** The skip check uses `negsteer_rmsd_threshold` (6.0)
@@ -112,9 +112,8 @@ without any obligation to submit. Full membership is a much higher bar, and not
 worth pursuing on current evidence. It needs MIT, a `TEMPLATE` branch, two
 reviewers including one from core or maintainers, and a test profile that runs
 end to end on trivial data. That last requirement is hard for GPU stages with
-large weights. Rosetta
-is also free for academics only, which sits awkwardly against nf-core's
-open-to-all stance.
+large weights. Rosetta is also free for academics only, which sits awkwardly
+against nf-core's open-to-all stance.
 
 **No `environment.yml`.** Analyses run across two environments, the
 `receptor-analysis` Jupyter kernel (Python 3.11.15) and the miniforge base

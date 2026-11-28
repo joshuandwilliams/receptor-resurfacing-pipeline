@@ -4,29 +4,29 @@
 
 This session closed two of the three active P0 blockers from v3
 (P0-30 kernel speedup, most of the infrastructure for P0-29 and
-P0-31) and left the rest in a state where the next session can run
-the end-to-end test on cached design_0..design_3 data without any
-further coding.
+P0-31). The remainder is ready for the next session to run the
+end-to-end test on cached design_0..design_3 data without additional
+coding.
 
 Scope entering this session:
 
 1. Rebuild the Boltz-2 container with `cuequivariance_torch` properly
    installed, so the NextFlow pipeline can run with
    `negsteer_no_kernels: false` (P0-30). The incumbent
-   `benchmark_models.img` never had `cuequivariance_torch` working
-   — every prior session's "failed to install" note came from a
+   `benchmark_models.img` never had `cuequivariance_torch` working.
+   Every prior session's "failed to install" note came from a
    silent `|| echo WARN` in the `.def` file rather than a real install.
 2. Build out the post-negative-steering pipeline stages: interface-
    restricted metrics (P0-29) and orthogonal validation metrics
-   (P0-31), both as NextFlow modules with per-module test harnesses
+   (P0-31). Both are NextFlow modules with per-module test harnesses
    that read a completed `test_negative_steering` output.
 3. Do both without introducing silent version drift in the
    container, since that's how we'd got stuck in the first place.
 
-Strict ground rule as usual — minimal targeted changes, no scope creep
-— with the explicit exception that infrastructure bugs exposed while
-doing the work (the silent torch/cu13 drift during the first rebuild)
-get fixed properly, not papered over.
+Strict ground rule as usual — minimal targeted changes, no scope
+creep. The one explicit exception is that infrastructure bugs
+exposed while doing the work (the silent torch/cu13 drift during the
+first rebuild) get fixed properly, not papered over.
 
 ## What we built
 
@@ -53,10 +53,10 @@ Key additions over `benchmark_models.def`:
 
 - **cuEquivariance 0.9.1, cu12 variant, explicitly installed** —
   NOT via `boltz[cuda]`. The `[cuda]` extra was observed to silently
-  upgrade torch from 2.6.0+cu124 to 2.11.0+cu130 because pip's
-  dependency resolver preferred the default PyPI torch wheel (with
-  bundled cu130) over the `+cu124`-suffixed wheel we installed
-  first. Installing the four cuEquivariance packages ourselves with
+  upgrade torch from 2.6.0+cu124 to 2.11.0+cu130. Pip's dependency
+  resolver preferred the default PyPI torch wheel (with bundled
+  cu130) over the `+cu124`-suffixed wheel we installed first.
+  Installing the four cuEquivariance packages ourselves with
   `--no-deps` on the kernel packages sidesteps this entirely.
 
 ### 2. Pinning strategy
@@ -75,8 +75,8 @@ that broke the first rebuild:
   them re-pulling torch from PyPI default during their install.
 - **Three intermediate torch-version hard-fail checks** between
   install steps, plus a final pin-drift audit. The previous build had
-  a soft `WARNING: torch version changed` that didn't stop the build;
-  now any drift aborts with `exit 1` and a clear message.
+  a soft `WARNING: torch version changed` that didn't stop the build.
+  Any drift now aborts with `exit 1` and an explicit message.
 
 Final verified versions after rebuild:
 - PyTorch `2.6.0+cu124`, CUDA build `12.4`
@@ -105,7 +105,7 @@ treating it as a failure. They import fine at runtime on GPU nodes.
 
 ### 4. `max_af2_parallel` → `max_boltz2_parallel` rename
 
-Tidying a historical artefact. The param was inherited from an AF2-
+This tidies a historical artefact, a param inherited from an AF2-
 era pipeline where Boltz now sits. Single-line renames across five
 live files (`nextflow.config`, `main.nf`, `params_example.yml`,
 `test_negative_steering.nf`, `negative_steering.nf`). Comment in
@@ -143,9 +143,9 @@ is needed. Per-sequence workdirs are staged as `workdirs/*` via
 NextFlow's `stageAs`.
 
 New bin script: `compute_interface_metrics.py`. Reuses
-`compute_metrics.compute_ipsae` rather than reimplementing it. DockQ
-API handles its own chain-mapping search; code falls back to
-"whatever DockQ found" if the `{A, B}` key isn't present. Core
+`compute_metrics.compute_ipsae` rather than reimplementing it. The
+DockQ API handles its own chain-mapping search. The code falls back
+to "whatever DockQ found" when the `{A, B}` key is absent. Core
 alignment is pure numpy Kabsch, avoiding any new dependencies beyond
 `gemmi` for PDB parsing.
 
@@ -176,12 +176,12 @@ streams plus a merger.
   streams. Extracts both chain sequences from the canonical PDB
   itself so AF3 sees the same sequence Boltz predicted on.
 - `parse_af3_output.py` — AF3 mmCIF output parser. Pure numpy Kabsch
-  for receptor-aligned effector RMSD per prediction; aggregates
+  for receptor-aligned effector RMSD per prediction. Aggregates
   across seeds into best/mean/n_correct stats.
 - `run_biophysical_metrics.py` — FreeSASA BSA (via complex-minus-
-  chains subtraction, divided by 2 for per-interface convention),
+  chains subtraction, divided by 2 for per-interface convention) and
   MDAnalysis HydrogenBondAnalysis (cross-chain only filtered on
-  segid), interface pLDDT aggregated from cached Boltz B-factors
+  segid). Interface pLDDT is aggregated from cached Boltz B-factors
   and normalised 0-100 → 0-1.
 - `run_rosetta_metrics.py` — CLI wrapper around
   `InterfaceAnalyzer.*.linuxgccrelease`. Single invocation produces
@@ -223,9 +223,9 @@ module header.
 
 Decision worth recording: rather than introducing CCP4 `sc` as a new
 dependency for shape complementarity, we use Rosetta's
-`InterfaceAnalyzer` with `-compute_interface_sc true` and
-`-compute_separated_dG true`, both off a single PDB input, with
-`-pack_input false -pack_separated false` to skip FastRelax.
+`InterfaceAnalyzer`. It runs with `-compute_interface_sc true` and
+`-compute_separated_dG true`, both off a single PDB input, and
+`-pack_input false -pack_separated false` skips FastRelax.
 Runtime ~10-15 s per survivor — same as CCP4 `sc` alone, but we get
 ΔΔG for free in the same invocation. Cleaner than splitting into two
 tools.
@@ -239,7 +239,7 @@ once P0-29 is stable in production) and `tests/orthogonal_metrics/`
 cascade).
 
 Both read cached output from a completed `test_negative_steering`
-run. No Boltz reruns. Fast iteration: interface_metrics in ~1 min
+run, with no Boltz reruns. Fast iteration: interface_metrics in ~1 min
 wall, orthogonal_metrics in ~15-20 min wall (AF3 is the long pole
 at ~5-10 min per survivor, parallelised 30 wide on `jic-gpu`).
 
@@ -248,7 +248,7 @@ at ~5-10 min per survivor, parallelised 30 wide on `jic-gpu`).
 - **`main.nf` integration.** The new P0-29 and P0-31 modules are
   wired into test harnesses but NOT into the production `main.nf`
   graph yet. The production pipeline still terminates at
-  `NEGSTEER_CROSS_SEQUENCE`. This is deliberate — we validate via
+  `NEGSTEER_CROSS_SEQUENCE`. This is deliberate. We validate via
   the test harness on design_0..design_3 data first, then wire
   into main once the output CSV looks right.
 
@@ -260,7 +260,7 @@ at ~5-10 min per survivor, parallelised 30 wide on `jic-gpu`).
   todo_list3 P0-29 step 6, this only happens after Task 8 cross-
   target AUROC confirms iRMSD correlates better. Task 8 depends on
   Task 7 (three-target cohort). So the composite stays as-is
-  through this build-out — don't flip it early just because it
+  through this build-out. Don't flip it early just because it
   "feels better".
 
 - **`main.nf` integration of negsteer_biophysical, rosetta,
@@ -280,7 +280,7 @@ at ~5-10 min per survivor, parallelised 30 wide on `jic-gpu`).
       workaround).
     - Wall-clock drop from ~105 min to ~75 min per sequence (the
       P0-30 estimate). If no meaningful speedup, kernel dispatch
-      may be misbehaving silently — flip the fallback and
+      may be misbehaving silently. Flip the fallback and
       investigate.
 
 - **AF3 model dir path assumption.** `params.af3_model_dir` defaults
@@ -291,8 +291,8 @@ at ~5-10 min per survivor, parallelised 30 wide on `jic-gpu`).
 - **FreeSASA BSA via three-call subtraction.** FreeSASA's Python
   API doesn't expose chain filtering, so we write tempfile-filtered
   per-chain PDBs and call `freesasa.Calc()` three times per
-  survivor. ~5-10 s total per survivor. Fine for typical cohorts;
-  if this becomes a bottleneck, there's a `freesasa.structureFromBioPDB`
+  survivor. ~5-10 s total per survivor. Fine for typical cohorts.
+  If this becomes a bottleneck, there's a `freesasa.structureFromBioPDB`
   path that avoids the tempfiles.
 
 - **MDAnalysis HBA segid handling.** PDB chain IDs surface as
@@ -404,7 +404,7 @@ Depends on this session's P0-31 being confirmed green on the test
 harness. Promotion-to-wet-lab gate per notes 8: 10 independent
 seeds per survivor at diffusion_samples=5, median iRMSD < 5 Å,
 IQR < 2 Å, ≥ 7/10 seeds at correct interface. Most of the Python
-exists (`submit_final_validation.sh` per notes 8) — work is
+exists (`submit_final_validation.sh` per notes 8), and the work is
 wrapping it as a NextFlow module with deterministic output naming.
 
 ### Later — Task 7 three-target cohort
@@ -414,7 +414,7 @@ three MAX effectors against a single Pikp1-HMA receptor (AvrPikD,
 AvrPikE, AvrPikF per the memo). Each ~100 MPNN sequences, same
 directory layout. That's the dataset Task 8 (cross-target per-metric
 AUROC) needs. Task 8's output is what tells us whether iRMSD
-actually correlates better with pose quality than ra_eff — and only
+actually correlates better with pose quality than ra_eff, and only
 then do we flip the composite score.
 
 ### Open diagnostic carry-over from pipeline_notes3

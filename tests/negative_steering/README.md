@@ -14,11 +14,11 @@ plus the diagnostic plots (`NEGSTEER_PLOTS`,
 from `modules/negsteer_controls.nf` (`DERIVE_INPUT_INDICES`,
 `NEGSTEER_CONTROLS`).
 
-For each MPNN sequence: one GPU job runs the full single-cycle chain
-end-to-end (cold-start prediction → identify wrong-interface →
-mutate → re-predict → revert protected-set mutations → re-predict
-→ harvest verdicts). Outputs are aggregated into the cohort
-`cross_sequence_summary.csv`.
+For each MPNN sequence, one GPU job runs the full single-cycle chain
+end-to-end. The chain is cold-start prediction → identify
+wrong-interface → mutate → re-predict → revert protected-set
+mutations → re-predict → harvest verdicts. Outputs are aggregated
+into the cohort `cross_sequence_summary.csv`.
 
 ## Inputs (from `data/`)
 

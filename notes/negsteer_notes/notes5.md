@@ -6,29 +6,31 @@ production recipe locked in by notes 3.
 
 ## What was run
 
-Target: Pikp1 + AvrPikD complex. Design 3 selected from `scored_metadata.csv`
-on the basis of being the only entry top-tier on both `mpnn_score` (1.0289,
-lowest of 16) and `design_region_score` (1.3559, second-lowest). Receptor
-sequence taken from the raw `design_3_mpnn/seqs/design_3.fa` (sample 3),
-**not** from `sequence_metadata.csv` — design_3 was generated before the
-`pipeline_correct_sequences.py` fix from notes 4 was applied to the upstream
-pipeline, so the CSV's `corrected_receptor` column would still contain
-effector residues for this entry. The receptor FASTA was extracted manually
-into a single-record file `design_3_seq_3_receptor.fasta` (79 residues,
-matching PDB chain A and `receptor_total_length` from the CSV).
+Target: Pikp1 + AvrPikD complex. Design 3 was selected from
+`scored_metadata.csv` as the only entry top-tier on both `mpnn_score`
+(1.0289, lowest of 16) and `design_region_score` (1.3559, second-lowest).
+The receptor sequence came from the raw `design_3_mpnn/seqs/design_3.fa`
+(sample 3), **not** from `sequence_metadata.csv`. design_3 was generated
+before the `pipeline_correct_sequences.py` fix from notes 4 reached the
+upstream pipeline, so the CSV's `corrected_receptor` column would still
+contain effector residues for this entry. The receptor FASTA was extracted
+manually into a single-record file `design_3_seq_3_receptor.fasta` (79
+residues, matching PDB chain A and `receptor_total_length` from the CSV).
 
-True interface indices derived from `rfdiffusion_metrics.json` for design_3:
-`receptor_contact_residues` mapped through `receptor_position_order` gave
-0-based seq_idx `[2, 32, 34, 36, 37, 38, 39, 47, 69, 70, 71, 72, 73, 74, 75,
-76, 77, 78]` — 18 contacts, concentrated heavily at the C-terminal end
-(positions 69–78 contribute 10 of 18) plus a small N-terminal cluster.
+True interface indices were derived from `rfdiffusion_metrics.json` for
+design_3. `receptor_contact_residues` mapped through
+`receptor_position_order` gave 0-based seq_idx `[2, 32, 34, 36, 37, 38, 39,
+47, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78]`. That is 18 contacts,
+concentrated heavily at the C-terminal end (positions 69–78 contribute 10 of
+18) plus a small N-terminal cluster.
 
 Run configuration: `--mode mild --max-mutations 4 --candidate-pool-size 6
 --n-designs 50 --n-cycles 2 --max-passing 3`. 50 cycle-0 designs, 3 cycle-1
 parents selected by maximin novelty (`c0d07`, `c0d29`, `c0d40`), 50 cycle-1
 children per parent. 201 total predictions including the cold start.
-Workdir: `runs/design_3_seq_3_smoke` (the `_smoke` suffix is misleading —
-this is the production-style run; smoke test was never done. Worth renaming.)
+Workdir: `runs/design_3_seq_3_smoke`. The `_smoke` suffix is misleading.
+This is the production-style run, and the smoke test was never done. Worth
+renaming.
 
 Crucially, **the ground truth here is the experimentally-validated native
 Pikp1–AvrPikD complex**, not a HADDOCK-derived pose. The notes-4 HADDOCK
@@ -46,24 +48,24 @@ a design that scores well on every Boltz confidence metric simultaneously:
 
 This is the strongest design in the run on confidence and the second-best on
 ra_eff once the strict 3.0 Å cut is relaxed. Its parent `c0d40` (cycle-0,
-mutations A26R Q46D) was already at ra_eff 3.35 Å, ipSAE 0.48 — the cycle-1
-addition of K5E and Y44R sharpened both the structural alignment and the
-confidence signal. Receptor backbone RMSD is 0.91 Å (well inside the 3.0 Å
-intact threshold) and effector RMSD is 0.41 Å, so the floppy-termini and
-side-chain-repacking concerns from notes 4 do not apply to this design — the
-fold is genuinely intact, the residual ra_eff comes from rigid-body
-positioning of an already-close pose.
+mutations A26R Q46D) was already at ra_eff 3.35 Å and ipSAE 0.48. The
+cycle-1 addition of K5E and Y44R sharpened both the structural alignment and
+the confidence signal. Receptor backbone RMSD is 0.91 Å, well inside the
+3.0 Å intact threshold, and effector RMSD is 0.41 Å. The floppy-termini and
+side-chain-repacking concerns from notes 4 therefore do not apply to this
+design. The fold is genuinely intact, and the residual ra_eff comes from
+rigid-body positioning of an already-close pose.
 
-The run also produced 27 designs at sub-3 Å ra_eff, 57 at sub-5 Å, and 9
-that pass the full notes-3 production tier (`receptor_intact AND ra_eff < 3
-AND tJac >= 0.7`), the strongest of which is a cycle-0 design at ra_eff
-2.36 Å, tJac 0.77, ipSAE 0.491, ipTM 0.80, complex_plddt 0.90.
+The run also produced 27 designs at sub-3 Å ra_eff and 57 at sub-5 Å. A
+further 9 pass the full notes-3 production tier (`receptor_intact AND
+ra_eff < 3 AND tJac >= 0.7`). The strongest of those is a cycle-0 design at
+ra_eff 2.36 Å, tJac 0.77, ipSAE 0.491, ipTM 0.80, complex_plddt 0.90.
 
 ## Cross-target context (re-read notes 3)
 
-Initial reaction was that the structural numbers were "8-10× better than
-anything we've seen." That framing was wrong — based on the v5 7QPX number
-from notes 1 (14.46 Å plateau) which predates the production recipe.
+The initial reaction was that the structural numbers were "8-10× better than
+anything we've seen". That framing was wrong. It rested on the v5 7QPX
+number from notes 1 (14.46 Å plateau), which predates the production recipe.
 Comparing properly against the four native benchmarks from notes 3:
 
 | target | rows | intact | best ra_eff | best tJac | cold ra | cold tJac | best ipSAE |
@@ -75,7 +77,7 @@ Comparing properly against the four native benchmarks from notes 3:
 | **design_3** | 201 | 83 | **1.46** | 0.77 | 29.30 | 0.48 | **0.86** |
 
 The structural rescue (1.46 Å) is in the middle of the native band, not
-above it. The cold-start tJac (0.48) is also in-band — comparable to 6G10
+above it. The cold-start tJac (0.48) is also in-band, comparable to 6G10
 (0.50) and well below 7B1I (0.83). The structural dimension contains no
 new information.
 
@@ -101,28 +103,29 @@ no data supporting it — was correct. This is the first design where the
 ranker has anything to rank.
 
 Notes 4's "ipSAE confirmed broken on RFDiffusion data" conclusion now needs
-qualification. It was based on Pikp1 design_1 v2, which (a) was run before
-the `pipeline_correct_sequences.py` fix and may have had a wrong receptor
+qualification. It was based on Pikp1 design_1 v2. That run (a) predated the
+`pipeline_correct_sequences.py` fix and may have had a wrong receptor
 sequence going into Boltz, and (b) was just one design. design_3, run with
 the verified-correct sequence and the patched plan-stage flags, gives the
-opposite result. The notes 4 conclusion should be amended to "ipSAE was
-zero on Pikp1 design_1 specifically, possibly due to the upstream sequence
-bug; on design_3 with verified-correct inputs ipSAE is well-distributed
-and informative."
+opposite result. The notes 4 conclusion should be amended to say that ipSAE
+was zero on Pikp1 design_1 specifically, possibly because of the upstream
+sequence bug. On design_3 with verified-correct inputs, ipSAE is
+well-distributed and informative.
 
 ## Open questions
 
 ### 1. Native vs designed cold-start comparison
 
-The most interesting thing the user raised: Boltz's cold-start prediction
-on the *native* Pikp1–AvrPikD sequence is wrong (presumably also at 20-30
-Å, like the natives in the table above), but the cold start on the
-RFDiffusion-designed sequence is *also* at 29 Å. So the designed sequence
-isn't giving Boltz a head start on the cold start — both are wrong out of
-the box. What's different is that one cycle of mild steering on the
-designed sequence produces a sub-2 Å hit with high confidence, whereas no
-comparable run on native Pikp1+AvrPikD has been done yet. The natural
-control: run the same recipe on the native Pikp1–AvrPikD sequence. If it
+The most interesting point the user raised concerns the native cold start.
+Boltz's cold-start prediction on the *native* Pikp1–AvrPikD sequence is
+wrong, presumably also at 20-30 Å, like the natives in the table above. But
+the cold start on the RFDiffusion-designed sequence is *also* at 29 Å. So
+the designed sequence is not giving Boltz a head start on the cold start,
+because both are wrong out of the box. What differs is that one cycle of mild
+steering on the designed sequence produces a sub-2 Å hit with high
+confidence. No comparable run on native Pikp1+AvrPikD has been done yet. The
+natural control: run the same recipe on the native Pikp1–AvrPikD sequence.
+If it
 also rescues to sub-2 Å with ipSAE ~0.7, design_3 is in line with the
 natives. If it plateaus at 13–14 Å the way Pikp1 design_1 v2 did, then
 design_3 is genuinely doing something the native sequence can't, and the
@@ -133,55 +136,56 @@ experiment.**
 designs
 
 `c0d40.c1d06` fails the production tier by 0.37 Å on ra_eff while passing
-every other criterion comfortably. The rec_rmsd is 0.91 Å — the receptor
+every other criterion comfortably. The rec_rmsd is 0.91 Å, so the receptor
 backbone is intact in the strong sense, not the borderline-intact sense
-notes 4 was worried about. The 0.37 Å miss on ra_eff is happening at a
-length scale where side-chain repacking against the designed sequence and
-inherent flexibility at the (Cα-only, glycine-placeholder) RFDiffusion
-termini can plausibly account for it without anything biologically
-meaningful changing. The threshold was set conservatively in notes 3 for
-the structural-only filter on natives where ipSAE was useless; on designs
-where ipSAE comes back at 0.70 with ipTM 0.85, the structural threshold
-is doing redundant gating work and excluding a strong design. A
-confidence-aware tier — e.g. `ra_eff < 5 AND tJac >= 0.7 AND ipSAE >= 0.5`
-— would let `c0d40.c1d06` through cleanly. Worth proposing as an
+notes 4 was worried about. The 0.37 Å miss on ra_eff sits at a length scale
+where two effects can plausibly account for it. Those are side-chain
+repacking against the designed sequence and inherent flexibility at the
+(Cα-only, glycine-placeholder) RFDiffusion termini, neither of which
+implies that anything biologically meaningful has changed. The threshold
+was set conservatively in notes 3 for the structural-only filter on
+natives, where ipSAE was useless. On designs where ipSAE comes back at 0.70
+with ipTM 0.85, the structural threshold is doing redundant gating work and
+excluding a strong design. A confidence-aware tier
+— e.g. `ra_eff < 5 AND tJac >= 0.7 AND ipSAE >= 0.5` —
+would let `c0d40.c1d06` through cleanly. Worth proposing as an
 RFDiffusion-specific production tier alongside the notes-3 native one,
 not replacing it.
 
 ### 3. The steered interface must not rely on the steering mutations themselves
 
-Critical check before trusting any result from this pipeline on RFDiffusion
-designs: **the contact residues Boltz is using in the rescued prediction
-must not be the residues that were mutated during steering.** The mutations
-are a tool to push Boltz onto the right interface so we can assess binding
-likelihood — they will NOT appear in the actual agroinfiltration constructs.
-The construct carries the original ProteinMPNN-designed sequence, unmodified.
-So if `c0d40.c1d06`'s low-RMSD, high-ipSAE pose is held in place by
-interactions involving K5E, A26R, Y44R, or Q46D, the result is not
-predictive of what will happen in planta — the in planta construct has
+One check is critical before trusting any result from this pipeline on
+RFDiffusion designs. **The contact residues Boltz is using in the rescued
+prediction must not be the residues that were mutated during steering.** The
+mutations are a tool to push Boltz onto the right interface so we can assess
+binding likelihood. They will NOT appear in the actual agroinfiltration
+constructs. The construct carries the original ProteinMPNN-designed
+sequence, unmodified. So if `c0d40.c1d06`'s low-RMSD, high-ipSAE pose is
+held in place by interactions involving K5E, A26R, Y44R, or Q46D, the result
+is not predictive of what will happen in planta. The in planta construct has
 K5/A26/Y44/Q46, and Boltz has told us nothing about whether those
 residues form a productive interface.
 
-The check is straightforward: for any design that passes the filter,
+The check is straightforward. For any design that passes the filter,
 intersect its `receptor_contact_residues` (from the prediction's interface
 analysis) against `mutations_chimerax` for that design. If the overlap is
 non-zero, the design is using its own steering mutations as contacts and
-should be flagged. The acceptable designs are ones where the contacts are
-all on *unmutated* positions — meaning the steering pushed Boltz onto an
+should be flagged. The acceptable designs are ones where the contacts all
+sit on *unmutated* positions. That means the steering pushed Boltz onto an
 interface composed of the original MPNN-designed residues, which is what
 the agroinfiltration construct will actually present.
 
-For `c0d40.c1d06` specifically: the mutations are at positions 5, 26, 44,
+For `c0d40.c1d06` specifically, the mutations are at positions 5, 26, 44,
 46. The true interface (from `rfdiffusion_metrics.json`) is at 0-based
-indices 2, 32, 34, 36, 37, 38, 39, 47, 69–78 — none of the mutated
+indices 2, 32, 34, 36, 37, 38, 39, 47, 69–78. None of the mutated
 positions overlap with the true interface set, which is a good sign. But
-the design's *actual* predicted contact residues (what Boltz used to place
-the effector in the rescue) need to be checked directly from the prediction
-PDB, not assumed from the true-interface set. That check hasn't been done
-yet and is a prerequisite for claiming any design as a binding-likelihood
-signal.
+the design's *actual* predicted contact residues need to be checked directly
+from the prediction PDB, not assumed from the true-interface set. Those are
+the residues Boltz used to place the effector in the rescue. That check
+hasn't been done yet and is a prerequisite for claiming any design as a
+binding-likelihood signal.
 
-Worth adding as a post-processing step in `compute-final-metrics`: for each
+Worth adding as a post-processing step in `compute-final-metrics`. For each
 passing design, compute `n_contacts_on_mutated_positions` and flag any
 design where this is non-zero. Would go alongside the existing confidence
 flag. Call it `mutation_reliance_flag` or similar.
@@ -190,27 +194,26 @@ flag. Call it `mutation_reliance_flag` or similar.
 
 Notes 4 warned that this design class can't meaningfully test "redirect
 Boltz to a new site" because the de novo loop is built around the existing
-native interface. This concern is *partially* mitigated for design_3 by
-the fact that the cold start is at 29 Å (i.e. Boltz did NOT find the site
-out of the box, despite the design being built around it), so the steering
-is doing real work. But the concern doesn't fully go away — the residues
-the steering is targeting are residues the native complex already uses,
-and "find the right site" is easier when the right answer is in Boltz's
-training distribution. The native-sequence control above would also
-address this.
+native interface. This concern is *partially* mitigated for design_3. The
+cold start is at 29 Å, so Boltz did NOT find the site out of the box despite
+the design being built around it. The steering is therefore doing real
+work. But the concern does not fully go away. The residues the steering
+targets are residues the native complex already uses, and "find the right
+site" is easier when the right answer is in Boltz's training distribution.
+The native-sequence control above would also address this.
 
 ### 5. Pikp1 design_1 v2 may need rerunning
 
 Notes 4's conclusions about design_1 — including the 13.5 Å plateau, the
 zero-ipSAE finding, and the HADDOCK discrepancy investigation — were all
 made before the `pipeline_correct_sequences.py` fix. design_1 v2 was
-likely run with a wrong receptor sequence going into Boltz (the silent
+likely run with a wrong receptor sequence going into Boltz. The silent
 `split_sequence` bug from notes 4 would have routed effector residues into
-the receptor FASTA via the CSV path). Worth rerunning design_1 with the
+the receptor FASTA via the CSV path. Worth rerunning design_1 with the
 verified-correct sequence to see whether the 13.5 Å plateau and zero-ipSAE
 findings reproduce, or whether they were artefacts of the upstream bug.
-If they reproduce: design_3 is the outlier and design_1's caveats stand.
-If they don't: notes 4's main conclusions need significant revision.
+If they reproduce, design_3 is the outlier and design_1's caveats stand.
+If they don't, notes 4's main conclusions need significant revision.
 
 ## Things to remember about this session
 
@@ -228,7 +231,7 @@ If they don't: notes 4's main conclusions need significant revision.
 - **`compute-final-metrics` only populates `cm_*` columns for rows passing
   its filter** (intact AND ra_eff < threshold). The first metrics-enriched
   CSV from this session was generated with the default 3 Å threshold and
-  had 0 cm_iptm rows; rerunning with `--rmsd-threshold 5.0` populated 57.
+  had 0 cm_iptm rows. Rerunning with `--rmsd-threshold 5.0` populated 57.
   If the cm_* columns look empty, check the threshold the metrics step
   ran with.
 - **`aggregate_results.sh` originally had a hard-coded `runs/7QPX*`
@@ -239,7 +242,7 @@ If they don't: notes 4's main conclusions need significant revision.
 - **The orchestrator's `aggregate` subcommand and the host-side
   `aggregate_results.sh` have confusingly overlapping names but do
   different things.** The orchestrator's `aggregate` produces
-  `all_results_multicycle.csv` inside one experiment dir; the shell
+  `all_results_multicycle.csv` inside one experiment dir. The shell
   script combines those across many experiments into a single CSV. If
   the multicycle file is missing after a run, run the orchestrator's
   `aggregate` first (inside the container), then the shell script.
@@ -254,12 +257,12 @@ If they don't: notes 4's main conclusions need significant revision.
 2. **ChimeraX inspection of `c0d40.c1d06`** against the native ground
    truth. Confirm the 3.37 Å ra_eff is rigid-body offset of an
    essentially-correct pose, not a wrong pose at lucky distance. **While
-   there, check which receptor residues are actually making contact with
-   the effector in the rescued pose, and confirm none of them are at
-   positions 5, 26, 44, or 46 (the steering mutations).** If any contact
-   residue is on a mutated position, the design's binding signal is
-   contaminated by the steering and cannot be trusted as a prediction
-   about what the agroinfiltration construct will do.
+   there, check which receptor residues are making contact with the
+   effector in the rescued pose. Confirm none of them are at positions 5,
+   26, 44, or 46 (the steering mutations).** If any contact residue is on a
+   mutated position, the design's binding signal is contaminated by the
+   steering. It cannot then be trusted as a prediction about what the
+   agroinfiltration construct will do.
 3. **Implement `mutation_reliance_flag` in `compute-final-metrics`.**
    For each passing design, count how many of its predicted interface
    contacts fall on mutated positions (from `mutations_chimerax`). Flag

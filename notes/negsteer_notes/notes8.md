@@ -5,10 +5,11 @@
 Notes 7 identified two immediate next features: (1) multi-seed validation of
 final candidates to measure confidence reproducibility, and (2) reversion
 deduplication to avoid predicting the same sequence multiple times. This session
-built both, discovered and fixed three reporting bugs in the aggregate code,
-uncovered a fundamental finding about Boltz confidence metric reliability through
-a 200-prediction variance test, and deployed a configurable `--num-seeds` parameter
-that unifies the exploration-vs-confidence tradeoff into a single dial.
+built both and fixed three reporting bugs in the aggregate code. A
+200-prediction variance test uncovered a fundamental finding about Boltz
+confidence metric reliability. The session also deployed a configurable
+`--num-seeds` parameter that unifies the exploration-vs-confidence tradeoff into
+a single dial.
 
 ## What was built
 
@@ -20,8 +21,8 @@ two designs can land on the same sequence by chance. Each duplicate wastes a GPU
 prediction on an identical input.
 
 **Solution:** The design loop in `cmd_plan` (cycle 0) and `cmd_iterate_plan`
-(cycle 1+) now generates unique sequences with retry-on-collision. A set of seen
-sequences is maintained; if a collision occurs, the RNG draws again. If the
+(cycle 1+) now generates unique sequences with retry-on-collision. The code
+keeps a set of seen sequences, and on a collision the RNG draws again. If the
 combinatorial space is exhausted before reaching `--n-designs`, the code warns
 and caps at the maximum number of unique sequences. `plan.json` records
 `n_unique_sequences` and `total_predictions`.
@@ -49,16 +50,17 @@ Each design entry in `plan.json` carries `sequence_group`, `seed_index`, and
 `steered_results_aggregate.csv` is written with per-group mean/std/min/max
 of structural metrics.
 
-Design naming: `design_00` when `num_seeds=1`; `design_00_s0`, `design_00_s1`,
-... when `num_seeds>1`. Backward compatible — `predict-one` falls back to the
-old seed formula when `boltz_seed` is absent from plan.json.
+Design naming: `design_00` when `num_seeds=1`, and `design_00_s0`,
+`design_00_s1`, ... when `num_seeds>1`. This stays backward compatible, because
+`predict-one` falls back to the old seed formula when `boltz_seed` is absent
+from plan.json.
 
 ### 3. Reversion deduplication
 
 **Problem:** When `--max-mutations 3` and all 3 mutations contact the effector,
 the reversion pass reverts them all back to the MPNN wild-type. In the v3 run
 (notes 7), ~40 designs each triggered a separate Boltz prediction of the same
-sequence — pure waste.
+sequence, which was pure waste.
 
 **Solution:** `write_reversion_plan` in `reversion.py` now groups contaminated
 designs by their actual reverted sequence (hash-based). If 40 designs all revert
@@ -71,7 +73,8 @@ shared labels after computing metrics for the canonical prediction.
 - v1 test (10 designs, num_seeds=1): 5 contaminated → 4 unique → 4 predictions
   (saved 1 GPU job). design_01 and design_02 shared results correctly.
 - v2 test (10 designs, num_seeds=3): 15 contaminated → 5 unique → 15 predictions
-  (5 × 3 seeds). Without dedup would have been 45 predictions — saved 30 GPU jobs.
+  (5 × 3 seeds). Without dedup that would have been 45 predictions, so this
+  saved 30 GPU jobs.
 
 ### 4. Multi-seed variance test
 
@@ -116,9 +119,9 @@ is in `r["design"]` (e.g. `"design_04"`).
 
 **The critical consequence:** `passing_summary.csv` reported `total_mutations=0`
 for pose_holds designs that actually carried 1 remaining mutation. This led to
-the false belief that the MPNN wild-type sequence could find the correct interface
-(4 out of 45 predictions), when in fact those predictions were of single-point
-mutants (e.g. D32K).
+the false belief that the MPNN wild-type sequence could find the correct
+interface (4 out of 45 predictions). In fact those predictions were of
+single-point mutants (e.g. D32K).
 
 **Fix:** For cycle-0, derive `leaf_label` from `r["design"]` instead of
 `r["pathway"]`. Read `positions_to_revert` from `contaminated.json` (the
@@ -163,14 +166,14 @@ and 100 times with `diffusion_samples=5`, each with different seeds.
    independent predictions. The wrong binding site is the overwhelming Boltz
    solution for this sequence. ra_eff is rock-solid at ~30 Å with <1 Å std.
 
-2. **`diffusion_samples=5` dramatically stabilises predictions** — effector
+2. **`diffusion_samples=5` dramatically stabilises predictions.** Effector
    deformation drops from 37% to 3%, and confidence metric variance roughly
    halves. Boltz picks better models when it has 5 internal candidates. This
    does NOT help with interface placement (still 0/100), only with fold quality.
 
 3. **This resolves the notes 7 mystery.** Notes 7 observed 4/45 reversion
    predictions of "the MPNN sequence" finding the correct interface. We showed
-   those predictions were NOT the MPNN wild-type — they carried a remaining
+   those predictions were NOT the MPNN wild-type. They carried a remaining
    D32K mutation (the `reverted_total_mutations=0` was a reporting bug). The
    single point mutation D32K is sufficient to shift the effector toward the
    correct interface in ~10% of predictions.
@@ -191,13 +194,13 @@ one (ipSAE 0.755). The pose_holds survivors with D32K have even lower confidence
 ipSAE and iPTM measure Boltz's self-consistency (how well-packed it thinks the
 interface is), NOT whether the prediction is biologically correct. The wrong
 interface is a perfectly reasonable protein surface that Boltz has seen in
-training data; the correct interface (designed de novo) is novel, so Boltz is
+training data. The correct interface (designed de novo) is novel, so Boltz is
 less confident even when it finds it.
 
 **This finding needs deeper investigation.** Notes 5 reported design_3 as the
 first case where ipSAE showed meaningful signal (0.86), and concluded the
 notes-3 decision to keep ipSAE as the production ranker was correct. The current
-session's data complicates that conclusion — the 0.86 was a single seed that
+session's data complicates that conclusion. The 0.86 was a single seed that
 happened to score high, the 10-seed mean is 0.755, and the wild-type wrong-site
 prediction scores comparably. A thorough literature review and analysis of the
 available data is needed to determine whether ipSAE, iPTM, or another metric
@@ -217,10 +220,10 @@ survivor from v3):
 | eff RMSD | 0.51 | 0.07 | 0.41 | 0.61 |
 
 10/10 seeds find the correct interface (all ra_eff < 5 Å). The three mild
-mutations (K→E, M→E, L→D — all charge-introducing) on the wrong-interface
-surface reliably redirect Boltz to the correct binding site without any of
-the mutations directly contacting the effector. This is a genuine,
-reproducible steering hit.
+mutations (K→E, M→E, L→D, all charge-introducing) sit on the wrong-interface
+surface. They reliably redirect Boltz to the correct binding site, and none of
+them directly contacts the effector. This is a genuine, reproducible steering
+hit.
 
 ### v3 vs v4 comparison: exploration vs confidence
 
@@ -232,20 +235,20 @@ reproducible steering hit.
 | Clean steered | 1 (design_24) | 0 |
 | pose_holds | 0 | 2 (D32K designs) |
 
-v3's broad exploration found the only clean steered design (design_24) — a hit
-v4 could have missed with only 30 sequences. v4's multi-seeding caught D32K
-pose_holds that v3 missed because the single reversion seed collapsed. Both
-approaches found valid hits, but different ones.
+v3's broad exploration found the only clean steered design (design_24). v4
+could have missed that hit with only 30 sequences. v4's multi-seeding caught
+D32K pose_holds that v3 missed because the single reversion seed collapsed.
+Both approaches found valid hits, but different ones.
 
 For production, `num_seeds=1` with post-hoc final validation (option E) appears
-to be the better default — it finds the cleanest hits and validates them
+to be the better default. It finds the cleanest hits and validates them
 cheaply afterward.
 
 ## Intact cutoff change: 3.0 → 5.0 Å
 
 The `RECEPTOR_INTACT_CUTOFF` and `EFFECTOR_INTACT_CUTOFF` were hardcoded at
 3.0 Å throughout the pipeline. This was too conservative for RFDiffusion
-designs with floppy termini — design_16 in v4 had ra_eff 1.0–1.6 Å (best
+designs with floppy termini. design_16 in v4 had ra_eff 1.0–1.6 Å (best
 ever) but was rejected because receptor RMSD was 3.2–3.4 Å.
 
 Changed to 5.0 Å in:
@@ -254,7 +257,7 @@ Changed to 5.0 Å in:
 - `reversion.py` (harvest_reversion_results)
 - `compute-final-metrics` default `--rmsd-threshold`
 
-Note: this threshold is intended as a temporary measure. The proper fix
+This threshold is a temporary measure. The proper fix
 is to replace whole-chain RMSD with a metric that ignores disordered
 regions (core-only RMSD, iRMSD, or DockQ). See "What to do next" §3.
 
@@ -321,7 +324,7 @@ The `reverted_mutated_contact_positions` column in shared results reflects the
 canonical design's remaining mutations, not the non-canonical label's. This
 doesn't affect verdicts or structural metrics (those depend only on the
 sequence, which is shared), but the audit column may be misleading for
-non-canonical labels. Low priority — the verdict is authoritative.
+non-canonical labels. Low priority, since the verdict is authoritative.
 
 ## What to do next
 
@@ -431,7 +434,7 @@ From notes 6:
   case (n_contaminated vs n_verdicts mismatch) isn't checked.
 
 From notes 3/4:
-- **RFDiffusion production validator wrapper** — iterate over a directory
+- **RFDiffusion production validator wrapper.** Iterate over a directory
   of designs, run the full pipeline per design, produce one summary CSV.
 
 ## Things to remember when working on this code
@@ -441,13 +444,13 @@ All items from notes 6/7 still apply, plus:
 - **`--num-seeds` is inherited from cycle-0 plan.json.** Cycle-1+ plans
   read `num_seeds` from `cycle0_plan.get("num_seeds", 1)` and use the
   same value throughout. You cannot change num_seeds mid-experiment.
-- **Design naming changes with num_seeds.** `design_00` when num_seeds=1;
+- **Design naming changes with num_seeds.** `design_00` when num_seeds=1, and
   `design_00_s0`/`design_00_s1`/... when num_seeds>1. Code that parses
   design names must handle both formats.
 - **`steered_results.csv` now has `sequence_group` and `seed_index` columns.**
   Downstream consumers (aggregate, extract_passing) should be aware of
   these. The aggregate code currently passes them through without
-  multi-seed-aware grouping — this is acceptable because each seed is
+  multi-seed-aware grouping. That is acceptable because each seed is
   treated as an independent design for the reversion pipeline.
 - **The intact cutoff is now 5.0 Å everywhere.** If you re-run
   aggregate + compute-final-metrics on an OLD experiment, you must also

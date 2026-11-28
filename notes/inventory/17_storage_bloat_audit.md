@@ -1,23 +1,23 @@
 # 17 — Storage bloat audit (negative steering focus)
 
 Audit of the storage footprint of the `receptor-resurfacing-pipeline` runs
-under `experiments/campaigns/*/runs/`, motivated by two observations: (a)
-finished runs occupy several GB despite being conceptually small, and (b)
-deleting a single finished run takes ~15 minutes due to high inode count.
-The audit is scoped to the negative-steering subsystem (which the human
-identified as the largest consumer) and uses one representative run,
+under `experiments/campaigns/*/runs/`. Two observations motivated it.
+Finished runs occupy several GB despite being conceptually small, and
+deleting a single finished run takes ~15 minutes because of the high inode
+count. The audit is scoped to the negative-steering subsystem, which the
+human identified as the largest consumer. It uses one representative run,
 `pikp1_avrpia/runs/v1_4b`, with a confirmation pass on `v1_4a` of the same
 campaign.
 
-This report does **not** implement code-level remediation; it describes the
-problem, lists the cleanup that should be applied to already-finished runs
-(see §6), and sketches a forward-looking code change that should be made
-before further runs are started (§7).
+This report does **not** implement code-level remediation. It describes the
+problem and lists the cleanup that should be applied to already-finished
+runs (see §6). It also sketches a forward-looking code change to make
+before further runs start (§7).
 
 ## Summary
 
-Five remediable causes of bloat are identified. Together they account for
-the majority of bytes and ~85% of the inodes in a finished run.
+This audit identifies five remediable causes of bloat. Together they
+account for the majority of bytes and ~85% of the inodes in a finished run.
 
 | # | Cause                                                          | Bytes recoverable per run | Inodes recoverable | Ease |
 |---|----------------------------------------------------------------|---------------------------|--------------------|------|
@@ -120,7 +120,7 @@ boltz_results_input/
     └── plddt_input_model_[1-4].npz            # 4 × 0.74 KB — UNUSED
 ```
 
-Total per Boltz call: ~1.15 MB; of that ~910 KB (≈ 80%) is models 1–4.
+Total per Boltz call: ~1.15 MB, of which ~910 KB (≈ 80%) is models 1–4.
 
 A fully-running negsteer sequence (i.e. one that reaches reversion) makes
 **3 + 9 + 6 = 18 Boltz calls**, so ~21 MB of Boltz raw output per sequence
@@ -140,9 +140,9 @@ path "${seq_name}/", emit: per_sequence_workdir
 
 `mode: 'copy'` makes Nextflow byte-copy every file inside `${seq_name}/`
 from the task's work directory into `${params.outdir}/negative_steering/runs/`.
-Because `output: path "${seq_name}/"` declares the entire folder (rather
-than a curated `path "${seq_name}/passing_summary.csv"` etc.), every
-intermediate file — including all of §2's Boltz raw output — is copied.
+`output: path "${seq_name}/"` declares the entire folder rather than a
+curated `path "${seq_name}/passing_summary.csv"` and similar. So every
+intermediate file is copied, including all of §2's Boltz raw output.
 
 **Confirmed by direct comparison.** For `pikp1_avrpia/runs/v1_4b`:
 
@@ -158,9 +158,9 @@ present the same duplication-with-`work/` pattern but at lower volume:
 single largest win and is the foundation of the cleanup script in §6.
 
 **Why not switch to `mode: 'symlink'`?** It would save the bytes
-immediately but ties `results/` lifetime to `work/` lifetime — deleting
-`work/` would silently break `results/`. Given that the goal is to delete
-`work/`, `mode: 'copy'` is actually the correct choice; the bug is in
+immediately, but it ties `results/` lifetime to `work/` lifetime, so
+deleting `work/` would silently break `results/`. Given that the goal is to
+delete `work/`, `mode: 'copy'` is the correct choice, and the bug is in
 *not* deleting `work/` afterwards.
 
 ## 4 — Issue #2: only `model_0` of N diffusion samples is consumed
@@ -189,14 +189,16 @@ pdbs.sort(key=lambda p: (
 return pdbs[0]
 ```
 
-`negsteer_diffusion_samples: 5` causes Boltz to run 5 diffusion trajectories,
-rank them internally, and emit them as `input_model_0.pdb` … `input_model_4.pdb`
-where **`model_0` is the highest-confidence sample** (Boltz's internal
-ranking, not just the sample index). The picker preferentially keeps
-`model_0`/`rank_0`, which is correct: this is how the multi-sample
-ensembling improves prediction quality. Reducing `negsteer_diffusion_samples`
-to 1 would skip the ranking and likely produce a lower-quality top pick;
-it is **not** a recommended fix.
+`negsteer_diffusion_samples: 5` causes Boltz to run 5 diffusion
+trajectories and rank them internally. It emits them as
+`input_model_0.pdb` … `input_model_4.pdb`, where **`model_0` is the
+highest-confidence sample** (Boltz's internal ranking, not just the sample
+index). The picker preferentially keeps `model_0`/`rank_0`, which is
+correct, because this multi-sample ensembling is what improves prediction
+quality.
+Reducing `negsteer_diffusion_samples` to 1 would skip the ranking and
+likely produce a lower-quality top pick, so it is **not** a recommended
+fix.
 
 The samples that are *not* picked (`model_1` through `model_4`) and their
 PAE / PDE / plddt / confidence sidecars are written but never read. The
@@ -218,8 +220,8 @@ points `compute_metrics.py` at the directory containing the *single* picked
 PDB and reads only the corresponding sidecar files for that one model.
 
 **Recovery.** Once Boltz has returned and `pdbs[0]` has been chosen, the
-files matching `*_model_[1-9]*` and `*_rank_[1-9]*` inside every
-`boltz_results_input/predictions/*/` directory are dead weight and can be
+files matching `*_model_[1-9]*` and `*_rank_[1-9]*` are dead weight. They
+sit inside every `boltz_results_input/predictions/*/` directory and can be
 deleted. Two ways to do this:
 
 - **Retroactively** (existing finished runs): cleanup script in §6.
@@ -229,7 +231,7 @@ deleted. Two ways to do this:
 ## 5 — Issue #3: Boltz scratch dirs are never read after Boltz returns
 
 `boltz_results_input/processed/`, `boltz_results_input/lightning_logs/`,
-and `boltz_results_input/msa/` are Boltz's internal staging output — none
+and `boltz_results_input/msa/` are Boltz's internal staging output. None
 of them are read by `boltz2_negative_steering.py`,
 `boltz2_iterate_steering.py`, or any of the negsteer post-processing
 modules. Confirmed by `grep -rn "processed\|lightning_logs" bin/ modules/`.
@@ -253,7 +255,7 @@ contains:
   per-sample model + confidence files.
 
 The `publishDir` for AF3 (`modules/negsteer_af3_nomsa.nf`) is correctly
-selective — `results/orthogonal_metrics/af3_nomsa/design_X_seq_Y/`
+selective. `results/orthogonal_metrics/af3_nomsa/design_X_seq_Y/`
 contains only `af3_nomsa_summary.csv` + `input.json`. So AF3 does **not**
 have the duplication problem of #1. But the full ensemble persists in
 `work/` until `work/` is deleted. ~9.8 MB × 99 tasks ≈ 970 MB per run.
@@ -269,7 +271,7 @@ Nextflow retains `work/` to support `--resume`. The cache directory
 once the run is complete and a re-run is not anticipated.
 
 **Important relationship:** `.nextflow/cache/` is only useful when `work/`
-exists. The cache stores task-hash → output-metadata mappings; on resume,
+exists. The cache stores task-hash → output-metadata mappings. On resume,
 Nextflow consults the cache to identify cached tasks, then verifies the
 matching files in `work/` are still present. If `work/` is deleted, every
 cache entry is invalid and Nextflow re-runs every task on resume regardless
@@ -280,7 +282,7 @@ of cache state. So once `work/` is deleted, `.nextflow/cache/` and
 exact command) is small and useful as audit trail. Keep it.
 
 `.nextflow.log` (run log, can be ~1 MB) is useful for post-mortem of
-failed runs. Keep it for now; can be revisited later.
+failed runs. Keep it for now, and revisit the policy later.
 
 `tmp/` (typically <100 KB, contains `libjansi-64.so` and similar) — keep
 or delete, doesn't matter.
@@ -296,7 +298,7 @@ three categories based on `.nextflow/history` and `.out` log inspection.
 |-------------------------------------------------------------|----------------------------------------------|
 | `.nextflow/history` is missing                              | Run was never executed (only `params.yml`)   |
 | `.nextflow/history` last column = `OK`                      | Pipeline completed (every task ended OK)     |
-| `.nextflow/history` last column = `ERR`                     | One or more tasks failed; stage may be partial|
+| `.nextflow/history` last column = `ERR`                     | One or more tasks failed. Stage may be partial|
 | `.out` log contains `Pipeline finished:` line               | Wrapper saw `nextflow run` exit 0 (only on `OK`) |
 | `results/negative_steering/runs/design_*/` non-empty        | Negsteer produced output worth cleaning      |
 | `results/orthogonal_metrics/af3_nomsa/` exists & non-empty  | AF3 stage completed                          |
@@ -304,13 +306,13 @@ three categories based on `.nextflow/history` and `.out` log inspection.
 Empirically, in the current fleet:
 
 - **All `OK` runs** also reached AF3 (`af3_nomsa/` present and non-empty).
-  None of them exited early due to filter-failure-with-zero-survivors.
+  None of them exited early from filter-failure-with-zero-survivors.
   The user's hypothetical "OK with nothing past Rosetta" did not occur in
-  this batch — but the cleanup script should still tolerate it (use
+  this batch. The cleanup script should still tolerate it by using
   `find … -delete`, which is a no-op on missing paths, never `rm` of a
-  hard-coded path).
-- **The one `ERR` run** (`pikp1_pwt7/v1_4e`) reached negsteer (with 0
-  designs surviving the filter) and then died at the
+  hard-coded path.
+- **The one `ERR` run** (`pikp1_pwt7/v1_4e`) reached negsteer with 0
+  designs surviving the filter. It then died at the
   `NEGSTEER_WITHIN_SEQUENCE_PLOTS` step because there was nothing to plot.
   Its `work/` is large and has nothing to recover by re-running, so it
   should be cleaned.
@@ -338,7 +340,7 @@ Empirically, in the current fleet:
 - `pikp1_pwt7/runs/v1_4b`
 
 The cleanup driver hard-codes the 8 eligible paths above. The 4 unexecuted
-runs are skipped — they have no `.nextflow/history`, so the per-run script
+runs are skipped. They have no `.nextflow/history`, so the per-run script
 will refuse to act on them defensively in case the driver list ever drifts.
 
 ## 9 — Cleanup actions (retroactive)
@@ -366,7 +368,7 @@ For each eligible run, perform in order:
 
    The `*_model_[1-9]*` glob matches `input_model_1.pdb`,
    `pae_input_model_1.npz`, `pde_input_model_1.npz`,
-   `plddt_input_model_1.npz`, and `confidence_input_model_1.json` — i.e.
+   `plddt_input_model_1.npz`, and `confidence_input_model_1.json`, i.e.
    the PDB and all four sidecars per sample. Same for samples 2–4
    (and 5–9, which the current params don't generate but the pattern
    handles defensively if the param ever increases).
@@ -397,10 +399,10 @@ at `scripts/clean_all_finished_runs.sh`.
 
 The HPC-Home filesystem is exposed to the local Mac via SSHFS, which adds
 a network roundtrip per file metadata operation. `find … -delete` over
-SSHFS is *catastrophically* slow for 100k-file trees — minutes per run
-becomes hours. **Run the cleanup script directly on the HPC login node**
+SSHFS is *catastrophically* slow for 100k-file trees, turning minutes per
+run into hours. **Run the cleanup script directly on the HPC login node**
 (`ssh hpc-home`), where the filesystem is local. The script itself is
-filesystem-agnostic; only the runtime cost differs.
+filesystem-agnostic, and only the runtime cost differs.
 
 ## 10 — Forward-looking code change (recommended, not yet implemented)
 
@@ -441,10 +443,10 @@ def _invoke_boltz(...):
     return chosen
 ```
 
-This **does not change any pipeline-visible behaviour** — `compute_metrics.py`
-already only reads the sidecars belonging to the chosen model. It only
-deletes files that the existing code was going to write to results/ but
-never read.
+This **does not change any pipeline-visible behaviour**, because
+`compute_metrics.py` already only reads the sidecars belonging to the
+chosen model. The patch only deletes files that the existing code was going
+to write to results/ but never read.
 
 A complementary change would add `workflow.onComplete` cleanup in
 `main.nf`:
@@ -468,8 +470,9 @@ deliverables.
 
 For each cleaned run, confirm:
 
-- `work/` does not exist; `results/` is unchanged in non-Boltz directories
-  (`mpnn/`, `rfdiffusion/`, `orthogonal_metrics/`, `plots/`, etc.).
+- `work/` does not exist, and `results/` is unchanged in non-Boltz
+  directories (`mpnn/`, `rfdiffusion/`, `orthogonal_metrics/`, `plots/`,
+  etc.).
 - One representative `cycle_0/initial/boltz_results_input/predictions/input/`
   has only `*_model_0.*` files left (4 PDBs and 4×4 sidecars per Boltz
   call should be gone).
@@ -483,18 +486,18 @@ For each cleaned run, confirm:
 
 1. **Should the forward-looking `_invoke_boltz` cleanup hook be applied
    before or after the next set of runs?** Doing it before would make
-   future runs lighter from the start; doing it after means one more
-   round of retroactive cleanup but no risk of changing behaviour
+   future runs lighter from the start. Doing it after means one more
+   round of retroactive cleanup, but no risk of changing behaviour
    mid-investigation.
 
 2. **Are `.nextflow.log` files worth preserving long-term?** They're
-   ~1 MB per run and useful for post-mortem of failures. Could be
-   compressed to `.log.gz` (~100 KB) at cleanup time — small win, decide
-   if worth the complexity.
+   ~1 MB per run and useful for post-mortem of failures. Compressing them
+   to `.log.gz` (~100 KB) at cleanup time is a small win. Decide whether
+   it is worth the complexity.
 
 3. **`workflow.onComplete` automation** — does the user want this added
    to `main.nf` so runs self-clean, or prefer the explicit external
-   script? External script is auditable and easier to dry-run; automation
+   script? External script is auditable and easier to dry-run. Automation
    is one less thing to remember.
 
 4. **HADDOCK module** — `modules/haddock.nf` has 5 `publishDir mode: 'copy'`

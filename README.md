@@ -18,9 +18,9 @@ installed once per site and called as a tool.
 ## Status
 
 Test coverage over `bin/` is **10.81%**, gated as a ratchet in `pyproject.toml`
-so it can only go up. It is low because most of `bin/` is reached only by the
-`check_test_run` tier. That tier needs a finished pipeline run, so it cannot
-contribute to a laptop or CI figure. Raising it is tracked in
+so it can only go up. Coverage is low because most of `bin/` is reached only
+by the `check_test_run` tier. That tier requires a completed pipeline run, so
+it cannot contribute to a laptop or CI figure. Raising it is tracked in
 [`notes/upstream_parity_plan.md`](notes/upstream_parity_plan.md).
 
 Active work is on the `phase4-impl` branch. `main` is the pre-Phase-4
@@ -59,8 +59,8 @@ geometrically sensible, not energetically optimal.
 
 Branch A **requires** `params.pose_solver_pairs`: one or more
 hard-pinned CA–CA contacts. Write them as space-separated,
-chain-prefixed residue pairs, e.g. `"A73-B31 A71-B33 A8-B22"`. Each
-pair takes an optional `@distance` target (e.g. `"A73-B48@4.5"`). `A`
+chain-prefixed residue pairs, e.g. `"A73-B31 A71-B33 A8-B22"`, with an
+optional `@distance` target per pair (e.g. `"A73-B48@4.5"`). `A`
 is the receptor, `B` the effector. See the "Pose Solver" block in
 [`params_example.yml`](params_example.yml) for the rest of the knobs
 (exclusions, min/max pair distance, clash and contact cutoffs,
@@ -69,8 +69,8 @@ weight).
 
 An optional manual-pick checkpoint lets you inspect the solved pose
 before the expensive design stages. Run with
-`params.stop_after_pose_solve: true` and open
-`${outdir}/pose_solver/solved_pose_posed.pdb` in ChimeraX. Then resume
+`params.stop_after_pose_solve: true`, open
+`${outdir}/pose_solver/solved_pose_posed.pdb` in ChimeraX, then resume
 with `stop_after_pose_solve: false` (`-resume` reuses the solved pose).
 
 From this complex, RFDiffusion generates candidate receptor backbones
