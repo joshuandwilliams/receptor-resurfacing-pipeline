@@ -15,6 +15,9 @@ in advance.
 with the metrics JSON and the design PDBs agreeing with each other, so the
 readers and the filters can be driven end to end without a cluster.
 
+`sequence_pdb` writes a chain carrying a sequence you state, so a stage that
+reads the chain's residues back and rewrites them has a known answer.
+
 Layouts are taken from the committed reference sets under
 `tests/<module>/example_output_files/`, not from docstrings.
 """
@@ -26,14 +29,32 @@ from pathlib import Path
 # One CA per residue is enough for every metric in rfdiffusion_filter, which
 # reads only CA records. Writing full backbones would make the fixtures larger
 # without changing a single assertion.
-_ATOM = ("ATOM  {serial:5d}  CA  {res} {chain}{resnum:4d}    "
+_ATOM = ("ATOM  {serial:5d}  CA  {res} {chain}{resnum:4d}{icode}   "
          "{x:8.3f}{y:8.3f}{z:8.3f}  1.00  0.00           C")
+
+# The 20 standard residues, written out rather than inverted from
+# contig_utils.THREE_TO_ONE. A fixture that derives its names from the code
+# under test agrees with it by construction, which is the one thing a
+# characterization fixture must not do.
+ONE_TO_THREE = {
+    "A": "ALA", "C": "CYS", "D": "ASP", "E": "GLU", "F": "PHE",
+    "G": "GLY", "H": "HIS", "I": "ILE", "K": "LYS", "L": "LEU",
+    "M": "MET", "N": "ASN", "P": "PRO", "Q": "GLN", "R": "ARG",
+    "S": "SER", "T": "THR", "V": "VAL", "W": "TRP", "Y": "TYR",
+}
 
 
 def ca_line(serial: int, chain: str, resnum: int, x: float, y: float,
-            z: float, res: str = "ALA") -> str:
+            z: float, res: str = "ALA", icode: str = " ") -> str:
+    """One CA ATOM record. `icode` is the insertion-code column (27).
+
+    A blank insertion code is the normal case and is what every other builder
+    here writes. A non-blank one lets a residue share its number with the
+    residue before it, which is the only input on which a reader keyed on
+    (resnum, icode) and a reader keyed on resnum alone disagree.
+    """
     return _ATOM.format(serial=serial, res=res, chain=chain, resnum=resnum,
-                        x=x, y=y, z=z)
+                        icode=icode, x=x, y=y, z=z)
 
 
 def complex_pdb(
@@ -89,6 +110,59 @@ def complex_pdb(
     lines.append("END")
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(lines) + "\n")
+    return path
+
+
+def sequence_pdb(
+    path: Path,
+    *,
+    sequence: str,
+    chain: str = "A",
+    start: int = 1,
+    spacing: float = 3.8,
+    origin: tuple[float, float, float] = (0.0, 0.0, 0.0),
+    icodes: dict[int, str] | None = None,
+    append: bool = False,
+) -> Path:
+    """One CA per residue of `sequence`, in that order, on one chain.
+
+    `complex_pdb` writes alanine everywhere, which is the right thing for a
+    geometric metric and the wrong thing for anything that reads the residues
+    back: a scramble of 20 alanines is indistinguishable from no scramble at
+    all. Here the chain carries the sequence stated at the call site, so
+    `get_chain_sequence` must return that exact string and a sequence
+    rewriter's output can be compared character by character.
+
+    Residue i sits at `origin + (i * spacing, 0, 0)` and, unless `icodes`
+    says otherwise, carries residue number `start + i`, so the geometry stays
+    as arithmetic as the other builders' is.
+
+    `icodes` maps a 0-based position to an insertion code. A residue given one
+    reuses the previous residue's number, which is how a real structure writes
+    10 then 10A, and is the case where a reader keyed on (resnum, icode) counts
+    one more residue than a reader keyed on resnum alone.
+
+    `append=True` adds the chain to an existing file, which is how a two-chain
+    complex with two different sequences is built.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    kept: list[str] = []
+    if append and path.exists():
+        kept = [ln for ln in path.read_text().splitlines()
+                if ln.startswith("ATOM")]
+
+    icodes = icodes or {}
+    lines, serial, resnum = [], len(kept) + 1, start - 1
+    for i, aa in enumerate(sequence):
+        icode = icodes.get(i, " ")
+        if icode == " " or i == 0:
+            resnum += 1
+        lines.append(ca_line(serial, chain, resnum,
+                             origin[0] + i * spacing, origin[1], origin[2],
+                             res=ONE_TO_THREE[aa], icode=icode))
+        serial += 1
+
+    path.write_text("\n".join(kept + lines) + "\nEND\n")
     return path
 
 

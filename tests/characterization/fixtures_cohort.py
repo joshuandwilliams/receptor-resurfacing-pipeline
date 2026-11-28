@@ -20,6 +20,9 @@ that `classify_seed` must return for it. The metric values are chosen to sit
 on the correct side of every threshold in extract_passing, so the expected
 classification is a property of the call site, not of the numbers.
 
+`passing_row` builds a passing_summary.csv row — the per-sequence file the
+cohort emitter reads, one directory per MPNN sequence.
+
 `cohort_tree` assembles all three into the runs/ layout the two scripts walk.
 
 Column names are taken from the committed reference set under
@@ -159,6 +162,33 @@ _SEED_DEFAULTS: Dict[str, str] = {
     "reverted_ipsae_min_15": "",
 }
 
+# ── passing_summary.csv ──────────────────────────────────────────────────
+# Subset of the 47-column header in
+# example_output_files/.../runs/<seq>/passing_summary.csv, limited to the
+# columns cross_sequence_summary.aggregate reads when it picks a
+# representative row and scores it.  A column left out of the header comes out
+# blank in the cohort CSV, which is the same thing a real run with no value
+# for it produces.
+_PASSING_DEFAULTS: Dict[str, str] = {
+    "rank_by_composite_score": "1",
+    "rank_by_ra_eff": "1",
+    "cycle": "0",
+    "pathway": "cycle_0",
+    "sequence_group": "0",
+    "design": "initial",
+    "n_seeds": "3",
+    "n_pass": "0",
+    "outcome": "no_reversion",
+    "ra_eff_vs_truth_median": "",
+    "true_jaccard_median": "",
+    "weighted_jaccard_median": "",
+    "complex_plddt_median": "",
+    "ipae_median": "",
+    "pae_pass_frac_median": "",
+    "iptm_median": "",
+    "confidence_flag": "ok",
+}
+
 # Metric blocks, one per outcome `classify_seed` can return. Each sits on the
 # stated side of every threshold in extract_passing (ra_eff < 5 Å, receptor
 # intact, complex_plddt >= 0.70, ipae <= 15, pae_pass_frac >= 0.10,
@@ -230,6 +260,35 @@ def cross_row(name: str, **overrides) -> Dict[str, str]:
     """One cross_sequence_summary.csv row for MPNN sequence `name`."""
     overrides.setdefault("mpnn_sequence", name)
     return _checked(_CROSS_DEFAULTS, overrides, "cross_row")
+
+
+def passing_row(*, n_pass: int, ra_eff: float = 2.0,
+                true_jaccard: float = 0.80, **overrides) -> Dict[str, str]:
+    """One passing_summary.csv row.
+
+    `n_pass` against the row's n_seeds is what decides the sequence's tier, so
+    it is required rather than defaulted. The composite the cohort emitter
+    scores is `true_jaccard - 0.05 * ra_eff`, which for the defaults here is
+    0.80 - 0.05 x 2.0 = 0.70.
+    """
+    return _checked(_PASSING_DEFAULTS, {
+        "n_pass": n_pass,
+        "ra_eff_vs_truth_median": ra_eff,
+        "true_jaccard_median": true_jaccard,
+        "weighted_jaccard_median": true_jaccard,
+        "complex_plddt_median": 0.92,
+        "ipae_median": 4.0,
+        "pae_pass_frac_median": 0.80,
+        "iptm_median": 0.72,
+        **overrides,
+    }, "passing_row")
+
+
+def write_passing_summary(directory: Path, rows: List[Dict[str, str]]) -> Path:
+    """`<directory>/passing_summary.csv`, the per-sequence file the cohort
+    emitter reads. An empty row list writes a header-only file, which is what
+    a sequence whose every prediction failed the eligibility gate leaves."""
+    return write_csv(directory / "passing_summary.csv", rows, _PASSING_DEFAULTS)
 
 
 def agg_row(**overrides) -> Dict[str, str]:

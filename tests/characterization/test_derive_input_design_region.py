@@ -13,6 +13,10 @@ collapsed by a refactor:
 
 Both are positional within the receptor chain rather than PDB residue numbers,
 so a structure that does not start at residue 1 still lines up.
+
+`main()` is the stage the Task 6 negative-control path runs, and the last
+section drives it end to end. The two files are the stage's only output, so
+the tests there assert what is written into them rather than that they appeared.
 """
 from __future__ import annotations
 
@@ -29,7 +33,7 @@ for _p in (str(BIN), str(HERE)):
         sys.path.insert(0, _p)
 
 import derive_input_design_region as didr  # noqa: E402
-from fixtures_runtree import complex_pdb  # noqa: E402
+from fixtures_runtree import complex_pdb, sequence_pdb  # noqa: E402
 
 # ── Contig parsing to the flat form ──────────────────────────────────
 
@@ -209,3 +213,204 @@ def test_the_two_frames_differ_by_one_on_the_same_residue(tmp_path):
     assert interface == [0]
     design = didr._design_region_positions_1b([(2, 10)], 10)
     assert design == [1]
+
+
+# ── The stage, end to end ────────────────────────────────────────────
+
+def _run(tmp_path: Path, pdb: Path, contigs: str, **extra) -> int:
+    """Drive `main()` with argv, returning its exit code.
+
+    The two output paths always land in `tmp_path`, so `_files` below can find
+    them without each test naming them again.
+    """
+    argv = ["derive_input_design_region.py",
+            "--input-pdb", str(pdb),
+            "--contigs", contigs,
+            "--design-region-output", str(tmp_path / "input_design_region.txt"),
+            "--true-interface-output",
+            str(tmp_path / "input_true_interface.txt")]
+    for k, v in extra.items():
+        argv += [f"--{k.replace('_', '-')}", str(v)]
+    old = sys.argv
+    try:
+        sys.argv = argv
+        try:
+            return int(didr.main() or 0)
+        except SystemExit as exc:
+            return int(exc.code or 0)
+    finally:
+        sys.argv = old
+
+
+def _files(tmp_path: Path) -> tuple[Path, Path]:
+    return (tmp_path / "input_design_region.txt",
+            tmp_path / "input_true_interface.txt")
+
+
+def _numbers(path: Path) -> list[int]:
+    """Every index in a written file, whichever of the two formats it is in.
+
+    The design region is one comma-separated line and the true interface is
+    one index per line, so reading both the same way keeps a test about the
+    indices from also being a test about the separator.
+    """
+    body = [ln for ln in path.read_text().splitlines()
+            if ln.strip() and not ln.lstrip().startswith("#")]
+    return [int(x) for ln in body for x in ln.replace(",", " ").split()]
+
+
+def _two_chain_complex(tmp_path: Path, *, separation: float = 4.0) -> Path:
+    """A 10-residue receptor with a 3-residue effector lying over its first
+    three residues, `separation` angstroms up in z.
+
+    Effector residue j sits directly above receptor residue j, so at a 5 Å
+    cutoff the interface is exactly positions 0, 1 and 2: the next receptor
+    residue along is sqrt(3.8^2 + 4^2) = 5.52 Å away and misses.
+    """
+    return complex_pdb(tmp_path / "input.pdb", n_receptor=10, n_effector=3,
+                       spacing=3.8, separation=separation)
+
+
+@pytest.mark.logic
+def test_the_two_files_hold_the_indices_the_contigs_and_the_structure_imply(tmp_path):
+    """Anchor A1-6 on a 10-residue receptor leaves positions 7..10 to be
+    rebuilt, and the effector sits over positions 0..2. Both answers are set
+    by the fixture, so a shift in either frame fails here."""
+    pdb = _two_chain_complex(tmp_path)
+    assert _run(tmp_path, pdb, "A1-6/4-4 B") == 0
+    design, interface = _files(tmp_path)
+    assert _numbers(design) == [7, 8, 9, 10]
+    assert _numbers(interface) == [0, 1, 2]
+
+
+@pytest.mark.logic
+def test_the_headers_record_what_produced_the_numbers(tmp_path):
+    """Both files are read by hand when a campaign is debugged, and a size or
+    a cutoff that disagrees with the body is how a stale file goes unnoticed.
+    """
+    pdb = _two_chain_complex(tmp_path)
+    _run(tmp_path, pdb, "A1-6/4-4 B", contact_cutoff=5.0)
+    design, interface = _files(tmp_path)
+    design_header = design.read_text()
+    assert "# contigs: A1-6/4-4 B" in design_header
+    assert "# design region size: 4 residues" in design_header
+    assert "# receptor chain: A" in design_header
+    interface_header = interface.read_text()
+    assert "# heavy-atom contacts <= 5.0 Angstroms" in interface_header
+    assert "# n contacts: 3" in interface_header
+    assert "# effector chain: B" in interface_header
+
+
+@pytest.mark.logic
+def test_an_all_anchor_contig_writes_an_empty_design_region(tmp_path):
+    """Nothing is rebuilt, so nothing may be scrambled. The file still has to
+    be written, because the Nextflow process publishes a fixed file list and
+    the control stage downstream reads it for a count of zero rather than
+    failing to find it."""
+    pdb = _two_chain_complex(tmp_path)
+    assert _run(tmp_path, pdb, "A1-10 B") == 0
+    design, _interface = _files(tmp_path)
+    assert _numbers(design) == []
+    assert "# design region size: 0 residues" in design.read_text()
+
+
+@pytest.mark.logic
+def test_the_contact_cutoff_flag_reaches_the_contact_search(tmp_path):
+    """At 4.5 Å only the residue directly under each effector residue is in
+    contact, at 4.0 Å exactly. At 7.0 Å the next one along, at
+    sqrt(3.8^2 + 4^2) = 5.52 Å, joins; the one after that is at
+    sqrt(7.6^2 + 4^2) = 8.59 Å and still does not."""
+    pdb = _two_chain_complex(tmp_path)
+    _run(tmp_path, pdb, "A1-6/4-4 B", contact_cutoff=4.5)
+    assert _numbers(_files(tmp_path)[1]) == [0, 1, 2]
+    _run(tmp_path, pdb, "A1-6/4-4 B", contact_cutoff=7.0)
+    assert _numbers(_files(tmp_path)[1]) == [0, 1, 2, 3]
+
+
+@pytest.mark.logic
+def test_a_separated_complex_writes_an_empty_interface(tmp_path):
+    """No interface is a legitimate answer for an input that has not been
+    posed yet, and it must be written as zero contacts rather than as a
+    crash."""
+    pdb = _two_chain_complex(tmp_path, separation=50.0)
+    assert _run(tmp_path, pdb, "A1-6/4-4 B") == 0
+    _design, interface = _files(tmp_path)
+    assert _numbers(interface) == []
+    assert "# n contacts: 0" in interface.read_text()
+
+
+# ── Refusals ─────────────────────────────────────────────────────────
+
+@pytest.mark.logic
+def test_a_receptor_chain_that_is_not_in_the_structure_exits_two(tmp_path):
+    """Exit 2 and no files. Writing a design region derived from a chain that
+    is not there would hand the control stage a set of positions against a
+    structure nobody checked."""
+    pdb = _two_chain_complex(tmp_path)
+    assert _run(tmp_path, pdb, "A1-6/4-4 B", receptor_chain="Z") == 2
+    design, interface = _files(tmp_path)
+    assert not design.exists() and not interface.exists()
+
+
+@pytest.mark.logic
+def test_an_empty_receptor_chain_exits_two(tmp_path, monkeypatch):
+    """The guard is unreachable through the file system today, because
+    structure_metrics.get_chain_sequence raises when the chain is absent
+    rather than returning an empty string, so the extraction is stubbed. It
+    is pinned because a receptor length of zero would make every anchor fall
+    outside the chain and the design region come out empty, which is a valid
+    answer for a different input."""
+    pdb = _two_chain_complex(tmp_path)
+    monkeypatch.setattr(didr, "_extract_receptor_sequence", lambda p, c: "")
+    assert _run(tmp_path, pdb, "A1-6/4-4 B") == 2
+    assert not _files(tmp_path)[0].exists()
+
+
+@pytest.mark.logic
+def test_an_unparseable_contig_exits_two(tmp_path, capsys):
+    pdb = _two_chain_complex(tmp_path)
+    assert _run(tmp_path, pdb, "A1-6/??/A8-10 B") == 2
+    assert "contigs parse failed" in capsys.readouterr().err
+
+
+@pytest.mark.logic
+def test_an_insertion_code_in_the_receptor_exits_two_rather_than_shifting_indices(
+        tmp_path, capsys):
+    """The sequence walk keys on (resnum, insertion code) and the contact walk
+    keys on resnum alone, so a receptor carrying 5 and 5A is one residue
+    longer to the first than to the second. Every index from the contact walk
+    would then be against a different structure, and the length check in
+    find_contact_residues_heavy is what stops that becoming a silent
+    off-by-one in the file the steering engine reads.
+    """
+    pdb = sequence_pdb(tmp_path / "icode.pdb", sequence="MKTAYIAKQR",
+                       chain="A", icodes={5: "A"})
+    sequence_pdb(pdb, sequence="WVC", chain="B", origin=(0.0, 0.0, 4.0),
+                 append=True)
+    assert _run(tmp_path, pdb, "A1-6/4-4 B") == 2
+    assert "true-interface computation failed" in capsys.readouterr().err
+
+
+# ── The advisory overlap warning ─────────────────────────────────────
+
+@pytest.mark.logic
+def test_rebuilding_over_the_whole_interface_warns(tmp_path, capsys):
+    """Anchoring A5-10 leaves positions 1..4 to be rebuilt, which in 0-based
+    terms is {0, 1, 2, 3} and covers all three interface positions. The
+    controls would then destroy the entire binding face, which the stage
+    warns about rather than refusing, because a campaign may intend it."""
+    pdb = _two_chain_complex(tmp_path)
+    assert _run(tmp_path, pdb, "4-4/A5-10 B") == 0
+    err = capsys.readouterr().err
+    assert "WARNING" in err
+    assert "100%" in err
+
+
+@pytest.mark.logic
+def test_an_interface_inside_the_anchors_does_not_warn(tmp_path, capsys):
+    """Anchoring A1-6 keeps the whole interface, so the overlap is zero and
+    the log must stay quiet. A warning on every run is a warning nobody
+    reads."""
+    pdb = _two_chain_complex(tmp_path)
+    assert _run(tmp_path, pdb, "A1-6/4-4 B") == 0
+    assert "WARNING" not in capsys.readouterr().err
