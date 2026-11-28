@@ -17,13 +17,16 @@ installed once per site and called as a tool.
 
 ## Where everything lives
 
-This repository is the tool. Three siblings hold what was done with it:
+This repository is the tool. Two siblings hold everything else:
 
 | Repository | Holds |
 |---|---|
-| [`resurfacing-experiments`](https://github.com/joshuandwilliams/resurfacing-experiments) | the campaigns, their inputs and parameters, and the working notes |
-| [`receptor-resurfacing-analyses`](https://github.com/joshuandwilliams/receptor-resurfacing-analyses) | the twelve Chapter 5 analysis documents |
+| [`resurfacing-experiments`](https://github.com/joshuandwilliams/resurfacing-experiments) | the campaigns with their inputs and parameters, the twelve Chapter 5 analysis documents, and the working notes |
 | [`structure-negative-steering`](https://github.com/joshuandwilliams/structure-negative-steering) | the negative-steering engine, installed per site and called as a tool |
+
+The campaign run directories are in none of the three. They are roughly 4.5 GB
+for the AVR-PikF campaign alone and have never been tracked. The analyses
+resolve them through `$RECEPTOR_RUN_ROOT`.
 
 ## Status
 
