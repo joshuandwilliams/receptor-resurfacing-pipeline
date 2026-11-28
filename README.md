@@ -44,13 +44,16 @@ All work is on `main`. It is the only branch. The `phase4-impl` and
 plans the remediation this codebase is going through.
 [`notes/upstream_parity_plan.md`](https://github.com/joshuandwilliams/resurfacing-experiments/blob/main/notes/upstream_parity_plan.md) covers the
 work to bring it in line with the engine repository.
-[`notes/things_to_fix.md`](https://github.com/joshuandwilliams/resurfacing-experiments/blob/main/notes/things_to_fix.md) lists the known defects
-that would change results.
+[`docs/known_defects.md`](docs/known_defects.md) lists seven known
+defects and six deliberate oddities that read like defects.  Each is verified
+against the code and pinned by a test, so none can change silently.
 
-`notes/SESSION_HANDOFF.md` and `notes/remediation_state.md` are per-session
-working documents rather than orientation. Both were last written in May 2026
-and describe an in-flight run, so read them for history, not for current
-state.
+[`notes/SESSION_HANDOFF.md`](https://github.com/joshuandwilliams/resurfacing-experiments/blob/main/notes/SESSION_HANDOFF.md)
+and
+[`notes/remediation_state.md`](https://github.com/joshuandwilliams/resurfacing-experiments/blob/main/notes/remediation_state.md)
+are per-session working documents rather than orientation. Both carry a
+2026-05-14 date and describe an in-flight run, so read them for history, not
+for current state.
 
 ## What the pipeline does
 
