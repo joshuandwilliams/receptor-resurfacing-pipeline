@@ -219,3 +219,12 @@ def test_a_stale_repo_path_remaps_onto_this_checkout():
 @pytest.mark.logic
 def test_a_repo_path_with_no_known_marker_is_none():
     assert esm._remap_repo_path("/opt/data/thing.pdb") is None
+
+
+@pytest.mark.logic
+@pytest.mark.parametrize("original", ["", None])
+def test_an_empty_repo_path_is_none_before_any_marker_search(original):
+    """plan.json can carry a null for either remappable key. Reaching the
+    marker loop with it would search the empty string and return the repo
+    root itself."""
+    assert esm._remap_repo_path(original) is None
