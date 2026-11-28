@@ -148,4 +148,15 @@ skip_covered = true
 # figure from 20.79% to 34.41%.  The fixture builders are in
 # tests/characterization/fixtures_runtree.py, which now also writes a cuboid
 # lattice for the convex-hull code that a collinear chain cannot drive.
-fail_under = 75.0
+#
+# 79.3 is where it stands after five modules whose helpers were covered but
+# whose main() and long paths were not were driven end to end:
+# pipeline_correct_sequences.py 48% to 98%, protein_structure_prediction.py
+# 49% to 98%, derive_design_region.py 47% to 96%, derive_true_interface.py
+# 62% to 96% and af3_confidence.py 66% to 99%.  That is 945 statements, and it
+# moved the figure from 75.01% to 79.33%.  The seven structure tests in
+# test_protein_structure_prediction.py that need a committed Boltz output
+# still skip; the same accessors are now driven on structures built by
+# fixtures_runtree instead, which state the expected geometry at the call
+# site rather than blessing a real output.
+fail_under = 79.3
