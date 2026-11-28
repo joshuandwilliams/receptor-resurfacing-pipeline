@@ -159,4 +159,4 @@ skip_covered = true
 # still skip; the same accessors are now driven on structures built by
 # fixtures_runtree instead, which state the expected geometry at the call
 # site rather than blessing a real output.
-fail_under = 79.3
+fail_under = 87.5
