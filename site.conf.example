@@ -73,6 +73,18 @@
 #RECEPTOR_AF2_DB="/nbi/Reference-Data/AlphaFold/db-v2.3.2"
 
 
+# ── Syncing to and from the cluster ─────────────────────────────────────────
+# scripts/sync_to_hpc.sh and scripts/sync_from_hpc.sh use these.  The host is
+# an ssh alias from your ~/.ssh/config, not a hostname.  The destination is
+# relative to your home directory on the cluster.
+#
+# sync_to_hpc.sh runs rsync with --delete, so anything removed locally is
+# removed there on the next sync.
+# Defaults: host "slurm", dest "receptor_design/receptor-resurfacing-pipeline/"
+#RECEPTOR_HPC_HOST="slurm"
+#RECEPTOR_HPC_DEST="receptor_design/receptor-resurfacing-pipeline/"
+
+
 # ── Test suite ──────────────────────────────────────────────────────────────
 # The check_test_run tier asserts against a finished pipeline run. Point this
 # at one. Without it those 298 tests skip.

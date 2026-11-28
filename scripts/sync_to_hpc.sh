@@ -40,8 +40,14 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-HPC_USER_HOST="slurm"
-HPC_DEST="receptor_design/receptor-resurfacing-pipeline/"
+# Site settings: the ssh host alias and the path on the cluster are specific
+# to one person's setup, so they come from site.conf rather than from here.
+_SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/site_conf.sh
+source "${_SELF_DIR}/site_conf.sh"
+
+HPC_USER_HOST="${RECEPTOR_HPC_HOST:-slurm}"
+HPC_DEST="${RECEPTOR_HPC_DEST:-receptor_design/receptor-resurfacing-pipeline/}"
 
 DRY_RUN=""
 if [ "${1:-}" = "--dry" ]; then
