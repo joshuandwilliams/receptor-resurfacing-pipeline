@@ -1,11 +1,12 @@
-"""Inputs for the four plot CLIs, with the expected figure content at the call site.
+"""Inputs for the five plot CLIs, with the expected figure content at the call site.
 
-Each of `bin/rfdiffusion_plots.py`, `bin/mpnn_plots.py`,
-`bin/orthogonal_metrics_plots.py` and `bin/pose_solver_plots.py` is a standalone
-CLI that reads one or more CSV/JSON files and writes PNGs. A figure test is only
-worth anything if the right answer is known before the code runs, so every
-builder here takes the values that go into the rows rather than hiding them in a
-default. A test that wants design 7 to rank first says so in the call.
+Each of `bin/rfdiffusion_plots.py`, `bin/rosetta_filter_plots.py`,
+`bin/mpnn_plots.py`, `bin/orthogonal_metrics_plots.py` and
+`bin/pose_solver_plots.py` is a standalone CLI that reads one or more CSV/JSON
+files and writes PNGs. A figure test is only worth anything if the right answer
+is known before the code runs, so every builder here takes the values that go
+into the rows rather than hiding them in a default. A test that wants design 7
+to rank first says so in the call.
 
 Column and key names are taken from the producers and the committed reference
 sets, never invented:
@@ -13,6 +14,9 @@ sets, never invented:
     rfdiffusion   bin/rfdiffusion_filter.py, and
                   tests/rfdiffusion/example_output_files/rfdiffusion/
                   rfdiffusion_metrics.json
+    rosetta       bin/rosetta_filter_collect.py, and
+                  tests/rosetta_filtering/example_output_files/
+                  rosetta_filtering/rosetta_filter_metrics.json
     mpnn          bin/mpnn_sequence_qc.py / bin/mpnn_design_region_score.py, and
                   tests/proteinmpnn/example_output_files/sequences/
                   scored_metadata.csv + mpnn_cluster_counts.csv
@@ -239,6 +243,64 @@ def rfdiffusion_metrics_json(
         "hotspot_residues": [],
         "min_hotspot_frac": min_hotspot_frac,
     }, indent=2))
+    return path
+
+
+# ══════════════════════════════════════════════════════════════════════
+# bin/rosetta_filter_plots.py
+# ══════════════════════════════════════════════════════════════════════
+
+# The threshold rosetta_filter_plots.py falls back to when the metrics JSON
+# carries no sc_threshold key. The committed reference set carries 0.5, so the
+# default is only reached by a metrics file written before the key existed.
+ROSETTA_DEFAULT_SC_THRESHOLD = 0.62
+
+
+def rosetta_design(index: int, *, sc_value: float | None = 0.60,
+                   passes_filter: bool | None = None, **physics) -> dict:
+    """One entry of `designs` in rosetta_filter_metrics.json.
+
+    The plot reads `sc_value` and nothing else, which is the module's own
+    documented choice: at this stage the inputs are RFDiffusion polyvaline
+    backbones, so `dG_separated`, `packstat` and `delta_unsatHbonds` are
+    valine-clash artefacts. They are still written here, because the committed
+    metrics file carries them and a fixture that dropped them would be a
+    statement about the plot rather than about the file.
+
+    `sc_value=None` is the shape Rosetta's InterfaceAnalyzer leaves behind when
+    it fails on a design, and the plot's `d.get("sc_value") is not None` guard
+    exists for exactly that. `passes_filter` defaults to nothing being claimed
+    beyond what sc_value implies against the committed 0.5 threshold.
+    """
+    entry = {
+        "design": f"design_{index}.pdb",
+        "design_stem": f"design_{index}",
+        "sc_value": sc_value,
+        "dG_separated": 58.046,
+        "dSASA_int": 1313.2,
+        "dG_dSASA_density": 4.42,
+        "packstat": 0.0,
+        "delta_unsatHbonds": 1.0,
+        "nres_int": 57,
+        "passes_filter": (passes_filter if passes_filter is not None
+                          else (sc_value is not None and sc_value >= 0.5)),
+    }
+    entry.update(physics)
+    return entry
+
+
+def rosetta_filter_metrics_json(path: Path, designs: Sequence[dict], *,
+                                sc_threshold: float | None = 0.5) -> Path:
+    """The metrics JSON `rosetta_filter_plots.py --metrics` reads.
+
+    `sc_threshold=None` omits the key, which is the input that exercises the
+    module's 0.62 fallback.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload: dict = {"designs": list(designs)}
+    if sc_threshold is not None:
+        payload["sc_threshold"] = sc_threshold
+    path.write_text(json.dumps(payload, indent=2))
     return path
 
 

@@ -159,4 +159,12 @@ skip_covered = true
 # still skip; the same accessors are now driven on structures built by
 # fixtures_runtree instead, which state the expected geometry at the call
 # site rather than blessing a real output.
-fail_under = 87.5
+#
+# 92.3 is where it stands after the four MPNN-and-Rosetta sequence-stage
+# modules were covered: mpnn_sequence_qc.py and mpnn_cluster_sequences.py to
+# 100%, mpnn_design_region_score.py to 99% and rosetta_filter_plots.py to 98%.
+# The scoring module needed ProteinMPNN and a working torch, neither of which
+# this repository installs, so the stubs it imports instead live in
+# tests/characterization/stubs/ and are picked up by the module's own
+# top-level import rather than by patching it.  Measured after merging main.
+fail_under = 92.3
