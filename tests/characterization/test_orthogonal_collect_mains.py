@@ -318,9 +318,6 @@ ROSETTA_SUMMARY = {
 def _summaries(tmp_path: Path, *, af3=AF3_SUMMARY, bio=BIO_SUMMARY,
                ros=ROSETTA_SUMMARY) -> tuple[str, str, str]:
     for name, row in (("af3", af3), ("bio", bio), ("ros", ros)):
-        if row is None:
-            (tmp_path / name).mkdir(parents=True, exist_ok=True)
-            continue
         _write_csv(tmp_path / name / "s.csv", list(row), [row])
     return (str(tmp_path / "af3" / "*.csv"),
             str(tmp_path / "bio" / "*.csv"),

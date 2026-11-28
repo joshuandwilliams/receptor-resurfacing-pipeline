@@ -7,11 +7,13 @@ part that decides what reaches `merge_orthogonal_metrics`.
 
 Neither Rosetta nor FreeSASA is installed here, so the Rosetta stage is driven
 by writing executable stubs named like the real binaries into tmp_path and
-prepending that directory to PATH. The stub decides its own exit code and
-whether it writes an output file, which is what makes each failure row
+making that directory the whole PATH. Each stub decides its own exit code and
+whether it writes an output file, which is what makes every failure row
 reachable: a relax that exits non-zero, a relax that exits clean with nothing
 to show, an InterfaceAnalyzer that writes no score file, and one that writes a
-score file while still failing.
+score file while still failing. FreeSASA goes in as a stub module on
+sys.modules whose total area is an arithmetic function of the atom counts, so
+the three-calculation BSA formula has a known answer.
 
 Both stages return 0 and write a row whatever happens. That is deliberate. One
 survivor failing must leave a row behind for the merge step, because a missing
