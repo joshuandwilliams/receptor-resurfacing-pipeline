@@ -209,3 +209,315 @@ def test_a_real_metrics_file_shape_derives_end_to_end(tmp_path):
     }]}))
     entry = dti.find_design_entry(json.loads(m.read_text()), "12")
     assert dti.derive_positional_indices(entry) == [1, 5, 9]
+
+
+# ── main(), and the file it leaves behind ────────────────────────────
+#
+# The helpers above are pinned. What the steering engine reads is the file
+# main() writes, so the block below drives main() on input where every value
+# is known and asserts the bytes, including the frame the header declares.
+
+def _metrics_file(tmp_path, *, design="design_12.pdb", order=None,
+                  contacts=None, name="rfdiffusion_metrics.json"):
+    """Receptor residues 50..59 with contacts at 51, 55 and 59, unless
+    overridden. The positional indices are therefore 1, 5 and 9."""
+    order = list(range(50, 60)) if order is None else order
+    contacts = [51, 55, 59] if contacts is None else contacts
+    p = tmp_path / name
+    p.write_text(json.dumps({"designs": [{
+        "design": design,
+        "receptor_position_order": order,
+        "receptor_contact_residues": contacts,
+    }]}))
+    return p
+
+
+def _run(monkeypatch, *argv) -> int:
+    monkeypatch.setattr(sys, "argv", ["derive_true_interface.py", *argv])
+    return dti.main()
+
+
+@pytest.mark.logic
+def test_main_writes_the_whole_file_byte_for_byte(tmp_path, monkeypatch):
+    """The receptor is numbered 50..59 and the contacting residues are 51, 55
+    and 59, so the positional indices are 1, 5 and 9. One per line, 0-based,
+    with the convention stated in the header. Asserting the whole text keeps
+    the provenance, the frame declaration and the body pinned together: this
+    file is the protected set, and a reader has nothing else to go on.
+    """
+    m = _metrics_file(tmp_path)
+    out = tmp_path / "iface.txt"
+    assert _run(monkeypatch, "--metrics-json", str(m), "--design", "design_12",
+                "--output", str(out)) == 0
+    assert out.read_text() == (
+        f"# derived from {m}\n"
+        "# design: design_12\n"
+        "# source field: receptor_contact_residues (3 residues)\n"
+        "# coordinate system: 0-based positional indices on the receptor chain,\n"
+        "#                    matching prediction PDB sequence order\n"
+        "1\n5\n9\n"
+    )
+
+
+@pytest.mark.logic
+def test_the_written_indices_are_positional_not_residue_numbers(
+        tmp_path, monkeypatch):
+    """The receptor starts at 50. Writing residue numbers would hand the
+    engine 50-based values for a 0-based protected set, and every one of them
+    would protect the wrong position. The file must hold 1, 5, 9 and never
+    51, 55, 59."""
+    m = _metrics_file(tmp_path)
+    out = tmp_path / "iface.txt"
+    _run(monkeypatch, "--metrics-json", str(m), "--design", "design_12",
+         "--output", str(out))
+    body = [ln for ln in out.read_text().splitlines()
+            if ln and not ln.startswith("#")]
+    assert body == ["1", "5", "9"]
+
+
+@pytest.mark.logic
+def test_the_first_receptor_position_is_written_as_zero(tmp_path, monkeypatch):
+    """The boundary of the 0-based frame. A contact on the receptor's first
+    residue is index 0, not 1."""
+    m = _metrics_file(tmp_path, contacts=[50])
+    out = tmp_path / "iface.txt"
+    _run(monkeypatch, "--metrics-json", str(m), "--design", "design_12",
+         "--output", str(out))
+    assert out.read_text().splitlines()[-1] == "0"
+
+
+@pytest.mark.logic
+def test_the_header_names_the_source_and_the_design(tmp_path, monkeypatch):
+    m = _metrics_file(tmp_path, name="campaign_metrics.json")
+    out = tmp_path / "iface.txt"
+    assert _run(monkeypatch, "--metrics-json", str(m), "--design", "12",
+                "--output", str(out)) == 0
+    text = out.read_text()
+    assert str(m) in text and "campaign_metrics.json" in text
+    # The id is recorded as typed, not normalised to 'design_12'.
+    assert "# design: 12\n" in text
+
+
+@pytest.mark.logic
+def test_the_header_count_is_the_source_field_length(tmp_path, monkeypatch):
+    """Unlike derive_design_region, this module passes the length of
+    receptor_contact_residues explicitly, so the count names the source
+    field rather than the number of lines written."""
+    m = _metrics_file(tmp_path, contacts=[51, 55])
+    out = tmp_path / "iface.txt"
+    _run(monkeypatch, "--metrics-json", str(m), "--design", "design_12",
+         "--output", str(out))
+    assert "receptor_contact_residues (2 residues)" in out.read_text()
+
+
+@pytest.mark.logic
+def test_main_reports_the_derived_span_on_stderr(tmp_path, monkeypatch,
+                                                 capsys):
+    m = _metrics_file(tmp_path)
+    out = tmp_path / "iface.txt"
+    _run(monkeypatch, "--metrics-json", str(m), "--design", "design_12",
+         "--output", str(out))
+    err = capsys.readouterr().err
+    assert "derived true interface: 3 positions (0-based range 1..9)" in err
+    assert str(out) in err
+
+
+@pytest.mark.logic
+def test_an_existing_output_file_is_overwritten(tmp_path, monkeypatch):
+    m = _metrics_file(tmp_path)
+    out = tmp_path / "iface.txt"
+    out.write_text("777\n")
+    assert _run(monkeypatch, "--metrics-json", str(m), "--design", "design_12",
+                "--output", str(out)) == 0
+    assert "777" not in out.read_text()
+
+
+# ── Failure paths. Each must name its cause and write nothing ────────
+
+@pytest.mark.logic
+def test_a_missing_metrics_file_fails_naming_the_path(tmp_path, monkeypatch,
+                                                      capsys):
+    missing = tmp_path / "absent.json"
+    out = tmp_path / "iface.txt"
+    assert _run(monkeypatch, "--metrics-json", str(missing),
+                "--design", "design_12", "--output", str(out)) == 2
+    err = capsys.readouterr().err
+    assert "not found" in err and str(missing) in err
+    assert not out.exists(), "a failed derivation must leave no protected set"
+
+
+@pytest.mark.logic
+def test_unparseable_json_fails_naming_the_file(tmp_path, monkeypatch, capsys):
+    m = tmp_path / "rfdiffusion_metrics.json"
+    m.write_text("]]not json[[")
+    out = tmp_path / "iface.txt"
+    assert _run(monkeypatch, "--metrics-json", str(m), "--design", "design_12",
+                "--output", str(out)) == 2
+    assert "failed to parse" in capsys.readouterr().err
+    assert not out.exists()
+
+
+@pytest.mark.logic
+def test_an_absent_design_fails_listing_the_designs_that_exist(
+        tmp_path, monkeypatch, capsys):
+    m = _metrics_file(tmp_path)
+    out = tmp_path / "iface.txt"
+    assert _run(monkeypatch, "--metrics-json", str(m), "--design", "design_99",
+                "--output", str(out)) == 2
+    err = capsys.readouterr().err
+    assert "design_99" in err and "design_12.pdb" in err
+    assert not out.exists()
+
+
+@pytest.mark.logic
+def test_metrics_without_a_designs_array_fails_naming_the_type(
+        tmp_path, monkeypatch, capsys):
+    m = tmp_path / "rfdiffusion_metrics.json"
+    m.write_text(json.dumps({"designs": "design_12"}))
+    out = tmp_path / "iface.txt"
+    assert _run(monkeypatch, "--metrics-json", str(m), "--design", "design_12",
+                "--output", str(out)) == 2
+    assert "got type str" in capsys.readouterr().err
+    assert not out.exists()
+
+
+@pytest.mark.logic
+def test_no_contacts_fails_rather_than_writing_an_empty_protected_set(
+        tmp_path, monkeypatch, capsys):
+    """An empty protected-set file would read as a valid instruction that
+    nothing is protected, and negative steering would be free to mutate the
+    binding site itself. That is the one thing the method must never do, so
+    the stage fails instead of writing the file."""
+    m = _metrics_file(tmp_path, contacts=[])
+    out = tmp_path / "iface.txt"
+    assert _run(monkeypatch, "--metrics-json", str(m), "--design", "design_12",
+                "--output", str(out)) == 2
+    err = capsys.readouterr().err
+    assert "receptor_contact_residues' is empty" in err
+    assert "not a binder" in err
+    assert not out.exists()
+
+
+@pytest.mark.logic
+def test_an_empty_position_order_fails(tmp_path, monkeypatch, capsys):
+    m = _metrics_file(tmp_path, order=[], contacts=[51])
+    out = tmp_path / "iface.txt"
+    assert _run(monkeypatch, "--metrics-json", str(m), "--design", "design_12",
+                "--output", str(out)) == 2
+    assert "receptor_position_order' is empty" in capsys.readouterr().err
+    assert not out.exists()
+
+
+@pytest.mark.logic
+def test_a_contact_absent_from_the_position_order_fails(tmp_path, monkeypatch,
+                                                        capsys):
+    m = _metrics_file(tmp_path, contacts=[51, 404])
+    out = tmp_path / "iface.txt"
+    assert _run(monkeypatch, "--metrics-json", str(m), "--design", "design_12",
+                "--output", str(out)) == 2
+    err = capsys.readouterr().err
+    assert "404" in err and "atom walks" in err
+    assert not out.exists()
+
+
+# ── The two modules meet at the cross-check ──────────────────────────
+
+@pytest.mark.logic
+def test_the_cross_check_reads_a_file_the_sibling_module_wrote(
+        tmp_path, monkeypatch, capsys):
+    """One pass through both stages on one metrics file, which is the only
+    place the 1-based design region and the 0-based interface meet.
+
+    The receptor is numbered 50..59. The design region is residues 53..58,
+    which derive_design_region writes as the 1-based range 4-9. The contacts
+    are 54 and 57, which this module writes as 0-based 4 and 7. Shifted up
+    for the comparison those are positions 5 and 8, both inside 4-9.
+    """
+    m = tmp_path / "rfdiffusion_metrics.json"
+    m.write_text(json.dumps({"designs": [{
+        "design": "design_12.pdb",
+        "receptor_position_order": list(range(50, 60)),
+        "per_design_design_residues": [53, 54, 55, 56, 57, 58],
+        "receptor_contact_residues": [54, 57],
+    }]}))
+    region = tmp_path / "region.txt"
+    monkeypatch.setattr(sys, "argv", [
+        "derive_design_region.py", "--metrics-json", str(m),
+        "--design", "design_12", "--output", str(region)])
+    import derive_design_region as _ddr
+    assert _ddr.main() == 0
+    assert region.read_text().splitlines()[-1] == "4-9"
+
+    iface = tmp_path / "iface.txt"
+    assert _run(monkeypatch, "--metrics-json", str(m), "--design", "design_12",
+                "--output", str(iface),
+                "--cross-check-design-region", str(region)) == 0
+    assert [ln for ln in iface.read_text().splitlines()
+            if not ln.startswith("#")] == ["4", "7"]
+    err = capsys.readouterr().err
+    assert "OK: true interface is a subset" in err
+
+
+@pytest.mark.logic
+@pytest.mark.parametrize("idx,inside", [(2, False), (3, True), (5, True),
+                                        (6, False)])
+def test_cross_check_boundary_is_the_region_shifted_by_one(tmp_path, idx,
+                                                           inside):
+    """A design-region file reading 4-6 is 1-based, so it covers 0-based
+    indices 3, 4 and 5. Index 2 and index 6 are the positions either side,
+    and each must fall outside."""
+    f = tmp_path / "dr.txt"
+    f.write_text("# derived from somewhere\n4-6\n")
+    assert dti.cross_check_design_region(f, [idx]) is inside
+
+
+@pytest.mark.logic
+def test_cross_check_warns_but_leaves_the_output_unchanged(tmp_path,
+                                                           monkeypatch,
+                                                           capsys):
+    """Advisory means advisory. The exit code stays 0 and the file still
+    holds the derived indices, because a contact reaching into a fixed
+    residue is a finding to report rather than a reason to lose the run."""
+    m = _metrics_file(tmp_path)
+    region = tmp_path / "dr.txt"
+    region.write_text("2-2\n")
+    out = tmp_path / "iface.txt"
+    assert _run(monkeypatch, "--metrics-json", str(m), "--design", "design_12",
+                "--output", str(out),
+                "--cross-check-design-region", str(region)) == 0
+    err = capsys.readouterr().err
+    assert "WARNING" in err and "OUTSIDE" in err
+    assert [ln for ln in out.read_text().splitlines()
+            if not ln.startswith("#")] == ["1", "5", "9"]
+
+
+@pytest.mark.logic
+def test_cross_check_skips_a_file_with_no_parseable_positions(tmp_path,
+                                                              capsys):
+    """A header-only file is not a region of zero positions. Treating it as
+    one would report every interface residue as outside the region, which
+    reads as a coordinate-system bug."""
+    f = tmp_path / "dr.txt"
+    f.write_text("# derived from nowhere\n# design: d\n")
+    assert dti.cross_check_design_region(f, [0, 1]) is True
+    assert "no parseable positions" in capsys.readouterr().err
+
+
+@pytest.mark.logic
+def test_cross_check_ignores_tokens_that_are_not_positions(tmp_path):
+    """A malformed token is skipped rather than raising, so one stray word
+    does not turn an advisory check into a lost run. '4-6' still parses, so
+    index 3 is still inside."""
+    f = tmp_path / "dr.txt"
+    f.write_text("4-6,junk,a-b,\n")
+    assert dti.cross_check_design_region(f, [3]) is True
+
+
+@pytest.mark.logic
+def test_cross_check_skips_a_file_it_cannot_read(tmp_path, capsys):
+    """A directory where a file was expected exists but cannot be read. The
+    check reports and returns rather than taking the stage down."""
+    d = tmp_path / "dr.txt"
+    d.mkdir()
+    assert dti.cross_check_design_region(d, [0]) is True
+    assert "failed to read" in capsys.readouterr().err
