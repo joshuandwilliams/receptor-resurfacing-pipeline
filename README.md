@@ -44,7 +44,7 @@ All work is on `main`. It is the only branch. The `phase4-impl` and
 plans the remediation this codebase is going through.
 [`notes/upstream_parity_plan.md`](https://github.com/joshuandwilliams/resurfacing-experiments/blob/main/notes/upstream_parity_plan.md) covers the
 work to bring it in line with the engine repository.
-[`docs/known_defects.md`](docs/known_defects.md) lists seven known
+[`docs/known_defects.md`](docs/known_defects.md) lists eight known
 defects and six deliberate oddities that read like defects.  Each is verified
 against the code and pinned by a test, so none can change silently.
 

@@ -11,6 +11,7 @@ makes a contact at cutoff c exactly the pairs whose separation is under c.
 """
 from __future__ import annotations
 
+import importlib.util
 import math
 import sys
 from pathlib import Path
@@ -81,6 +82,14 @@ def test_break_is_found_where_the_geometry_jumps(tmp_path):
 
 
 @pytest.mark.logic
+def test_a_single_atom_has_no_break_to_find():
+    """A one-residue chain has no pair to measure, so the detector reports
+    index 0 and distance 0 rather than indexing past the end."""
+    assert rf._find_break_index([{"x": 1.0, "y": 2.0, "z": 3.0}]) == (0, 0.0)
+    assert rf._find_break_index([]) == (0, 0.0)
+
+
+@pytest.mark.logic
 def test_the_split_keeps_every_atom(tmp_path):
     p = complex_pdb(tmp_path / "one.pdb", n_receptor=14, n_effector=7,
                     single_chain=True, separation=30.0)
@@ -125,6 +134,23 @@ def test_a_de_novo_length_that_resolved_short_still_identifies(tmp_path):
     seg1, seg2, _ = rf.split_at_chain_break(rf.read_ca_atoms(p))
     rec, eff, _ = rf.identify_segments(seg1, seg2, 20, 10)
     assert len(rec) == 18 and len(eff) == 10
+
+
+@pytest.mark.logic
+def test_the_fuzzy_match_picks_the_leading_segment_as_the_effector(tmp_path, capsys):
+    """Neither segment matches exactly: 11 and 19 against an expected 20 and
+    10. The effector length is the exact one, so the segment nearer to 10 is
+    the effector, which here is the one that came first. Falling back on
+    'the receptor leads' would describe the wrong chain in every metric.
+    """
+    p = complex_pdb(tmp_path / "one.pdb", n_receptor=11, n_effector=19,
+                    single_chain=True, separation=30.0)
+    seg1, seg2, _ = rf.split_at_chain_break(rf.read_ca_atoms(p))
+    assert (len(seg1), len(seg2)) == (11, 19)
+
+    rec, eff, rec_is_seg1 = rf.identify_segments(seg1, seg2, 20, 10)
+    assert len(rec) == 19 and len(eff) == 11 and rec_is_seg1 is False
+    assert "Fuzzy match" in capsys.readouterr().out
 
 
 # ── Contacts ─────────────────────────────────────────────────────────
@@ -240,6 +266,34 @@ def test_write_split_pdb_produces_two_chains_from_one(tmp_path):
 
 
 @pytest.mark.logic
+def test_the_written_split_assigns_chain_a_to_the_receptor_whichever_came_first(tmp_path):
+    """The file holds 11 residues then 19, and the effector is expected to be
+    10, so the leading 11 are the effector. Chain A must still be the
+    receptor, because that is what every later stage reads as the binder.
+    """
+    src = complex_pdb(tmp_path / "one.pdb", n_receptor=11, n_effector=19,
+                      single_chain=True, separation=30.0)
+    out = tmp_path / "split.pdb"
+    rf.write_split_pdb(src, out, 19, 10)
+    assert len(rf.read_ca_atoms(out, chain="A")) == 19
+    assert len(rf.read_ca_atoms(out, chain="B")) == 11
+
+
+@pytest.mark.logic
+def test_the_split_renumbers_each_chain_from_one(tmp_path):
+    """split/design_*.pdb is 1-based output space, whatever the input
+    numbering was. The module docstring says the metrics JSON is in
+    contig space and these files are not, and downstream joins depend on
+    exactly that."""
+    src = complex_pdb(tmp_path / "one.pdb", n_receptor=12, n_effector=6,
+                      single_chain=True, separation=30.0, receptor_start=201)
+    out = tmp_path / "split.pdb"
+    rf.write_split_pdb(src, out, 12, 6)
+    assert [a["resnum"] for a in rf.read_ca_atoms(out, chain="A")] == list(range(1, 13))
+    assert [a["resnum"] for a in rf.read_ca_atoms(out, chain="B")] == list(range(1, 7))
+
+
+@pytest.mark.logic
 def test_the_split_moves_no_atom(tmp_path):
     """Only chain ids and numbering change. A coordinate that moved would
     make every metric computed afterwards describe a different structure."""
@@ -250,3 +304,30 @@ def test_the_split_moves_no_atom(tmp_path):
     before = [(a["x"], a["y"], a["z"]) for a in rf.read_ca_atoms(src)]
     after = [(a["x"], a["y"], a["z"]) for a in rf.read_ca_atoms(out)]
     assert before == after
+
+
+# ── Importing the file on its own ────────────────────────────────────
+
+@pytest.mark.logic
+def test_the_module_adds_its_own_directory_to_the_path_when_loaded_by_file():
+    """A Nextflow stage runs this script by absolute path with no PYTHONPATH,
+    so `import structure_metrics` and `from contig_utils import ...` resolve
+    only because the module puts bin/ on sys.path itself. Every test file
+    here adds bin/ before importing, which hides that line, and losing it
+    would break the stage while the suite stayed green.
+    """
+    saved = list(sys.path)
+    try:
+        sys.path[:] = [p for p in sys.path
+                       if Path(p or ".").resolve() != BIN.resolve()]
+        assert not any(Path(p or ".").resolve() == BIN.resolve() for p in sys.path)
+
+        spec = importlib.util.spec_from_file_location(
+            "rfdiffusion_filter_loaded_by_path", BIN / "rfdiffusion_filter.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        assert any(Path(p or ".").resolve() == BIN.resolve() for p in sys.path)
+        assert module.read_ca_atoms is not rf.read_ca_atoms, "a second load"
+    finally:
+        sys.path[:] = saved

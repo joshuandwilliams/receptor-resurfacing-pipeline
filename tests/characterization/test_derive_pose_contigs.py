@@ -26,6 +26,16 @@ for _p in (str(BIN), str(HERE)):
 import derive_pose_contigs as dpc  # noqa: E402
 from fixtures_runtree import complex_pdb  # noqa: E402
 
+
+def _run(argv: list[str]):
+    """Drive the script the way the usage line in its docstring says to."""
+    old = sys.argv
+    try:
+        sys.argv = ["derive_contigs.py", *argv]
+        dpc.main()
+    finally:
+        sys.argv = old
+
 # ── Reading ──────────────────────────────────────────────────────────
 
 @pytest.mark.logic
@@ -235,6 +245,66 @@ def test_the_total_counts_design_residues_after_gap_joining():
     all_rn = list(range(1, 31))
     _contig, total = dpc.make_contig({10, 12}, all_rn, "A", "B")
     assert total == 3
+
+
+# ── The script itself ────────────────────────────────────────────────
+
+@pytest.mark.logic
+def test_the_script_prints_the_contig_for_the_cutoff_it_was_given(tmp_path, capsys):
+    """Ten binder residues, three of them under the 5 A cutoff because the
+    effector sits 4 A above residues 1 to 3. One design segment of length 3
+    scales to 2-5, and residues 4 to 10 stay fixed, so the contig is
+    `2-5/A4-10 B` with no leading fixed part.
+    """
+    p = complex_pdb(tmp_path / "pose.pdb", n_receptor=10, n_effector=3,
+                    spacing=3.8, separation=4.0, receptor_start=1)
+    _run([str(p), "A", "B", "5.0"])
+
+    out = capsys.readouterr().out
+    assert "binder chain A (10 res)  target chain B" in out
+    assert "--- cutoff 5.0 A ---" in out
+    assert "raw design residues (3): [1, 2, 3]" in out
+    assert "contig: 2-5/A4-10 B" in out
+
+
+@pytest.mark.logic
+def test_every_cutoff_given_gets_its_own_section(tmp_path, capsys):
+    """The script exists to compare cutoffs side by side, so each one must be
+    reported separately rather than the last overwriting the rest."""
+    p = complex_pdb(tmp_path / "pose.pdb", n_receptor=12, n_effector=4,
+                    spacing=3.8, separation=4.0, receptor_start=1)
+    _run([str(p), "A", "B", "4.5", "6.0", "10.0"])
+
+    out = capsys.readouterr().out
+    for cut in ("4.5", "6.0", "10.0"):
+        assert f"--- cutoff {cut} A ---" in out
+    assert out.count("contig: ") == 3
+
+
+@pytest.mark.logic
+def test_a_wider_cutoff_never_reports_fewer_design_residues(tmp_path, capsys):
+    """The sections are the comparison the script is for. A cutoff ordering
+    that did not hold would mean the contacts were not recomputed per cutoff.
+    """
+    p = complex_pdb(tmp_path / "pose.pdb", n_receptor=12, n_effector=4,
+                    spacing=3.8, separation=4.0, receptor_start=1)
+    _run([str(p), "A", "B", "4.5", "10.0"])
+
+    counts = [int(line.split("(")[1].split(")")[0])
+              for line in capsys.readouterr().out.splitlines()
+              if "raw design residues" in line]
+    assert counts == sorted(counts)
+
+
+@pytest.mark.logic
+def test_too_few_arguments_exits_with_the_usage_line(tmp_path):
+    """A PDB and two chain ids with no cutoff after them. Defaulting to some
+    cutoff would derive a contig the caller never asked for, and the contig
+    is what every design that follows is built from."""
+    p = complex_pdb(tmp_path / "pose.pdb", n_receptor=6, n_effector=2)
+    with pytest.raises(SystemExit) as exc:
+        _run([str(p), "A", "B"])
+    assert "usage" in str(exc.value)
 
 
 @pytest.mark.logic

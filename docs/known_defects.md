@@ -20,7 +20,7 @@ mistaken for a bug by the next reader.
 
 ## Why these are not fixed
 
-Six of the seven change what a stage writes. The AVR-PikF campaign's
+Six of the eight change what a stage writes. The AVR-PikF campaign's
 `passing_summary.csv`, `cross_sequence_summary.csv` and
 `rfdiffusion_metrics.json` are committed in
 [`resurfacing-experiments`](https://github.com/joshuandwilliams/resurfacing-experiments)
@@ -31,9 +31,14 @@ and there is no way to tell from the file which version produced it.
 So the order is: pin the defect, then fix it in a change that also re-runs the
 campaign and replaces the committed outputs together. Not before.
 
-Defect 4 is the exception. MMseqs2 was present when the campaign ran, so the
-missing-binary path was never taken and no committed output depends on it. It
-can be fixed on its own.
+Defects 4 and 8 are the exceptions, and both can be fixed on their own.
+
+MMseqs2 was present when the campaign ran, so defect 4's missing-binary path
+was never taken and no committed output depends on it.
+
+Defect 8 only fires on a contig the grammar does not allow. Every campaign
+contig is valid, and `derive_pose_contigs.strat4a_range` cannot emit an
+inverted range, so refusing one changes no committed output either.
 
 The evidence for that is the campaign's own committed cluster counts. The
 fallback reports `n_clusters == n_sequences`, and
@@ -185,6 +190,34 @@ pipeline does not publish it. Publishing it removes the guess entirely. That
 is a change to `modules/`, not to `bin/`, which is why it is pinned here.
 
 Pinned by `tests/characterization/test_rfdiffusion_filter_mapping.py::test_two_variable_segments_split_the_budget_correctly`.
+
+## 8. Only one of the two contig parsers validates the grammar
+
+`bin/rfdiffusion_filter.py`, `_parse_receptor_segments`
+
+`contig_spec.DeNovoSegment` refuses a segment whose maximum is below its
+minimum:
+
+```python
+raise ValueError(f"DeNovoSegment max_len={self.max_len} < min_len={self.min_len}")
+```
+
+`_parse_receptor_segments` reads the same grammar with its own code and
+accepts it. A mistyped `1-0` becomes `("denovo", 1, 0)`, which the budget
+split then treats as a variable-length segment whose maximum is zero. The
+proportional division divides by a total maximum of zero, falls back to an
+even split, clamps each share up to the minimum, and hands the remainder to
+the last segment. So a contig that cannot be satisfied still produces a
+residue map, and everything keyed off that map is computed from it.
+
+Refusing it means raising from a parser the filter calls once per design, so
+a typo that reaches a cluster run would fail the stage instead of writing
+wrong numbers. That is the right behaviour and it is a change to what the
+stage does, not to a test, which is why it is pinned here.
+
+Pinned by `tests/characterization/test_rfdiffusion_filter_mapping.py::test_an_inverted_denovo_range_should_be_refused`, with
+`test_an_inverted_denovo_range_is_accepted_as_written` asserting today's
+behaviour.
 
 ---
 

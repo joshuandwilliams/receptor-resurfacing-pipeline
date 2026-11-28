@@ -76,6 +76,21 @@ def test_chain_residues_sorted_is_ordered_and_unique(tmp_path):
     assert got == sorted(set(got)) == list(range(5, 13))
 
 
+@pytest.mark.logic
+def test_an_unparseable_residue_number_is_skipped_rather_than_crashing(tmp_path):
+    """Columns 23-26 of an ATOM record are not always an integer. A structure
+    carrying `ABCD` there must not take the whole stage down, and the residues
+    around it must still be read."""
+    pdb = tmp_path / "bad.pdb"
+    pdb.write_text(
+        "ATOM      1  CA  ALA A   7       0.000   0.000   0.000  1.00  0.00           C\n"
+        "ATOM      2  CA  ALA AABCD       3.800   0.000   0.000  1.00  0.00           C\n"
+        "ATOM      3  CA  ALA A   9       7.600   0.000   0.000  1.00  0.00           C\n"
+        "END\n")
+    assert cu.get_chain_residue_range(pdb, "A") == (7, 9)
+    assert cu.get_chain_residues_sorted(pdb, "A") == [7, 9]
+
+
 # ── Block parsing ────────────────────────────────────────────────────
 
 @pytest.mark.logic
@@ -106,6 +121,46 @@ def test_a_bare_chain_resolves_to_a_fixed_range_when_given_a_pdb(tmp_path):
 
 
 @pytest.mark.logic
+def test_a_chain_break_marker_becomes_its_own_descriptor():
+    """`0` tells RFDiffusion the flanking residues are not contiguous. It
+    carries no length, so it has to survive as a descriptor of its own rather
+    than being dropped or counted as a residue."""
+    descs, chain = cu.parse_block_segments("A1-10/0/A15-20")
+    assert chain == "A"
+    assert descs == [
+        ("fixed", "A", 1, 10),
+        ("break",),
+        ("fixed", "A", 15, 20),
+    ]
+
+
+@pytest.mark.logic
+def test_a_bare_chain_letter_inside_a_block_is_a_passthrough():
+    """`A1-10/B/A15-20` keeps chain B whole in the middle of the receptor
+    block. Without a PDB its range is unknown, so it stays a letter."""
+    descs, chain = cu.parse_block_segments("A1-10/B/A15-20")
+    assert chain == "A"
+    assert descs[1] == ("passthrough", "B")
+
+
+@pytest.mark.logic
+def test_an_in_block_passthrough_resolves_against_the_pdb(tmp_path):
+    pdb = _pdb(tmp_path, {"A": (1, 30), "B": (7, 96)})
+    descs, _chain = cu.parse_block_segments("A1-10/B/A15-20", pdb_path=pdb)
+    assert descs[1] == ("fixed", "B", 7, 96)
+
+
+@pytest.mark.logic
+def test_an_in_block_passthrough_for_an_absent_chain_stays_a_letter(tmp_path):
+    """The PDB cannot supply a range, so the letter is carried through for
+    RFDiffusion to expand. Inventing a range here would fix residues that are
+    not in the structure."""
+    pdb = _pdb(tmp_path, {"A": (1, 30)})
+    descs, _chain = cu.parse_block_segments("A1-10/Z/A15-20", pdb_path=pdb)
+    assert descs[1] == ("passthrough", "Z")
+
+
+@pytest.mark.logic
 def test_a_malformed_block_raises_naming_the_block():
     """RFDiffusion's own failure for a bad contig does not mention the contig,
     so the message here has to."""
@@ -121,6 +176,8 @@ def test_a_malformed_block_raises_naming_the_block():
     "A1-390/20-40/A421-438",
     "A1-100/15-15/A150-200",
     "A5-9",
+    "A1-10/0/A15-20",       # the chain-break marker survives the round trip
+    "A1-10/B/A15-20",       # so does an unresolved passthrough letter
 ])
 def test_segments_to_string_round_trips(block):
     descs, _ = cu.parse_block_segments(block)
@@ -145,6 +202,14 @@ def test_expected_chain_lengths_returns_receptor_and_effector():
 def test_denovo_length_uses_the_midpoint_of_the_range():
     rec, _eff = cu.get_expected_chain_lengths("B A1-10/20-40/A21-30", "A", "B")
     assert rec == 10 + (20 + 40) // 2 + 10
+
+
+@pytest.mark.logic
+def test_an_already_resolved_denovo_length_counts_once():
+    """A bare `5` with no range is a length RFDiffusion has already sampled.
+    Averaging it with itself, or reading it as residue 5, would both be
+    wrong: the receptor is 10 + 5 + 10 residues long."""
+    assert cu.get_expected_chain_lengths("B A1-10/5/A21-30", "A", "B") == (25, 1)
 
 
 @pytest.mark.logic
@@ -204,6 +269,14 @@ def test_absent_receptor_chain_gives_empty_sets_rather_than_raising():
 @pytest.mark.logic
 def test_unparseable_contig_gives_empty_sets():
     assert cu.parse_design_region("not a contig at all ???", "A") == (set(), set())
+
+
+@pytest.mark.logic
+def test_a_chain_carried_through_whole_has_no_design_region():
+    """The effector block is a bare letter, so it has no fixed segments to
+    find gaps between. Nothing of it is rebuilt and nothing of it is pinned
+    by residue number, which is not the same as it being absent."""
+    assert cu.parse_design_region("A1-10/3-3/A21-30 B", "B") == (set(), set())
 
 
 # ── De novo length resolution ────────────────────────────────────────
@@ -275,6 +348,22 @@ def test_remapping_preserves_every_fixed_length(tmp_path):
     for before, after in zip(descs, out):
         if before[0] == "fixed":
             assert after[3] - after[2] == before[3] - before[2]
+
+
+@pytest.mark.logic
+def test_a_chain_break_marker_survives_remapping(tmp_path):
+    """Remapping walks the PDB residue by residue. A break carries no length,
+    so it must pass through untouched without consuming a residue: A1-10
+    lands on 101-110 and the 15-residue anchor after the break lands on
+    111-125, not on 112-126.
+    """
+    pdb = _pdb(tmp_path, {"A": (101, 130)})
+    descs = [("fixed", "A", 1, 10), ("break",), ("fixed", "A", 16, 30)]
+    assert cu.remap_segments_to_pdb(descs, "A", pdb) == [
+        ("fixed", "A", 101, 110),
+        ("break",),
+        ("fixed", "A", 111, 125),
+    ]
 
 
 @pytest.mark.logic

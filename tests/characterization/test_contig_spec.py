@@ -307,6 +307,103 @@ class TestConstraintForm:
 
 
 @pytest.mark.logic
+class TestMalformedSegments:
+    """A token in a block is either understood or refused by name.
+
+    Nothing may be read as something it is not, because RFDiffusion's own
+    failure for a bad contig does not quote the contig, so these messages are
+    the only place a typo is named.
+    """
+
+    def test_an_empty_block_is_refused(self):
+        """``from_string`` splits on whitespace so it never hands this down,
+        but a caller assembling blocks itself can."""
+        with pytest.raises(ValueError, match="empty chain block"):
+            cs._parse_block("   ")
+
+    def test_a_doubled_slash_contributes_no_segment(self):
+        """``A1-10//5`` is a typo, not a zero-length segment. Inventing one
+        would shift every designed position after it."""
+        doubled = cs.ContigSpec.from_string("A1-10//5")
+        plain = cs.ContigSpec.from_string("A1-10/5")
+        assert doubled.chain("A").segments == plain.chain("A").segments
+
+    def test_a_de_novo_range_that_is_not_two_integers_is_refused(self):
+        with pytest.raises(ValueError, match="range must be int-int"):
+            cs.ContigSpec.from_string("A1-10/5-x")
+
+    def test_a_bare_de_novo_length_that_is_not_an_integer_is_refused(self):
+        with pytest.raises(ValueError, match="length must be an integer"):
+            cs.ContigSpec.from_string("A1-10/5x")
+
+    def test_a_segment_starting_with_punctuation_is_refused(self):
+        """Neither a chain letter nor a length. Skipping it silently would
+        drop a residue range the user asked for."""
+        with pytest.raises(ValueError, match="unrecognised first character"):
+            cs.ContigSpec.from_string("A1-10/?/A15-20")
+
+    def test_a_single_residue_ref_that_is_not_an_integer_is_refused(self):
+        with pytest.raises(ValueError, match="residue ref must be an int"):
+            cs.ContigSpec.from_string("Axy")
+
+
+@pytest.mark.logic
+class TestPassthroughSegment:
+    def test_an_empty_chain_is_refused(self):
+        """A passthrough with no chain letter would expand to nothing at
+        RFDiffusion run time, silently dropping the effector."""
+        with pytest.raises(ValueError, match="non-empty"):
+            cs.PassthroughSegment(chain="")
+
+    def test_a_non_string_chain_is_refused(self):
+        with pytest.raises(ValueError, match="non-empty"):
+            cs.PassthroughSegment(chain=None)  # type: ignore[arg-type]
+
+    def test_a_leading_bare_letter_names_the_block_chain(self):
+        """``A/5-10`` has no chain-prefixed fixed segment, so the bare letter
+        is the only thing that can identify the chain."""
+        chain = cs.ContigSpec.from_string("A/5-10").chain("A")
+        assert chain.chain_id == "A"
+        assert [type(s).__name__ for s in chain.segments] == [
+            "PassthroughSegment", "DeNovoSegment"]
+
+    def test_passthrough_segments_are_listed(self):
+        chain = cs.ContigSpec.from_string("A1-10/5/B/A15-20").chain("A")
+        assert [s.chain for s in chain.passthrough_segments] == ["B"]
+
+    def test_a_chain_without_passthrough_lists_none(self):
+        chain = cs.ContigSpec.from_string("A1-10/5/A15-20").chain("A")
+        assert chain.passthrough_segments == []
+
+
+@pytest.mark.logic
+class TestHasBreaks:
+    def test_a_break_marker_is_reported(self):
+        assert cs.ContigSpec.from_string("A1-10/0/A15-20").chain("A").has_breaks
+
+    def test_a_chain_without_a_break_is_not(self):
+        assert not cs.ContigSpec.from_string("A1-10/5/A15-20").chain("A").has_breaks
+
+
+@pytest.mark.logic
+class TestConstructedDirectly:
+    """Programmatic construction, which the class docstring supports for
+    generated contigs. A list of segments must become a tuple, or the frozen
+    dataclass is neither hashable nor safe to share."""
+
+    def test_a_chain_built_from_a_list_stores_a_tuple(self):
+        chain = cs.ContigChain(chain_id="A", segments=[cs.FixedSegment(1, 10)])
+        assert isinstance(chain.segments, tuple)
+        assert chain.total_length == 10
+
+    def test_a_spec_built_from_a_list_stores_a_tuple(self):
+        chain = cs.ContigChain(chain_id="A", segments=(cs.FixedSegment(1, 10),))
+        spec = cs.ContigSpec(chains=[chain], contig_string="A1-10")
+        assert isinstance(spec.chains, tuple)
+        assert spec.chain_ids == ["A"]
+
+
+@pytest.mark.logic
 class TestImmutability:
     def test_contig_spec_is_frozen(self):
         spec = cs.ContigSpec.from_resolved_string("A1-10")
