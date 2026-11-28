@@ -7,7 +7,7 @@ module.  Callers can override them programmatically but normally don't.
 These are research-methodology defaults chosen for this pipeline.
 
 This module is where the pending threshold audit lands.  See
-notes/design_audit.md.  Changing a threshold here is a research-
+the design audit in https://github.com/joshuandwilliams/resurfacing-experiments.  Changing a threshold here is a research-
 methodology change.  Changing a `PipelineParams` field is a user-
 contract change with a different audit trail (see
 bin/pipeline_params.py).
@@ -88,7 +88,7 @@ class PipelineInternalThresholds:
     orthogonal_af3_ra_max: float = 5.0
     # Read only by the cohort-summary plot.  Explicitly NOT part of the
     # orthogonal_filters gate (see
-    # notes/inventory/06_ubiquitous_language.md,
+    # the glossary in resurfacing-experiments,
     # passes_orthogonal_filters).
     orthogonal_plddt_min_informational: float = 0.75
 

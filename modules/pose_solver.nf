@@ -5,7 +5,7 @@
  * Constraint-driven rigid-body docking via bin/pose_solver.py.  Returns
  * one deterministic pose (no clusters to rank), driven by 2-4
  * user-supplied CA-CA pair constraints, in minutes.  See
- * notes/pipeline_notes/pipeline_notes16.md for the geometric rationale
+ * pipeline_notes16.md in https://github.com/joshuandwilliams/resurfacing-experiments for the geometric rationale
  * behind the defaults.
  *
  * Process chain (Branch A: separate receptor + effector PDBs):

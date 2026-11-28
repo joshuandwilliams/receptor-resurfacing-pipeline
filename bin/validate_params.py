@@ -189,7 +189,7 @@ def _check_num_seeds_odd(v: Any) -> Optional[str]:
 #
 # Coverage: most pipeline params have meaningful specs.  A handful
 # remain marked `any`.  Those are coverage gaps to close once the pending
-# threshold audit (notes/design_audit.md) decides each value's valid
+# threshold audit (the design audit in https://github.com/joshuandwilliams/resurfacing-experiments) decides each value's valid
 # range.  An unspecced param does NOT block the pipeline.  The coverage
 # report (--report) lists them so reviewers can prioritise.
 
@@ -355,7 +355,7 @@ PARAM_SPECS: List[ParamSpec] = [
     ParamSpec("pose_solver_max_pair_distance","float_range", {"min": 0.0, "max": 30.0},
               "maximum CA-CA distance for pair constraints (Å); "
               "default 6.0 matches the natural-interface CA-CA range "
-              "documented in notes/pipeline_notes/pipeline_notes16.md §4.1"),
+              "documented in pipeline_notes16.md §4.1 in https://github.com/joshuandwilliams/resurfacing-experiments"),
     ParamSpec("pose_solver_pair_sc_clash_cutoff","float_range", {"min": 0.0, "max": 10.0},
               "heavy-atom clash cutoff between paired-residue sidechains (Å); "
               "set 0 to disable"),
@@ -445,7 +445,7 @@ def _branch_a_pose_solver_pairs_present(params: dict) -> Optional[str]:
             "CA-CA pair restraint.  Example:\n"
             "    pose_solver_pairs: \"A73-B31 A71-B33 A8-B22\"\n"
             "Use 2-4 pairs covering the intended interface.  See "
-            "notes/pipeline_notes/pipeline_notes16.md for guidance on "
+            "pipeline_notes16.md in https://github.com/joshuandwilliams/resurfacing-experiments for guidance on "
             "choosing pair residues and distance bounds."
         )
     return None

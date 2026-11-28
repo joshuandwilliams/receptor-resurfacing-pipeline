@@ -13,7 +13,8 @@
 #
 # Excludes:
 #   - .git/, Python/IDE caches, macOS metadata, Word lockfiles
-#   - run artefacts in tests/*/ and experiments/campaigns/*/runs/*/
+#   - run artefacts in tests/*/, and in experiments/campaigns/*/runs/*/ if
+#     a resurfacing-experiments checkout is synced alongside this one
 #     (work/, tmp/, results*/, .nextflow*, receptor_resurfacing_results/).
 #     Note the campaign-run pattern is results*/ , not results/ : arms of a
 #     paired experiment publish to sibling dirs like results_constrained/,

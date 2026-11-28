@@ -15,6 +15,16 @@ Negative steering of the Boltz-2 predictions is a separate repository,
 [structure-negative-steering](https://github.com/joshuandwilliams/structure-negative-steering),
 installed once per site and called as a tool.
 
+## Where everything lives
+
+This repository is the tool. Three siblings hold what was done with it:
+
+| Repository | Holds |
+|---|---|
+| [`resurfacing-experiments`](https://github.com/joshuandwilliams/resurfacing-experiments) | the campaigns, their inputs and parameters, and the working notes |
+| [`receptor-resurfacing-analyses`](https://github.com/joshuandwilliams/receptor-resurfacing-analyses) | the twelve Chapter 5 analysis documents |
+| [`structure-negative-steering`](https://github.com/joshuandwilliams/structure-negative-steering) | the negative-steering engine, installed per site and called as a tool |
+
 ## Status
 
 Test coverage over `bin/` is **10.81%**, gated as a ratchet in `pyproject.toml`
@@ -102,7 +112,7 @@ modules/     Nextflow modules — one per pipeline stage
 tests/       Per-module tests, characterization tests, reference data,
              and the curated fixtures each per-module test runs against
 containers/  Singularity .def recipes; image + JDK symlinks (git-ignored) go here
-notes/       Inventory documents, remediation plan, decisions, glossaries
+
 scripts/     Repo tooling (sync_to_hpc.sh, check_environment.slurm.sh, …)
 main.nf      Top-level workflow
 nextflow.config   Per-process SLURM resources; partitions come from site.conf

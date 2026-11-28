@@ -309,7 +309,7 @@ def build_receptor_resnum_map(rec_atoms, contigs, rec_chain):
     discards the .trb, so it must also be published alongside the PDBs.
 
     A local correction used by one analysis, and the evidence above, is in
-    experiments/campaigns/pikp1_avrpikf/analyses/02-design-region-novelty/
+    the design-region-novelty analysis in receptor-resurfacing-analyses
     (trb_metrics.py and motif_rigidity.py).
 
     How the guess is made.  Total receptor length comes from the design

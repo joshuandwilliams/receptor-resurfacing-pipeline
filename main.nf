@@ -279,7 +279,7 @@ params.max_pct_identity   = 100.0
 // ── Pose Solver (Branch A docking) ──────────────────────────────────────
 // Constraint-driven rigid-body docking driven by user-supplied CA-CA
 // pair restraints.  Deterministic (one pose, no clusters), CA-only,
-// runs in minutes.  See notes/pipeline_notes/pipeline_notes16.md for
+// runs in minutes.  See pipeline_notes16.md in https://github.com/joshuandwilliams/resurfacing-experiments for
 // the geometric rationale behind these defaults.
 params.rfdiff_contact_cutoff       = 8.0   // Cα–Cα cutoff (Å) for rfdiffusion_filter contact
                                             // detection on RFDiffusion-designed complexes.
@@ -462,7 +462,7 @@ workflow MAIN_PIPELINE {
         // Rewrite the receptor PDB to chain params.receptor_chain and
         // the effector PDB to chain params.effector_chain so the
         // user-declared chain IDs are present in every downstream PDB.
-        // See notes/pipeline_notes/pipeline_notes16.md for the chain
+        // See pipeline_notes16.md in https://github.com/joshuandwilliams/resurfacing-experiments for the chain
         // convention rationale.
         POSE_SOLVER_PREPARE(
             rec_file,

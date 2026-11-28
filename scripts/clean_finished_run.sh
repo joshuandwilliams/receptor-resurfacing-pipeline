@@ -4,7 +4,7 @@
 # Usage:
 #   scripts/clean_finished_run.sh <run_dir>
 #
-# Where <run_dir> is e.g. experiments/campaigns/pikp1_avrpia/runs/v1_4b/
+# Where <run_dir> is e.g. <campaign>/runs/<run>/   (campaigns live in resurfacing-experiments)
 #
 # Performs, in order:
 #   1. Refuse if .nextflow/history is missing (run was never executed).
@@ -12,7 +12,7 @@
 #      (warn loudly on ERR), skip anything else.
 #   3. Delete <run>/work, <run>/.nextflow/cache, <run>/.nextflow/plr
 #      (cache and plr are orphaned once work/ is gone — see
-#      notes/inventory/17_storage_bloat_audit.md §7).
+#      the storage bloat audit in resurfacing-experiments §7).
 #   4. Inside results/negative_steering/runs/, prune unused Boltz diffusion
 #      samples (model_1..9 and rank_1..9 + their PAE/PDE/plddt/confidence
 #      sidecars) — only model_0/rank_0 is consumed downstream.

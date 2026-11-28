@@ -101,7 +101,7 @@ rfdiff_rog_min_dist: 5             # monomer_ROG minimum Rg floor (Å) — Rg va
 # The constraint-driven pose solver places the two monomers in a
 # compact, clash-free arrangement that gives RFDiffusion a good
 # starting point.  Deterministic (one pose, not clusters), CA-only,
-# runs in minutes.  See notes/pipeline_notes/pipeline_notes16.md for
+# runs in minutes.  See pipeline_notes16.md in https://github.com/joshuandwilliams/resurfacing-experiments for
 # the geometric rationale behind the defaults.
 #
 # REQUIRED in Branch A: pose_solver_pairs.  Hard-pin CA-CA pairs that

@@ -216,7 +216,7 @@ def plot_interface_dashboard(metrics_list: List[Dict],
         ax.text(xi, v + max(vals, default=1) * 0.02, f"{v:.0f}",
                 ha="center", va="bottom", fontsize=8.5)
     # Reference dashed line at the validated AvrPikF pose's interface BSA
-    # (~2700 Å², notes/pipeline_notes/pipeline_notes16.md).
+    # (~2700 Å², pipeline_notes16.md in https://github.com/joshuandwilliams/resurfacing-experiments).
     ax.axhline(2700, color=PALETTE["reference"], linestyle="--",
                linewidth=0.8, alpha=0.7)
     ax.text(len(bars) - 0.4, 2700, "  native ≈2700 Å²",
@@ -260,7 +260,7 @@ def plot_interface_dashboard(metrics_list: List[Dict],
     gi = m.get("shape_complementarity_proxy", {}).get("gap_index_mean_A")
     gi = float(gi) if gi is not None and not np.isnan(gi) else None
     # Reference: AF3-native PikF gap-index = 3.41 Å
-    # (notes/pipeline_notes/pipeline_notes16.md).
+    # (pipeline_notes16.md in https://github.com/joshuandwilliams/resurfacing-experiments).
     native = 3.41
     if gi is not None:
         ax.barh([0], [gi], height=0.35,
