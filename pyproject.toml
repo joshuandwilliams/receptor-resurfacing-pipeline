@@ -148,4 +148,11 @@ skip_covered = true
 # figure from 20.79% to 34.41%.  The fixture builders are in
 # tests/characterization/fixtures_runtree.py, which now also writes a cuboid
 # lattice for the convex-hull code that a collinear chain cannot drive.
-fail_under = 75.0
+# 79.8 is where it stands after the four MPNN-and-Rosetta sequence-stage
+# modules were covered: mpnn_sequence_qc.py and mpnn_cluster_sequences.py to
+# 100%, mpnn_design_region_score.py to 99% and rosetta_filter_plots.py to 98%.
+# The scoring module needed ProteinMPNN and a working torch, neither of which
+# this repository installs, so the stubs it imports instead live in
+# tests/characterization/stubs/ and are picked up by the module's own
+# top-level import rather than by patching it.
+fail_under = 79.8
