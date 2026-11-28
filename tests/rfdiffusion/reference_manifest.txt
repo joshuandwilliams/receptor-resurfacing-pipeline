@@ -6,10 +6,7 @@
 # See tests/_update_example_dataset_impl.py for semantics.
 
 # ── Top-level Nextflow run artefacts ──────────────────────────────
-dag.html
-timeline.html
 trace.txt
-pipeline_report.html
 
 # ── RFDiffusion outputs (test-checked) ────────────────────────────
 # Note: design_*.pdb / passing/ / split/ / traj/ are NOT in the

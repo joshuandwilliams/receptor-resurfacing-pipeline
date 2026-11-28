@@ -7,10 +7,7 @@
 # top-level artefacts (cross_summary, indices, controls inputs).
 
 # ── Top-level Nextflow run artefacts ──────────────────────────────
-dag.html
-timeline.html
 trace.txt
-pipeline_report.html
 
 # ── Cross-sequence summary (cohort-level output) ──────────────────
 negative_steering/cross_sequence_summary.csv

@@ -2,10 +2,7 @@
 # See header in tests/rfdiffusion/reference_manifest.txt for format.
 
 # ── Top-level Nextflow run artefacts ──────────────────────────────
-dag.html
-timeline.html
 trace.txt
-pipeline_report.html
 
 # ── Cross-summary with interface metrics (extended by P0-29) ─────
 negative_steering/cross_sequence_summary_with_interface_metrics.csv

@@ -6,10 +6,7 @@
 # See tests/_update_example_dataset_impl.py for semantics.
 
 # ── Top-level Nextflow run artefacts ──────────────────────────────
-dag.html
-timeline.html
 trace.txt
-pipeline_report.html
 
 # ── Pose solver: chain-normalised inputs ──────────────────────────
 pose_solver/data/receptor_pose.pdb

@@ -28,6 +28,14 @@ slurm-*.err
 # tracked and documents every setting.
 site.conf
 
+# ----- Generated HTML -----
+# Quarto renders its .qmd siblings and Nextflow writes dag.html,
+# timeline.html and pipeline_report.html.  Both kinds are regenerable and
+# neither is read by a test, so neither is tracked.  26.63 MB of them made
+# this repository read as 89.1% HTML on GitHub.
+*.html
+**/*_files/libs/
+
 # ----- Coverage -----
 # Written on every pytest run, because addopts carries --cov.
 .coverage
