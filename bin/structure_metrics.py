@@ -271,12 +271,14 @@ def find_contact_residues_heavy(
     receptor_chain: str,
     effector_chain: str,
     cutoff: float = 5.0,
-) -> List[int]:
-    """0-based positional indices of receptor residues contacting the effector.
+    expected_rec_seq: Optional[str] = None,
+) -> List[Tuple[int, float]]:
+    """Receptor residues contacting the effector, as (index, distance) pairs.
 
     A contact is any heavy atom of the residue within `cutoff` angstroms of any
     heavy atom of the effector chain.  read_chain_heavy_atoms drops hydrogens,
-    so 5 Å is a heavy-atom-to-heavy-atom distance.
+    so 5 Å is a heavy-atom-to-heavy-atom distance.  The distance returned is
+    the closest heavy-atom approach for that residue.
 
     The index is positional within the receptor chain, counted over distinct
     resnums in file order.  That matches the design-region and true-interface
@@ -284,26 +286,46 @@ def find_contact_residues_heavy(
     break on any structure that does not start at 1.  Note that this walk
     ignores insertion codes, whereas get_chain_sequence above keys on
     (resnum, icode), so the two agree only on structures without icodes.
+
+    `expected_rec_seq` is a LENGTH check, not an identity check.  It exists so
+    a caller holding the sequence it thinks the receptor has fails here rather
+    than silently indexing a different structure.  It cannot be tightened into
+    a comparison of the residues themselves, because a reverted design carries
+    surviving mutations and would then be rejected for a difference that is
+    expected.  A run of alanines of the right length passes.
+
+    Returns pairs rather than bare indices because
+    derive_input_design_region.py reports the closest approach alongside each
+    contact.  The pairs are sorted by index.
     """
     import numpy as _np
 
     rec = read_chain_heavy_atoms(Path(pdb_path), receptor_chain)
     eff = read_chain_heavy_atoms(Path(pdb_path), effector_chain)
-    if not rec or not eff:
+    if not rec:
         return []
 
     order: List[int] = []
     for resnum, _atom, _x, _y, _z in rec:
         if resnum not in order:
             order.append(resnum)
-    index_of = {rn: i for i, rn in enumerate(order)}
 
+    if expected_rec_seq is not None and len(expected_rec_seq) != len(order):
+        raise ValueError(
+            f"receptor chain {receptor_chain} of {pdb_path} has {len(order)} "
+            f"residues, but the caller expected {len(expected_rec_seq)}. "
+            f"Every index derived from this walk would be against a different "
+            f"structure.")
+
+    if not eff:
+        return []
+
+    index_of = {rn: i for i, rn in enumerate(order)}
     eff_xyz = _np.asarray([(x, y, z) for _r, _a, x, y, z in eff], dtype=float)
-    hits: set = set()
+    closest: dict = {}
     for resnum, _atom, x, y, z in rec:
-        if resnum in hits:
-            continue
-        d = _np.linalg.norm(eff_xyz - _np.asarray((x, y, z), dtype=float), axis=1)
-        if float(d.min()) <= cutoff:
-            hits.add(resnum)
-    return sorted(index_of[rn] for rn in hits)
+        d = float(_np.linalg.norm(
+            eff_xyz - _np.asarray((x, y, z), dtype=float), axis=1).min())
+        if d <= cutoff and (resnum not in closest or d < closest[resnum]):
+            closest[resnum] = d
+    return sorted((index_of[rn], d) for rn, d in closest.items())
