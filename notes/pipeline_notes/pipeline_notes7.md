@@ -1,4 +1,4 @@
-# pipeline_notes6.md — Kernel A/B result, per-prediction cost breakdown
+# pipeline_notes7.md — Kernel A/B result, per-prediction cost breakdown
 
 ## Context
 

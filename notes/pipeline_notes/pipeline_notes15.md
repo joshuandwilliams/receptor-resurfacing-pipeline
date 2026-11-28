@@ -344,6 +344,3 @@ Latest commit: RMSD failure analysis and analyses design added to pipeline_notes
 
 - `experiments/campaigns/pikp1_avrpia/runs/pose_solved_5a_2/params.yml` — new run
 - `notes/pipeline_notes/pipeline_notes15.md` — this document
-
-- `experiments/campaigns/pikp1_avrpia/runs/pose_solved_5a_2/params.yml` — new run
-- `notes/pipeline_notes/pipeline_notes15.md` — this document

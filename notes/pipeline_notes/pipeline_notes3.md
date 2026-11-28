@@ -126,7 +126,7 @@ fix, new symptom: half the sequences still disappeared, but
 unpredictably. Root cause: `fasta_stream_ch` was being read BOTH to
 compute `.unique()` stems (to filter which designs needed index
 derivation) AND for the three-way combine. Queue channels drain on
-first read — the second reader got an empty channel.
+first read, so the second reader got an empty channel.
 
 **Round 3 — skip the filter entirely.** The "only derive indices for
 designs that have matching FASTAs" filter was the source of the
@@ -172,8 +172,8 @@ from tier A to tier C. Several sequences that were genuinely strong
 wet-lab candidates were being dropped to tier C on this basis, then
 filtered out of `passing_summary.csv` entirely.
 
-Fix: new `clean_steered` bucket in `_per_seed_verdict_breakdown`.
-Admission criteria are strict enough that only genuinely
+Fix: new `clean_steered` bucket in `_per_seed_verdict_breakdown`, with
+admission criteria strict enough that only genuinely
 no-reversion-needed rows qualify:
 
 - `reversion_verdict` blank
@@ -335,7 +335,7 @@ in roughly 2 hours of wall-clock rather than 6+.
 
 **NextFlow channel semantics get unintuitive for 1:N fan-out.**
 `.join()` for one-to-one, `.combine(by: key)` for one-to-many, and
-never read a queue channel twice — use `.first()` to promote it to a
+never read a queue channel twice, using `.first()` to promote it to a
 value channel if you need multi-consumer behaviour. This took three
 rounds of debugging to internalise.
 
@@ -380,8 +380,8 @@ Staged patches by deployment group:
   `runtime_instrumentation/` copies.
 - `config_tuning/nextflow.config` — resource sizing for NEGSTEER
   processes, explicit trace `fields`. **Diff against the live repo
-  copy before replacing** — the project knowledge indexed here is
-  stale and may not include the current NEGSTEER blocks.
+  copy before replacing**, because the project knowledge indexed here
+  is stale and may not include the current NEGSTEER blocks.
 
 NextFlow integration files, already deployed in an earlier stage of
 this session: `main.nf`, `modules/negative_steering.nf`,

@@ -118,8 +118,8 @@ didn't break the plot test. The fallback path is not actually used,
 because `_get_per_design_residues` prefers the per-design field.
 
 Touched: `rfdiffusion_filter.py` (two write-site edits). `rfdiffusion_plots.py`
-deliberately not updated yet — we did rewrite it later in the session,
-but for a different reason (the new COM displacement plot from Item 4).
+deliberately not updated yet, though we did rewrite it later in the
+session for a different reason (the new COM displacement plot from Item 4).
 
 ### 2(b). Branch B contig resolution via new `RESOLVE_CONTIGS` process
 
@@ -140,9 +140,9 @@ script). Branch B in `main.nf` now calls it on the input PDB and
 produces a resolved `contigs_ch` value channel mirroring Branch A's
 shape (`.map { it.text.trim() }.first()`).
 
-Branch A's `BUILD_CONTIGS` is left alone — it does more than just
-resolution (HADDOCK coordinate remapping, sequences JSON), so unifying
-the two would have been overengineering.
+Branch A's `BUILD_CONTIGS` is left alone, because it does more than
+just resolution (HADDOCK coordinate remapping, sequences JSON), so
+unifying the two would have been overengineering.
 
 Touched: `preprocessing.nf` (new process), `main.nf` (include + Branch B
 wiring).

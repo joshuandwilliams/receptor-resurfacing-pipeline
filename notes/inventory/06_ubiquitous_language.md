@@ -224,7 +224,11 @@ The set of receptor residue positions that ProteinMPNN was allowed to redesign. 
 - **Complement within receptor**: Motif
 
 ### Contig
-RFDiffusion's specification string for a design. It is a comma-separated list of segments. Each segment is either an *anchor* (residue range copied from native, contributing to the motif) or *de novo* (range to be generated, contributing to the design region). Resolved at preprocessing time.
+RFDiffusion's specification string for a design. It is a `/`-separated list of
+segments within a chain block, and blocks are separated by spaces. A fixed
+segment carries its chain letter, as in `A1-390`. A de novo segment is a bare
+length range, as in `20-40`. Commas are not separators anywhere in the grammar.
+`bin/contig_utils.py` and `bin/contig_spec.py` both split on `/`. Each segment is either an *anchor* (residue range copied from native, contributing to the motif) or *de novo* (range to be generated, contributing to the design region). Resolved at preprocessing time.
 
 - **Variants in code**: `contig`, `contigs`, `contigmap`, `parse_block_segments`, `resolve_contigs`
 
