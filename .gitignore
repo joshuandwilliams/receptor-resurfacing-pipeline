@@ -168,3 +168,5 @@ experiments/campaigns/*/runs/*/agroinfiltrations/
 
 # One-off session report, not part of the repo.
 session_report_*.html
+
+overnight_report_*.html

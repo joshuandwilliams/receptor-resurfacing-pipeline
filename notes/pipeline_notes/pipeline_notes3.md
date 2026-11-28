@@ -24,12 +24,12 @@ What actually happened: the port went quickly, but three rounds of
 NextFlow channel-topology debugging were needed before the graph ran
 end-to-end without silently dropping half the sequences. The overnight
 validation then exposed two semantic bugs in the underlying Python
-scripts that were latent in the standalone pipeline and only became
-visible at production scale. Both were fixed and re-staged as patches
-v3. The 16-sequence run itself produced 7 tier-A survivors, two of
-which came through paths that had been silently filtered out pre-patch.
-Then we closed the session with resource-tuning based on `trace.txt`
-analysis, runtime instrumentation added to the output CSVs, and a
+scripts, latent in the standalone pipeline and only visible at
+production scale. Both were fixed and re-staged as patches v3, and the
+16-sequence run itself produced 7 tier-A survivors, two of which came
+through paths silently filtered out pre-patch.
+We closed the session with resource-tuning from `trace.txt`
+analysis, runtime instrumentation in the output CSVs, and a
 wet-lab triage of three candidate picks.
 
 Strict ground rule as usual — minimal targeted changes, no scope creep
@@ -109,12 +109,12 @@ negative-steering repo, unchanged in this session:
 
 ### 3. Three rounds of channel-topology debugging
 
-This is the part that took a while to get right, as each fix looked
-reasonable but introduced a new failure mode.
+This part took a while to get right, as each fix looked reasonable but
+introduced a new failure mode.
 
 **Round 1 — `.join()` is one-to-one, not one-to-many.** The initial
 graph wanted: "for each MPNN FASTA, look up its parent design's PDB
-and derive outputs." Used `.join()` on `design_id`, with the symptom
+and derive outputs". Used `.join()` on `design_id`, with the symptom
 that only the first MPNN sequence per parent design ran and the other 3
 silently vanished. `.join()` consumes the PDB channel on the first match and
 drops siblings — correct semantics for a 1:1 join, wrong for a 1:N
@@ -133,8 +133,8 @@ designs that have matching FASTAs" filter was the source of the
 dual-consumer problem. Cost of running `NEGSTEER_DERIVE_INDICES`
 unconditionally on every design PDB regardless of FASTA availability:
 ~5s per orphan design. Not worth the code complexity, so the filter
-was dropped. Added `.first()` on `metrics_json_ch` so it becomes a
-value channel (broadcastable without consumption).
+was dropped and `.first()` was added on `metrics_json_ch` so it
+becomes a value channel (broadcastable without consumption).
 
 Verified end-to-end on 4 FASTAs × 2 designs (8 runs): all 8 submitted,
 all 8 completed.
@@ -152,16 +152,16 @@ which is how we discovered the bugs in step 5.
 
 ### 5. Two semantic bugs exposed at production scale (patches v3)
 
-These are bugs in the underlying negative-steering Python that were
-latent in standalone runs and only surfaced when multiple MPNN
-sequences were compared side-by-side in the NextFlow run.
+These are bugs in the underlying negative-steering Python, latent in
+standalone runs and surfacing only when multiple MPNN sequences were
+compared side-by-side in the NextFlow run.
 
 **Bug (a): `clean_steered` misclassified as `no_data`.**
 
 Setup: a sequence where 2/3 Boltz seeds predict the correct pose
 without any load-bearing mutations, so with zero contamination on the
 steering mutations reversion is correctly skipped. The remaining 1/3 of
-seeds end up contaminated, but their reverted prediction holds the pose
+seeds are contaminated, but their reverted prediction holds the pose
 (pose_holds).
 
 Pre-patch, the aggregator's `_per_seed_verdict_breakdown` treated the
@@ -197,9 +197,9 @@ both the any-seed-passing gate and the Bug-E residual guard.
 Setup: MPNN sequences where the cold-start Boltz already gets the
 pose right without any negative steering — the skip-steering fast
 path. Pre-patch, `plan` ran exactly one cold-start prediction at one
-seed. If that single prediction happened to hit the ra_eff threshold,
-skip-steering was triggered and the pipeline exited after ~4 minutes
-with no variance evidence.
+seed. If that single prediction hit the ra_eff threshold, skip-steering
+triggered and the pipeline exited after ~4 minutes with no variance
+evidence.
 
 Policy fix (agreed this session): 3 cold-start seeds always run. If
 all 3 are clean (ra_eff ≤ threshold AND receptor intact), steering is
@@ -321,8 +321,8 @@ Three files in `bin/` touched: `negative_steering_run_one.sh`,
 
 ### 9. GPU-partition capacity check (`max_af2_parallel` tuning)
 
-`sinfo -p jic-gpu` showed 10 A100 nodes totalling 26 GPUs. At the time
-of inspection, ~19 GPUs were free (one competing user holding 7 for
+`sinfo -p jic-gpu` showed 10 A100 nodes totalling 26 GPUs. At
+inspection, ~19 GPUs were free (one competing user holding 7 for
 multi-day jobs). Recommended bump from `max_af2_parallel = 5` (current)
 to `max_af2_parallel = 12`, a ~2.4× throughput improvement on sequence
 parallelism that leaves ~30% partition headroom for competing users.
@@ -360,9 +360,9 @@ shorten queue pending times.
 
 **Skill scaling: cold-start all-clean is a legitimate output path.**
 Some MPNN sequences are good enough that Boltz gets the pose right
-without steering. Pre-patch these were dropped on the floor, and
-post-patch they're tier-A candidates via the `no_reversion` verdict.
-Three of the seven tier-A survivors from the overnight run came
+without steering, and pre-patch these were dropped on the floor.
+Post-patch they're tier-A candidates via the `no_reversion` verdict,
+and three of the seven tier-A survivors from the overnight run came
 through this path.
 
 ## File deliverables
@@ -403,7 +403,7 @@ scripts: `derive_true_interface.py`, `negative_steering_run_one.sh`,
   notes series (to be written in a future session) for the design
   sketch.
 - **Aggregate module rebuild deferred** —
-  `MPNN_SELECT_TOP.out.top_metadata` is emitted but not consumed; it
+  `MPNN_SELECT_TOP.out.top_metadata` is emitted but not consumed. It
   should be joined with `cross_sequence_summary.csv` into a final
   `results_summary.csv`. Harmless as-is (NextFlow ignores unconsumed
   emits).
@@ -443,19 +443,19 @@ candidates — but worth doing before the next methodology push.
 `MPNN_SELECT_TOP.out.top_metadata` (the per-sequence MPNN metadata:
 native-sequence recovery, design-region RMSD, cluster membership,
 etc.) is currently unused downstream. Should be joined with
-`cross_sequence_summary.csv` to produce a final `results_summary.csv`
-that carries both the MPNN provenance and the negative-steering
-verdicts, so wet-lab triage has a single file with everything in it.
+`cross_sequence_summary.csv` into a final `results_summary.csv`
+carrying both the MPNN provenance and the negative-steering verdicts,
+giving wet-lab triage one file with everything.
 
 ### Open diagnostic: 7/16 tier-none rate
 
 Half the MPNN sequences produced no passing predictions. Worth
-logging, for each tier-none sequence: did it fail at cold-start (all
-3 seeds above rmsd_threshold), or did it get through cold-start but
-fail at steered-pass (none of the 60 steered predictions passed the
-ra_eff filter), or did it get through steered but fail at reversion
-(every pose_holds candidate broke when the mutations were reverted)?
-The answer tells you which lever to pull: cold-start failures want
-better MPNN sequences or RFDiffusion designs; steered failures want
-more `n_designs` or different modes; reversion failures mean the
-design is genuinely too mutation-dependent to survive wet-lab.
+logging, for each tier-none sequence, which stage it failed at. Did it
+fail at cold-start (all 3 seeds above rmsd_threshold), or clear
+cold-start but fail at steered-pass (none of the 60 steered predictions
+passed the ra_eff filter)? Or did it clear steered but fail at
+reversion (every pose_holds candidate broke when the mutations were
+reverted)? The answer tells you which lever to pull. Cold-start
+failures want better MPNN sequences or RFDiffusion designs, steered
+failures want more `n_designs` or different modes, and reversion
+failures mean the design is too mutation-dependent to survive wet-lab.
