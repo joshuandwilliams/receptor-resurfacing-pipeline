@@ -218,6 +218,57 @@ def test_a_hotspot_list_is_accepted_and_does_not_crash(tmp_path):
 
 
 @pytest.mark.logic
+def test_the_hotspot_list_keeps_what_it_can_read_and_drops_the_rest(tmp_path):
+    """`B2,,Bxx,B3` is one empty token and one unreadable token around two
+    good ones. The stage records 2 and 3 and carries on. Failing on a
+    malformed hotspot would lose a run over a field that does not gate
+    anything."""
+    inp, designs = _stage(tmp_path, n_designs=1)
+    assert _run(tmp_path, inp, designs, hotspot="B2,,Bxx,B3") == 0
+    metrics, _s, _p = _outputs(tmp_path)
+    assert metrics["hotspot_residues"] == [2, 3]
+
+
+@pytest.mark.logic
+def test_a_bare_number_is_accepted_as_a_hotspot(tmp_path):
+    """The flag's help says 'B24,B25', but a chain letter is optional: the
+    number is read either way, because only effector residue numbers are
+    recorded."""
+    inp, designs = _stage(tmp_path, n_designs=1)
+    _run(tmp_path, inp, designs, hotspot="4,5")
+    metrics, _s, _p = _outputs(tmp_path)
+    assert metrics["hotspot_residues"] == [4, 5]
+
+
+# ── A single-chain input structure ───────────────────────────────────
+
+@pytest.mark.logic
+def test_an_unsplit_input_structure_is_split_before_it_is_used_as_the_reference(tmp_path):
+    """The input PDB can arrive as one chain holding both partners, which is
+    what RFdiffusion itself is handed. The reference for the motif fit is
+    then found by the same chain-break split the designs go through, not by
+    chain id.
+
+    The designs here are geometrically identical to the input, so a correct
+    split gives a motif RMSD of exactly 0. Taking the whole 26-atom chain,
+    or taking the effector half, would move the fit and show up as a
+    non-zero value.
+    """
+    inp = complex_pdb(tmp_path / "input.pdb", n_receptor=20, n_effector=6,
+                      single_chain=True, separation=30.0)
+    designs = tmp_path / "designs"
+    designs.mkdir()
+    complex_pdb(designs / "design_0.pdb", n_receptor=20, n_effector=6,
+                single_chain=True, separation=30.0)
+
+    assert _run(tmp_path, inp, designs, contigs="A1-8/4-4/A13-20 B") == 0
+    metrics, _s, _p = _outputs(tmp_path)
+    entry = metrics["designs"][0]
+    assert entry["n_receptor_residues"] == 20
+    assert entry["motif_rmsd"] == 0.0
+
+
+@pytest.mark.logic
 def test_the_fixed_residue_set_is_written(tmp_path):
     """Downstream calls a residue 'design' when it is absent from this set,
     so an empty one would classify everything as rebuilt."""
