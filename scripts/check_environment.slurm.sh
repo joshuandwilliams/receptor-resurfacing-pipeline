@@ -1,6 +1,10 @@
 #!/bin/bash
 #SBATCH --job-name="rr_env_check"
-#SBATCH -p jic-gpu
+# No -p: the partition is site-specific.  Submit with
+# `sbatch -p "$RECEPTOR_PARTITION_GPU"`, or from a shell that has sourced
+# scripts/site_conf.sh, where `sbatch -p` beats both the environment and a
+# header line.  Submitting this directly takes the cluster's default
+# partition, which on a GPU check is usually not a GPU partition.
 #SBATCH -N 1
 #SBATCH -n 1
 #SBATCH -c 4
